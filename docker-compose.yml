@@ -1,0 +1,92 @@
+# Luneta - un solo comando para levantar todo en local
+# Uso: docker compose up   o   make up
+#
+# Servicios: mongo, redis, minio, mailhog (infra) + api, worker, web (apps)
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/luneta
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      EMAIL_SMTP_HOST: mailhog
+      EMAIL_SMTP_PORT: 1025
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - redis
+
+  worker:
+    build:
+      context: apps/api
+      dockerfile: Dockerfile
+    command: ["taskiq", "worker", "worker:broker"]
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/luneta
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      EMAIL_SMTP_HOST: mailhog
+      EMAIL_SMTP_PORT: 1025
+    env_file:
+      - .env
+    depends_on:
+      - mongo
+      - redis
+      - api
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - api
+
+volumes:
+  mongo_data:
+  minio_data:

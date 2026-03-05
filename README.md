@@ -2,40 +2,55 @@
 
 Luneta is a collaborative web platform to collect, review, and publish research-grade smart-glasses usage scenarios related to childhood contexts, with ethical analysis, AI-assisted suggestions, and similarity detection to reduce duplication.
 
+## Levantar todo en local (un comando)
+
+```bash
+cp .env.example .env   # solo la primera vez (en PowerShell: copy .env.example .env)
+make up
+```
+
+En **Windows sin Make**, usa Docker Compose directo:
+
+```powershell
+copy .env.example .env
+docker compose up -d --build
+```
+
+Para parar: `docker compose down`. Ver [docs/FUNDACIONES-TECNICAS.md](docs/FUNDACIONES-TECNICAS.md) para más comandos y desarrollo con hot-reload.
+
 ## Repository structure
 
 ```text
 luneta/
   README.md
-  .gitignore
   .env.example
   Makefile
+  docker-compose.yml   # stack completo (mongo, redis, api, worker, web, ...)
   pnpm-workspace.yaml
 
   apps/
-    web/          # Vite + React SPA
-    backend/      # FastAPI API + Taskiq worker + jobs
+    api/               # FastAPI + Taskiq (skeleton: app/, worker.py, Dockerfile)
+    web/               # Vite + React SPA
+    backend/           # Backend legacy (migración gradual a apps/api)
 
   packages/
-    contracts/    # OpenAPI + generated TS types
-
-  docs/           # Project documentation (brief, FR/NFR, ADRs, etc.)
+    contracts/         # OpenAPI + generated TS types
 
   infra/
-    docker/       # docker-compose (redis, minio, mailhog)
-    scripts/      # helper scripts (openapi export, seeds, ...)
+    docker/            # compose/scripts adicionales
+    mongo-init/        # opcional: scripts init MongoDB
+    scripts/           # openapi export, seeds, ...
 
-  .github/
-    workflows/    # CI
+  docs/                # Documentación (FUNDACIONES-TECNICAS, ADRs, etc.)
+  .github/workflows/   # CI
 ```
 
 ## High-level components
 
+- **apps/api**: FastAPI + Taskiq skeleton (app/main.py, routes/, tasks/, worker.py). Estructura objetivo para sostener el crecimiento.
 - **apps/web**: Vite + React SPA (public browsing + authenticated flows).
-- **apps/backend**: Single Python project (FastAPI API + Taskiq worker + jobs).
-- **packages/contracts**: OpenAPI spec exported from the API and generated TypeScript types for the frontend.
-- **docs**: Functional/technical docs, domain model, API contract, architecture, ADRs.
-- **infra**: Local dev tooling (docker-compose, scripts).
-
-Concrete implementation details (routes, schemas, services) can be iterated on top of this skeleton.
+- **apps/backend**: Backend legacy; migrar dominio a apps/api según convenga.
+- **packages/contracts**: OpenAPI spec + TypeScript types for the frontend.
+- **infra**: Local dev (docker-compose en raíz + scripts en infra/).
+- **docs**: [Fundaciones técnicas](docs/FUNDACIONES-TECNICAS.md), ADRs, etc.
 
