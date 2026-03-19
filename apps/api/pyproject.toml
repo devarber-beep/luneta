@@ -7,6 +7,7 @@ dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
   "pydantic-settings>=2.3.0",
+  "email-validator>=2.2.0",
   "motor>=3.4.0",
   "taskiq>=0.11.0",
   "taskiq-redis>=0.6.0",

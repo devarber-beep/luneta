@@ -1,17 +1,29 @@
 """Luneta API - FastAPI application entrypoint."""
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import health, orgs
+from app.routes import auth, health, orgs, public, scenarios, workflow
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Luneta API", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Health
     app.include_router(health.router, prefix="/health", tags=["health"])
 
     # Organizations (first real MongoDB access)
     app.include_router(orgs.router, prefix="/orgs", tags=["orgs"])
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"])
+    app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
+    app.include_router(public.router, prefix="/public", tags=["public"])
 
     return app
 
