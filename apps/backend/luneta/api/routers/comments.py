@@ -1,4 +1,0 @@
-"""
-Comments router placeholder.
-"""
-

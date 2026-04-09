@@ -1,4 +1,0 @@
-"""
-Similarity checking router placeholder.
-"""
-

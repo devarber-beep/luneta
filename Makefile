@@ -43,14 +43,9 @@ worker:
 web:
 	cd apps/web && pnpm install && pnpm dev
 
-# --- Backend legacy (apps/backend) por si se usa durante la migración
-backend:
-	cd apps/backend && uvicorn luneta.api.main:app --reload
-
 # --- Tests y utilidades
 test:
 	cd apps/api && pip install -e ".[dev]" && pytest
-	cd apps/backend && pytest
 
 openapi:
 	bash infra/scripts/export_openapi.sh

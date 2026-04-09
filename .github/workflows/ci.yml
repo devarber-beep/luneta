@@ -27,8 +27,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install backend deps
-        working-directory: apps/backend
+      - name: Install api deps
+        working-directory: apps/api
         run: |
           pip install -e .[dev]
 
@@ -42,8 +42,8 @@ jobs:
         run: |
           pnpm install
 
-      - name: Run backend tests
-        working-directory: apps/backend
+      - name: Run api tests
+        working-directory: apps/api
         run: pytest
 
       - name: Build web

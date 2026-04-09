@@ -16,7 +16,13 @@ class ScenariosRepository:
         self._collection = db["scenarios"]
 
     async def ensure_indexes(self) -> None:
-        await self._collection.create_index("slug", unique=True)
+        # Hacemos unico el slug solo cuando es una cadena valida, para no romper
+        # con documentos legacy que tienen slug nulo u otros tipos.
+        await self._collection.create_index(
+            [("slug", 1)],
+            unique=True,
+            partialFilterExpression={"slug": {"$type": "string"}},
+        )
         await self._collection.create_index("author_user_id")
         await self._collection.create_index("state")
 

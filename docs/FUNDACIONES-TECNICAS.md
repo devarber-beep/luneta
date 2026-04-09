@@ -67,7 +67,7 @@ luneta/
   README.md
 ```
 
-El backend “legacy” con más dominio (auth, orgs, escenarios, etc.) sigue en `apps/backend`; la API nueva y estable es `apps/api`, que puedes ir poblando o migrando desde backend.
+`apps/api` es el backend activo y único del proyecto.
 
 ## Requisitos
 

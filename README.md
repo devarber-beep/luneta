@@ -29,9 +29,8 @@ luneta/
   pnpm-workspace.yaml
 
   apps/
-    api/               # FastAPI + Taskiq (skeleton: app/, worker.py, Dockerfile)
+    api/               # Backend principal: FastAPI + Taskiq
     web/               # Vite + React SPA
-    backend/           # Backend legacy (migración gradual a apps/api)
 
   packages/
     contracts/         # OpenAPI + generated TS types
@@ -47,9 +46,8 @@ luneta/
 
 ## High-level components
 
-- **apps/api**: FastAPI + Taskiq skeleton (app/main.py, routes/, tasks/, worker.py). Estructura objetivo para sostener el crecimiento.
+- **apps/api**: Backend principal FastAPI + Taskiq (app/main.py, routes/, tasks/, worker.py).
 - **apps/web**: Vite + React SPA (public browsing + authenticated flows).
-- **apps/backend**: Backend legacy; migrar dominio a apps/api según convenga.
 - **packages/contracts**: OpenAPI spec + TypeScript types for the frontend.
 - **infra**: Local dev (docker-compose en raíz + scripts en infra/).
 - **docs**: [Fundaciones técnicas](docs/FUNDACIONES-TECNICAS.md), ADRs, etc.

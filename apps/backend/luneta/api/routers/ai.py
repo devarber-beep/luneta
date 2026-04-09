@@ -1,4 +1,0 @@
-"""
-AI suggestions router placeholder.
-"""
-

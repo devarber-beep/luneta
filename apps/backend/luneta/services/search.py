@@ -1,4 +1,0 @@
-"""
-Atlas Search query helpers.
-"""
-
