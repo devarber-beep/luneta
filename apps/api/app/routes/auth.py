@@ -8,7 +8,9 @@ from app.api_auth import get_current_user
 from app.db import get_db
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
 from app.repositories.users import UsersRepository
+from app.dev_email_verification_snapshot import get_last, record_last
 from app.schemas.auth import (
+    DevLastEmailVerificationResponse,
     LoginRequest,
     LoginResponse,
     MeResponse,
@@ -46,8 +48,20 @@ async def signup(payload: SignupRequest, db: AsyncIOMotorDatabase = Depends(get_
 
     user = await auth_service.signup(email=payload.email, password=payload.password, role=payload.role)
     verification_token = await email_verification_service.issue_token(user_id=user.id or "", email=user.email)
+    if settings.dev_expose_last_email_verification_token:
+        record_last(email=user.email, token=verification_token)
     await mailer_service.send_verification_email(to_email=user.email, token=verification_token)
     return SignupResponse(user_id=user.id or "", requires_email_verification=True)
+
+
+@router.get("/dev/last-email-verification", response_model=DevLastEmailVerificationResponse)
+async def dev_last_email_verification() -> DevLastEmailVerificationResponse:
+    if not settings.dev_expose_last_email_verification_token:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    snap = get_last()
+    if snap is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No verification token recorded yet")
+    return DevLastEmailVerificationResponse(email=snap.email, token=snap.token, issued_at=snap.issued_at)
 
 
 @router.post("/verify-email", response_model=VerifyEmailResponse)

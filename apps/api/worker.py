@@ -1,11 +1,9 @@
 """Taskiq worker entrypoint. Run with: taskiq worker worker:broker (from apps/api)."""
-from taskiq import TaskiqScheduler
-from taskiq_redis import ListQueue, RedisQueueBroker
+from taskiq_redis import ListQueueBroker
 
 from app.settings import settings
 
-broker = RedisQueueBroker(url=settings.redis_url, list_cls=ListQueue)
-scheduler = TaskiqScheduler(broker=broker)
+broker = ListQueueBroker(url=settings.redis_url)
 
 # Import tasks so they are registered with the broker
 import app.tasks.example  # noqa: F401

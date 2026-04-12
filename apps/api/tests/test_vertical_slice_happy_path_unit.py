@@ -108,6 +108,37 @@ class _FakeReviewEventsRepo:
         return kwargs
 
 
+@dataclass
+class _FakeUsersRepo:
+    users: dict[str, UserModel] = None
+
+    def __post_init__(self) -> None:
+        self.users = {}
+
+    async def get_by_id(self, user_id: str) -> UserModel | None:
+        return self.users.get(user_id)
+
+
+@dataclass
+class _FakeCommentsRepo:
+    comments: list[dict] = None
+
+    def __post_init__(self) -> None:
+        self.comments = []
+
+    async def ensure_indexes(self) -> None:
+        return None
+
+    async def create(self, **kwargs):
+        now = datetime.now(UTC)
+        comment = {"_id": str(len(self.comments) + 1), "created_at": now, "updated_at": now, **kwargs}
+        self.comments.append(comment)
+        return comment
+
+    async def list_by_scenario_id(self, *, scenario_id: str):
+        return [c for c in self.comments if c["scenario_id"] == scenario_id]
+
+
 def _author() -> UserModel:
     now = datetime.now(UTC)
     return UserModel(
@@ -138,11 +169,15 @@ async def test_vertical_slice_happy_path_unit() -> None:
     scenarios_repo = _FakeScenariosRepo()
     revisions_repo = _FakeRevisionsRepo()
     review_events_repo = _FakeReviewEventsRepo()
+    users_repo = _FakeUsersRepo()
+    comments_repo = _FakeCommentsRepo()
 
     scenario_service = ScenarioService(
         scenarios_repo=scenarios_repo,
         revisions_repo=revisions_repo,
         review_events_repo=review_events_repo,
+        comments_repo=comments_repo,
+        users_repo=users_repo,
     )
     workflow_service = WorkflowService(
         scenarios_repo=scenarios_repo,
@@ -189,8 +224,21 @@ async def test_vertical_slice_happy_path_unit() -> None:
     )
     assert published.state == ScenarioState.PUBLISHED
 
+    comment = await scenario_service.add_comment(
+        scenario_id=created.id or "",
+        current_user=reviewer,
+        body_markdown="Buen escenario",
+        revision_number=2,
+        section_key="body",
+        field_path="body_markdown",
+    )
+    assert comment["body_markdown"] == "Buen escenario"
+    comments = await scenario_service.list_comments(scenario_id=created.id or "", current_user=reviewer)
+    assert len(comments) == 1
+
     event_types = [event["event_type"] for event in review_events_repo.events]
     assert ReviewEventType.DRAFT_SAVED in event_types
     assert ReviewEventType.SUBMITTED in event_types
     assert ReviewEventType.APPROVED in event_types
     assert ReviewEventType.PUBLISHED in event_types
+    assert ReviewEventType.COMMENT_ADDED in event_types

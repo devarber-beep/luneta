@@ -118,10 +118,64 @@ export async function publishScenario(token: string, id: string): Promise<{ stat
   });
 }
 
+export type PublicScenarioListItem = {
+  id: string;
+  slug: string;
+  title: string;
+  published_at: string;
+};
+
+export async function listPublicScenarios(): Promise<PublicScenarioListItem[]> {
+  return request("/public/scenarios");
+}
+
 export async function publicScenario(slug: string): Promise<{
+  id: string;
   slug: string;
   title: string;
   body_markdown: string;
+  published_at: string;
 }> {
   return request(`/public/scenarios/${slug}`);
+}
+
+export type ScenarioSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  state: string;
+  updated_at: string;
+};
+
+export async function listMyScenarios(token: string): Promise<ScenarioSummary[]> {
+  return request("/scenarios/mine", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type PublicComment = {
+  id: string;
+  author_user_id: string;
+  body_markdown: string;
+  revision_number: number | null;
+  section_key: string | null;
+  field_path: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listPublicComments(slug: string): Promise<{ scenario_id: string; slug: string; items: PublicComment[] }> {
+  return request(`/public/scenarios/${slug}/comments`);
+}
+
+export async function postPublicComment(
+  token: string,
+  slug: string,
+  payload: { body_markdown: string; revision_number?: number | null },
+): Promise<PublicComment> {
+  return request(`/public/scenarios/${slug}/comments`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
 }

@@ -7,7 +7,7 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.domain.enums import ScenarioState
+from app.domain.enums import CollaboratorRole, ScenarioState
 from app.models.scenario import ScenarioModel
 
 
@@ -24,6 +24,7 @@ class ScenariosRepository:
             partialFilterExpression={"slug": {"$type": "string"}},
         )
         await self._collection.create_index("author_user_id")
+        await self._collection.create_index("collaborators.user_id")
         await self._collection.create_index("state")
 
     async def create(
@@ -40,6 +41,14 @@ class ScenariosRepository:
             "title": title,
             "body_markdown": body_markdown,
             "author_user_id": author_user_id,
+            "collaborators": [
+                {
+                    "user_id": author_user_id,
+                    "role": CollaboratorRole.OWNER.value,
+                    "added_at": now,
+                    "added_by": author_user_id,
+                }
+            ],
             "state": ScenarioState.DRAFT.value,
             "current_revision_number": 1,
             "published_at": None,
@@ -97,9 +106,39 @@ class ScenariosRepository:
         doc = await self._collection.find_one({"slug": slug, "state": state.value})
         return self._to_model(doc)
 
+    async def replace_collaborators(
+        self,
+        *,
+        scenario_id: str,
+        collaborators: list[dict[str, Any]],
+    ) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {"$set": {"collaborators": collaborators, "updated_at": datetime.now(UTC)}},
+        )
+        return await self.get_by_id(scenario_id)
+
     async def list_by_state(self, *, state: ScenarioState) -> list[ScenarioModel]:
         items: list[ScenarioModel] = []
         cursor = self._collection.find({"state": state.value}).sort("updated_at", -1)
+        async for doc in cursor:
+            model = self._to_model(doc)
+            if model is not None:
+                items.append(model)
+        return items
+
+    async def list_for_participating_user(self, *, user_id: str) -> list[ScenarioModel]:
+        """Scenarios where the user is author or listed as collaborator."""
+        query = {
+            "$or": [
+                {"author_user_id": user_id},
+                {"collaborators.user_id": user_id},
+            ]
+        }
+        items: list[ScenarioModel] = []
+        cursor = self._collection.find(query).sort("updated_at", -1)
         async for doc in cursor:
             model = self._to_model(doc)
             if model is not None:

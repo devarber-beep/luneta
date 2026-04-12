@@ -1,4 +1,6 @@
 """Auth API schemas for vertical slice."""
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -11,6 +13,12 @@ class SignupRequest(BaseModel):
 class SignupResponse(BaseModel):
     user_id: str
     requires_email_verification: bool = True
+
+
+class DevLastEmailVerificationResponse(BaseModel):
+    email: EmailStr
+    token: str
+    issued_at: datetime
 
 
 class VerifyEmailRequest(BaseModel):

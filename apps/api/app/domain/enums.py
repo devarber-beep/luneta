@@ -14,8 +14,16 @@ class ScenarioState(StrEnum):
     PUBLISHED = "published"
 
 
+class CollaboratorRole(StrEnum):
+    OWNER = "owner"
+    EDITOR = "editor"
+
+
 class ReviewEventType(StrEnum):
     DRAFT_SAVED = "draft_saved"
     SUBMITTED = "submitted"
     APPROVED = "approved"
     PUBLISHED = "published"
+    COLLABORATOR_ADDED = "collaborator_added"
+    COLLABORATOR_REMOVED = "collaborator_removed"
+    COMMENT_ADDED = "comment_added"

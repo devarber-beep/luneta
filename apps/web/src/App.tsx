@@ -4,9 +4,13 @@ import {
   approveScenario,
   createScenario,
   getScenario,
+  listMyScenarios,
+  listPublicComments,
+  listPublicScenarios,
   login,
   me,
   patchScenario,
+  postPublicComment,
   publicScenario,
   publishScenario,
   reviewQueue,
@@ -25,19 +29,44 @@ const layoutStyle: CSSProperties = {
 
 function HomePage() {
   const token = getToken();
+  const [published, setPublished] = useState<Array<{ id: string; slug: string; title: string; published_at: string }>>([]);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    listPublicScenarios()
+      .then(setPublished)
+      .catch((e: Error) => setCatalogError(e.message));
+  }, []);
+
   return (
     <main style={layoutStyle}>
-      <h1>Luneta - Vertical Slice</h1>
-      <p>{"Journey: signup -> verify -> login -> draft -> review -> publish -> public read"}</p>
+      <h1>Luneta</h1>
+      <p>
+        Flujo: registro → verificar email → login → <strong>Mis escenarios</strong> / nuevo borrador → editar y guardar →
+        enviar a revisión → (revisor) cola → aprobar → publicar → <strong>catálogo público</strong> y vista{" "}
+        <code>/public/&lt;slug&gt;</code> (comentarios con cuenta en publicados).
+      </p>
       <nav style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
         <Link to="/signup">Signup</Link>
         <Link to="/verify-email">Verify email</Link>
         <Link to="/login">Login</Link>
-        <Link to="/scenarios/new">Nuevo draft</Link>
-        <Link to="/review">Review queue</Link>
-        <Link to="/scenarios/escenario-demo">Vista publica demo</Link>
+        <Link to="/mis-escenarios">Mis escenarios</Link>
+        <Link to="/scenarios/new">Nuevo borrador</Link>
+        <Link to="/review">Cola de revisión</Link>
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Sesion activa.</p> : <p style={{ marginTop: "1rem" }}>Sin sesion.</p>}
+      <section style={{ marginTop: "2rem" }}>
+        <h2>Publicados</h2>
+        {catalogError ? <p style={{ color: "crimson" }}>{catalogError}</p> : null}
+        {!published.length && !catalogError ? <p>Aun no hay escenarios publicados.</p> : null}
+        <ul style={{ paddingLeft: "1.25rem" }}>
+          {published.map((s) => (
+            <li key={s.id}>
+              <Link to={`/public/${s.slug}`}>{s.title}</Link> <span style={{ color: "#666" }}>({s.slug})</span>
+            </li>
+          ))}
+        </ul>
+      </section>
     </main>
   );
 }
@@ -120,7 +149,7 @@ function LoginPage() {
       if (profile.role === "reviewer") {
         navigate("/review");
       } else {
-        navigate("/scenarios/new");
+        navigate("/mis-escenarios");
       }
     } catch (error) {
       setMessage((error as Error).message);
@@ -147,6 +176,55 @@ function RequireAuth({ children }: { children: ReactElement }) {
     return <Navigate to="/login" replace />;
   }
   return children;
+}
+
+function MyScenariosPage() {
+  const [items, setItems] = useState<Array<{ id: string; slug: string; title: string; state: string }>>([]);
+  const [message, setMessage] = useState("");
+
+  const load = async () => {
+    const token = getToken();
+    if (!token) {
+      return;
+    }
+    try {
+      const rows = await listMyScenarios(token);
+      setItems(rows);
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    load().catch((e: Error) => setMessage(e.message));
+  }, []);
+
+  return (
+    <main style={layoutStyle}>
+      <h2>Mis escenarios</h2>
+      <p>Autor o colaborador (owner/editor). Los borradores se editan por id; los publicados se ven por slug.</p>
+      <button type="button" onClick={() => load().catch((e: Error) => setMessage(e.message))}>
+        Refrescar
+      </button>
+      <ul style={{ marginTop: "1rem", paddingLeft: "1.25rem" }}>
+        {items.map((s) => (
+          <li key={s.id} style={{ marginBottom: "0.5rem" }}>
+            <strong>{s.title}</strong> — {s.state}{" "}
+            <Link to={`/scenarios/${s.id}/edit`}>Editar / flujo</Link>
+            {s.state === "published" ? (
+              <>
+                {" "}
+                <Link to={`/public/${s.slug}`}>Ver público</Link>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {!items.length && <p>No hay escenarios asociados a tu cuenta.</p>}
+      {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
+      <Link to="/">Volver</Link>
+    </main>
+  );
 }
 
 function NewScenarioPage() {
@@ -301,7 +379,7 @@ function ReviewPage() {
           slug: {item.slug}
           <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
             <button onClick={() => onApprovePublish(item.scenario_id)}>Approve + Publish</button>
-            <Link to={`/scenarios/${item.slug}`}>Ver publico</Link>
+            <Link to={`/public/${item.slug}`}>Ver publico</Link>
           </div>
         </div>
       ))}
@@ -314,9 +392,20 @@ function ReviewPage() {
 
 function PublicScenarioPage() {
   const { slug } = useParams();
+  const token = getToken();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [publishedAt, setPublishedAt] = useState("");
+  const [comments, setComments] = useState<
+    Array<{ id: string; author_user_id: string; body_markdown: string; created_at: string }>
+  >([]);
+  const [newComment, setNewComment] = useState("");
   const [message, setMessage] = useState("");
+
+  const loadComments = async (s: string) => {
+    const data = await listPublicComments(s);
+    setComments(data.items);
+  };
 
   useEffect(() => {
     if (!slug) {
@@ -326,16 +415,68 @@ function PublicScenarioPage() {
       .then((data) => {
         setTitle(data.title);
         setBody(data.body_markdown);
+        setPublishedAt(data.published_at);
       })
       .catch((error: Error) => setMessage(error.message));
+    loadComments(slug).catch((error: Error) => setMessage(error.message));
   }, [slug]);
+
+  const onPostComment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!slug || !token || !newComment.trim()) {
+      return;
+    }
+    try {
+      await postPublicComment(token, slug, { body_markdown: newComment.trim() });
+      setNewComment("");
+      await loadComments(slug);
+      setMessage("Comentario publicado.");
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  };
 
   return (
     <main style={layoutStyle}>
-      <h2>Vista Publica</h2>
+      <h2>Vista pública</h2>
+      {publishedAt ? <p style={{ color: "#666" }}>Publicado: {new Date(publishedAt).toLocaleString()}</p> : null}
       <h3>{title}</h3>
       <pre style={{ whiteSpace: "pre-wrap" }}>{body}</pre>
-      <p>{message}</p>
+      <section style={{ marginTop: "2rem" }}>
+        <h4>Comentarios</h4>
+        {!comments.length ? <p>Sin comentarios aún.</p> : null}
+        <ul style={{ listStyle: "none", padding: 0 }}>
+          {comments.map((c) => (
+            <li
+              key={c.id}
+              style={{ borderBottom: "1px solid #eee", padding: "0.75rem 0", whiteSpace: "pre-wrap" }}
+            >
+              <small style={{ color: "#666" }}>Usuario {c.author_user_id.slice(-6)} · {c.created_at}</small>
+              <div>{c.body_markdown}</div>
+            </li>
+          ))}
+        </ul>
+        {token ? (
+          <form onSubmit={onPostComment} style={{ display: "grid", gap: "0.5rem", marginTop: "1rem" }}>
+            <label htmlFor="pub-comment">Añadir comentario (requiere sesión)</label>
+            <textarea
+              id="pub-comment"
+              rows={4}
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Escribe un comentario..."
+            />
+            <button type="submit">Publicar comentario</button>
+          </form>
+        ) : (
+          <p style={{ marginTop: "1rem" }}>
+            <Link to="/login">Inicia sesión</Link> para comentar en escenarios publicados.
+          </p>
+        )}
+      </section>
+      {message ? (
+        <p style={{ marginTop: "1rem", color: message.startsWith("Comentario") ? "green" : "crimson" }}>{message}</p>
+      ) : null}
       <Link to="/">Volver</Link>
     </main>
   );
@@ -365,6 +506,14 @@ export function App() {
         <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
+          path="/mis-escenarios"
+          element={
+            <RequireAuth>
+              <MyScenariosPage />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/scenarios/new"
           element={
             <RequireAuth>
@@ -388,7 +537,7 @@ export function App() {
             </RequireAuth>
           }
         />
-        <Route path="/scenarios/:slug" element={<PublicScenarioPage />} />
+        <Route path="/public/:slug" element={<PublicScenarioPage />} />
       </Routes>
     </>
   );

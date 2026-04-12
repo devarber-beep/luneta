@@ -82,10 +82,21 @@ class FakeCollection:
 
 
 def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
+    if "$or" in query:
+        branches = query["$or"]
+        if not isinstance(branches, list) or not any(_matches(doc, sub) for sub in branches):
+            return False
+        rest = {k: v for k, v in query.items() if k != "$or"}
+        return _matches(doc, rest) if rest else True
     for key, expected in query.items():
         value = doc.get(key)
         if isinstance(expected, dict):
             if "$gt" in expected and not (value is not None and value > expected["$gt"]):
+                return False
+            continue
+        if key == "collaborators.user_id":
+            collabs = doc.get("collaborators") or []
+            if not any(c.get("user_id") == expected for c in collabs):
                 return False
             continue
         if value != expected:
