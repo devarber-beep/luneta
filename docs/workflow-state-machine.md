@@ -18,17 +18,17 @@ Definicion de transiciones permitidas para el flujo minimo.
 
 ## Transiciones validas
 
-| Desde       | Evento      | Hacia       | Actor      |
-|-------------|-------------|-------------|------------|
-| `draft`     | `submitted` | `in_review` | `author`   |
-| `in_review` | `approved`  | `approved`  | `reviewer` |
-| `approved`  | `published` | `published` | `reviewer` |
+| Desde       | Evento      | Hacia       | Actor          |
+|-------------|-------------|-------------|----------------|
+| `draft`     | `submitted` | `in_review` | `investigator` |
+| `in_review` | `approved`  | `approved`  | `coordinator`  |
+| `approved`  | `published` | `published` | `coordinator`  |
 
 Notas:
 
 - `draft_saved` no cambia estado; crea/actualiza revision.
 - El estado `published` es terminal para esta version minima.
-- No se define evento de rechazo en esta fase.
+- Rechazo (`in_review` → `draft`) lo realiza un `coordinator` (ver API actual).
 
 ## Invariantes
 

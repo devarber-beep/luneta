@@ -90,11 +90,11 @@ class ScenariosRepository:
     async def get_by_id(self, scenario_id: str) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None
-        doc = await self._collection.find_one({"_id": ObjectId(scenario_id)})
+        doc = await self._collection.find_one({"_id": ObjectId(scenario_id), "deleted_at": None})
         return self._to_model(doc)
 
     async def get_by_public_slug(self, slug: str) -> ScenarioModel | None:
-        doc = await self._collection.find_one({"public_slug": slug})
+        doc = await self._collection.find_one({"public_slug": slug, "deleted_at": None})
         return self._to_model(doc)
 
     async def update_draft_content(
@@ -275,9 +275,37 @@ class ScenariosRepository:
         )
         return await self.get_by_id(scenario_id)
 
+    async def reject_to_draft(self, *, scenario_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.DRAFT.value,
+                    "submitted_for_review_at": None,
+                    "submitted_for_review_by_user_id": None,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def soft_delete_draft(self, *, scenario_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id), "state": ScenarioState.DRAFT.value, "deleted_at": None},
+            {"$set": {"deleted_at": now, "updated_at": now}},
+        )
+        return await self.get_by_id(scenario_id)
+
     async def list_by_state(self, *, state: ScenarioState) -> list[ScenarioModel]:
         items: list[ScenarioModel] = []
-        cursor = self._collection.find({"state": state.value}).sort("updated_at", -1)
+        cursor = self._collection.find({"state": state.value, "deleted_at": None}).sort("updated_at", -1)
         async for doc in cursor:
             model = self._to_model(doc)
             if model is not None:
@@ -289,6 +317,7 @@ class ScenariosRepository:
         cursor = self._collection.find(
             {
                 "published_at": {"$ne": None},
+                "deleted_at": None,
                 "public_slug": {"$type": "string"},
                 "public_title": {"$type": "string"},
                 "public_body_markdown": {"$type": "string"},
@@ -303,9 +332,14 @@ class ScenariosRepository:
     async def list_for_participating_user(self, *, user_id: str) -> list[ScenarioModel]:
         """Scenarios where the user is author or listed as collaborator."""
         query = {
-            "$or": [
-                {"author_user_id": user_id},
-                {"collaborators.user_id": user_id},
+            "$and": [
+                {"deleted_at": None},
+                {
+                    "$or": [
+                        {"author_user_id": user_id},
+                        {"collaborators.user_id": user_id},
+                    ]
+                },
             ]
         }
         items: list[ScenarioModel] = []
@@ -332,10 +366,13 @@ class ScenariosRepository:
         return candidate
 
     async def _slug_exists(self, slug: str, *, exclude_id: str | None = None) -> bool:
-        q: dict[str, Any] = {"$or": [{"slug": slug}, {"public_slug": slug}]}
+        clauses: list[dict[str, Any]] = [
+            {"$or": [{"slug": slug}, {"public_slug": slug}]},
+            {"deleted_at": None},
+        ]
         if exclude_id and ObjectId.is_valid(exclude_id):
-            q = {"$and": [q, {"_id": {"$ne": ObjectId(exclude_id)}}]}
-        return await self._collection.find_one(q) is not None
+            clauses.append({"_id": {"$ne": ObjectId(exclude_id)}})
+        return await self._collection.find_one({"$and": clauses}) is not None
 
     def _build_keywords(
         self,

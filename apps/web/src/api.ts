@@ -1,9 +1,69 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+type FastApiValidationItem = {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+};
+
+function formatFastApiDetail(detail: unknown): string {
+  if (detail === null || detail === undefined) {
+    return "Request failed";
+  }
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "object" && item !== null && "msg" in item) {
+          const row = item as FastApiValidationItem;
+          const path =
+            Array.isArray(row.loc) && row.loc.length > 0
+              ? row.loc
+                  .map(String)
+                  .filter((segment) => segment !== "body" && segment !== "query" && segment !== "path")
+                  .join(".")
+              : "";
+          const msg = row.msg ?? "invalid";
+          return path ? `${path}: ${msg}` : msg;
+        }
+        return typeof item === "string" ? item : JSON.stringify(item);
+      })
+      .join("; ");
+  }
+  if (typeof detail === "object" && "message" in detail) {
+    return String((detail as { message: unknown }).message);
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return "Request failed";
+  }
+}
+
+/** Readable message from a failed fetch (FastAPI JSON or plain text). */
+export async function getFetchErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  const status = response.status;
+  if (!text.trim()) {
+    return `Request failed (${status})`;
+  }
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (parsed.detail !== undefined) {
+      return formatFastApiDetail(parsed.detail);
+    }
+  } catch {
+    // not JSON
+  }
+  return text.length > 800 ? `${text.slice(0, 800)}…` : text;
+}
+
 export type SignupPayload = {
   email: string;
   password: string;
-  role: "author" | "reviewer";
+  role: "investigator" | "coordinator";
   nickname: string;
 };
 
@@ -44,10 +104,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    throw new Error(await getFetchErrorMessage(response));
   }
-  return (await response.json()) as T;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const raw = await response.text();
+  if (!raw.trim()) {
+    return undefined as T;
+  }
+  return JSON.parse(raw) as T;
 }
 
 export async function signup(payload: SignupPayload): Promise<{ user_id: string }> {
@@ -121,7 +187,7 @@ export async function changeMyPassword(
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
-    throw new Error((await response.text()) || `Request failed: ${response.status}`);
+    throw new Error(await getFetchErrorMessage(response));
   }
 }
 
@@ -161,13 +227,31 @@ export async function submitReview(token: string, id: string): Promise<{ state: 
   });
 }
 
+export async function deleteScenario(token: string, id: string): Promise<void> {
+  const response = await fetch(`${API_URL}/scenarios/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(await getFetchErrorMessage(response));
+  }
+}
+
+export type WorkflowActionResponse = {
+  scenario_id: string;
+  state: string;
+  changed_at: string;
+};
+
 export async function reviewQueue(token: string): Promise<{
   items: Array<{
     scenario_id: string;
     slug: string;
     title: string;
+    author_user_id: string;
     state: string;
     has_prior_approval: boolean;
+    submitted_at?: string | null;
     live_public_slug?: string | null;
     live_public_title?: string | null;
     live_public_body_markdown?: string | null;
@@ -178,14 +262,21 @@ export async function reviewQueue(token: string): Promise<{
   });
 }
 
-export async function approveScenario(token: string, id: string): Promise<{ state: string }> {
+export async function approveScenario(token: string, id: string): Promise<WorkflowActionResponse> {
   return request(`/workflow/scenarios/${id}/approve`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
-export async function publishScenario(token: string, id: string): Promise<{ state: string }> {
+export async function rejectScenario(token: string, id: string): Promise<WorkflowActionResponse> {
+  return request(`/workflow/scenarios/${id}/reject`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function publishScenario(token: string, id: string): Promise<WorkflowActionResponse> {
   return request(`/workflow/scenarios/${id}/publish`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -253,7 +344,7 @@ export async function uploadScenarioCover(
     body: form,
   });
   if (!response.ok) {
-    throw new Error((await response.text()) || `Request failed: ${response.status}`);
+    throw new Error(await getFetchErrorMessage(response));
   }
   return (await response.json()) as ScenarioResponse;
 }
@@ -275,7 +366,7 @@ export async function uploadScenarioInline(
     body: form,
   });
   if (!response.ok) {
-    throw new Error((await response.text()) || `Request failed: ${response.status}`);
+    throw new Error(await getFetchErrorMessage(response));
   }
   return (await response.json()) as ScenarioResponse;
 }

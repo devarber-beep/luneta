@@ -1,11 +1,11 @@
 """Permission and workflow rules for the vertical slice."""
-from app.domain.enums import CollaboratorRole, ScenarioState, UserRole
+from app.domain.enums import CollaboratorRole, ScenarioState
 from app.models.scenario import ScenarioModel
 
 
 ALLOWED_WORKFLOW_TRANSITIONS: dict[ScenarioState, set[ScenarioState]] = {
     ScenarioState.DRAFT: {ScenarioState.IN_REVIEW},
-    ScenarioState.IN_REVIEW: {ScenarioState.APPROVED},
+    ScenarioState.IN_REVIEW: {ScenarioState.APPROVED, ScenarioState.DRAFT},
     ScenarioState.APPROVED: {ScenarioState.PUBLISHED},
     ScenarioState.PUBLISHED: {ScenarioState.IN_REVIEW},
 }
@@ -37,12 +37,11 @@ def has_republication_pending(*, scenario: ScenarioModel) -> bool:
 
 def can_submit_for_review(
     *,
-    actor_role: UserRole,
     collaborator_role: CollaboratorRole | None,
     state: ScenarioState,
     scenario: ScenarioModel,
 ) -> bool:
-    if actor_role != UserRole.AUTHOR or collaborator_role != CollaboratorRole.OWNER:
+    if collaborator_role != CollaboratorRole.OWNER:
         return False
     if state == ScenarioState.DRAFT:
         return True
@@ -62,18 +61,6 @@ def can_edit_published_content(*, collaborator_role: CollaboratorRole | None) ->
 
 def can_manage_collaborators(*, collaborator_role: CollaboratorRole | None) -> bool:
     return collaborator_role == CollaboratorRole.OWNER
-
-
-def has_scenario_read_access(*, actor_role: UserRole, collaborator_role: CollaboratorRole | None) -> bool:
-    return actor_role == UserRole.REVIEWER or collaborator_role is not None
-
-
-def can_approve(*, actor_role: UserRole, state: ScenarioState) -> bool:
-    return actor_role == UserRole.REVIEWER and state == ScenarioState.IN_REVIEW
-
-
-def can_publish(*, actor_role: UserRole, state: ScenarioState) -> bool:
-    return actor_role == UserRole.REVIEWER and state == ScenarioState.APPROVED
 
 
 def is_publicly_visible(state: ScenarioState) -> bool:

@@ -4,10 +4,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api_auth import get_current_user
 from app.core.permissions import has_republication_pending
 from app.db import get_db
+from app.deps.authz import require_any_permission, require_permission
+from app.domain.authz_permissions import Permission
 from app.domain.enums import ScenarioState
+from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
@@ -104,7 +106,7 @@ def _to_response(scenario) -> ScenarioResponse:
 async def create_scenario(
     payload: ScenarioCreateRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_CREATE_DRAFT)),
 ) -> ScenarioResponse:
     scenario = await _service(db).create_draft(
         current_user=current_user,
@@ -117,7 +119,7 @@ async def create_scenario(
 @router.get("/mine", response_model=list[ScenarioSummaryResponse])
 async def list_my_scenarios(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
     scenarios = await _service(db).list_my_scenarios(current_user=current_user)
     return [
@@ -137,9 +139,11 @@ async def list_my_scenarios(
 async def get_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+    ),
 ) -> ScenarioResponse:
-    scenario = await _service(db).get_for_author_or_reviewer(
+    scenario = await _service(db).get_scenario_if_readable(
         scenario_id=scenario_id,
         current_user=current_user,
     )
@@ -151,7 +155,9 @@ async def patch_scenario(
     scenario_id: str,
     payload: ScenarioPatchRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     scenario = await _service(db).patch_draft(
         scenario_id=scenario_id,
@@ -166,11 +172,20 @@ async def patch_scenario(
     return _to_response(scenario)
 
 
+@router.delete("/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_scenario(
+    scenario_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_DELETE_OWN)),
+) -> None:
+    await _service(db).delete_draft(scenario_id=scenario_id, current_user=current_user)
+
+
 @router.post("/{scenario_id}/submit-review", response_model=SubmitReviewResponse)
 async def submit_review(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_SUBMIT_REVIEW)),
 ) -> SubmitReviewResponse:
     scenario = await _service(db).submit_review(
         scenario_id=scenario_id,
@@ -188,7 +203,9 @@ async def upload_cover_asset(
     file: UploadFile = File(...),
     alt_text: str | None = Form(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     content_type = (file.content_type or "").lower()
     if not content_type.startswith("image/"):
@@ -214,7 +231,9 @@ async def upload_inline_asset(
     alt_text: str | None = Form(default=None),
     order: int = Form(default=0),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     content_type = (file.content_type or "").lower()
     if not content_type.startswith("image/"):
@@ -238,7 +257,9 @@ async def upload_inline_asset(
 async def delete_cover_asset(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_cover_image(
         scenario_id=scenario_id,
@@ -253,7 +274,9 @@ async def delete_inline_asset(
     scenario_id: str,
     asset_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_inline_image(
         scenario_id=scenario_id,
@@ -269,7 +292,9 @@ async def reorder_inline_assets(
     scenario_id: str,
     payload: ReorderInlineAssetsRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+    ),
 ) -> ScenarioResponse:
     scenario = await _service(db).reorder_inline_images(
         scenario_id=scenario_id,
@@ -285,7 +310,9 @@ async def get_asset_read_url(
     asset_id: str,
     expires_in_seconds: int = 900,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+    ),
 ) -> ScenarioAssetReadUrlResponse:
     signed_url, expires = await _service(db).resolve_asset_read_url(
         scenario_id=scenario_id,
@@ -301,7 +328,9 @@ async def get_asset_read_url(
 async def list_collaborators(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(
+        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+    ),
 ) -> ScenarioCollaboratorsResponse:
     collaborators, scenario = await _service(db).list_collaborators(
         scenario_id=scenario_id,
@@ -326,7 +355,7 @@ async def add_collaborator(
     scenario_id: str,
     payload: AddCollaboratorRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
     scenario = await _service(db).add_editor(
         scenario_id=scenario_id,
@@ -341,7 +370,7 @@ async def remove_collaborator(
     scenario_id: str,
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_editor(
         scenario_id=scenario_id,

@@ -169,7 +169,7 @@ def _author() -> UserModel:
         email_normalized="author@luneta.dev",
         password_hash="x",
         password_updated_at=now,
-        role=UserRole.AUTHOR,
+        role=UserRole.INVESTIGATOR,
         is_email_verified=True,
         email_verified_at=now,
         nickname="author",
@@ -187,7 +187,7 @@ def _reviewer() -> UserModel:
         email_normalized="reviewer@luneta.dev",
         password_hash="x",
         password_updated_at=now,
-        role=UserRole.REVIEWER,
+        role=UserRole.COORDINATOR,
         is_email_verified=True,
         email_verified_at=now,
         nickname="reviewer",
@@ -277,6 +277,7 @@ async def test_vertical_slice_happy_path_unit() -> None:
     assert resubmitted.state == ScenarioState.IN_REVIEW
 
     event_types = [event["event_type"] for event in review_events_repo.events]
+    assert ReviewEventType.CREATE_DRAFT in event_types
     assert ReviewEventType.DRAFT_SAVED in event_types
     assert event_types.count(ReviewEventType.SUBMITTED) == 2
     assert ReviewEventType.APPROVED in event_types

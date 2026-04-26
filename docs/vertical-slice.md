@@ -19,8 +19,8 @@ Con este slice validamos auth, roles, workflow, persistencia, permisos y publica
 
 ## Roles minimos
 
-- `author`: crea y edita su draft; puede enviarlo a revision.
-- `reviewer`: ve la cola de revision; aprueba y publica.
+- `investigator`: crea y edita su draft; puede enviarlo a revision.
+- `coordinator`: ve la cola de revision; aprueba, rechaza y publica.
 - `public`: solo lectura de escenarios publicados, sin login.
 
 ## Estados minimos del escenario
@@ -34,7 +34,7 @@ Con este slice validamos auth, roles, workflow, persistencia, permisos y publica
 
 - Solo usuario verificado puede usar endpoints autenticados.
 - Solo el autor del escenario puede editar su `draft`.
-- Solo `reviewer` puede aprobar y publicar.
+- Solo `coordinator` puede aprobar y publicar.
 - Solo escenarios `published` son visibles en endpoints publicos.
 - Cada guardado de draft crea/actualiza una revision en `scenario_revisions`.
 - Cada transicion de estado genera un evento en `review_events`.
@@ -58,14 +58,14 @@ Separar `scenario_revisions` y `review_events` evita sobrecargar el documento pr
 - `POST /auth/login`
 - `GET /auth/me`
 
-### Author / Scenario
+### Investigator / Scenario
 
 - `POST /scenarios`
 - `GET /scenarios/{id}`
 - `PATCH /scenarios/{id}`
 - `POST /scenarios/{id}/submit-review`
 
-### Workflow (reviewer)
+### Workflow (coordinator)
 
 - `GET /workflow/review-queue`
 - `POST /workflow/scenarios/{id}/approve`

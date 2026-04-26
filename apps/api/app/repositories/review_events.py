@@ -6,7 +6,7 @@ from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.domain.enums import ReviewEventType, ScenarioState
+from app.domain.enums import ReviewEventType, ScenarioState, UserRole
 from app.models.review_event import ReviewEventModel
 
 
@@ -23,6 +23,7 @@ class ReviewEventsRepository:
         scenario_id: str,
         event_type: ReviewEventType,
         actor_user_id: str,
+        actor_role: UserRole | None = None,
         from_state: ScenarioState | None = None,
         to_state: ScenarioState | None = None,
     ) -> ReviewEventModel:
@@ -32,6 +33,8 @@ class ReviewEventsRepository:
             "actor_user_id": actor_user_id,
             "created_at": datetime.now(UTC),
         }
+        if actor_role is not None:
+            doc["actor_role"] = actor_role.value
         if from_state is not None:
             doc["from_state"] = from_state.value
         if to_state is not None:

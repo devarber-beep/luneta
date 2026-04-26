@@ -16,7 +16,7 @@ async def test_vertical_slice_http_happy_path(api_client):
             json={
                 "email": "author@luneta.dev",
                 "password": "Password123!",
-                "role": "author",
+                "role": "investigator",
                 "nickname": "author",
             },
         )
@@ -86,7 +86,7 @@ async def test_vertical_slice_http_happy_path(api_client):
             json={
                 "email": "reviewer@luneta.dev",
                 "password": "Password123!",
-                "role": "reviewer",
+                "role": "coordinator",
                 "nickname": "reviewer",
             },
         )

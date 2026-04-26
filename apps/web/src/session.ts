@@ -19,5 +19,14 @@ export function setRole(role: string): void {
 }
 
 export function getRole(): string | null {
-  return localStorage.getItem(ROLE_KEY);
+  const raw = localStorage.getItem(ROLE_KEY);
+  if (raw === "author") {
+    localStorage.setItem(ROLE_KEY, "investigator");
+    return "investigator";
+  }
+  if (raw === "reviewer") {
+    localStorage.setItem(ROLE_KEY, "coordinator");
+    return "coordinator";
+  }
+  return raw;
 }

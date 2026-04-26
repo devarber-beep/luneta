@@ -6,14 +6,16 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 
 from app.core.permissions import (
-    can_edit_draft,
-    can_edit_published_content,
     can_manage_collaborators,
-    can_submit_for_review,
     get_collaborator_role,
     has_republication_pending,
-    has_scenario_read_access,
     is_valid_transition,
+)
+from app.core.scenario_access import (
+    can_delete_own_draft,
+    can_read_scenario,
+    can_submit_review,
+    can_update_scenario,
 )
 from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
@@ -49,9 +51,6 @@ class ScenarioService:
         title: str,
         body_markdown: str,
     ) -> ScenarioModel:
-        if current_user.role != UserRole.AUTHOR:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only authors can create drafts")
-
         await self._scenarios_repo.ensure_indexes()
         await self._revisions_repo.ensure_indexes()
         await self._review_events_repo.ensure_indexes()
@@ -71,8 +70,10 @@ class ScenarioService:
         )
         await self._review_events_repo.create(
             scenario_id=scenario.id or "",
-            event_type=ReviewEventType.DRAFT_SAVED,
+            event_type=ReviewEventType.CREATE_DRAFT,
             actor_user_id=current_user.id or "",
+            actor_role=UserRole(current_user.role),
+            to_state=scenario.state,
         )
         return scenario
 
@@ -80,15 +81,12 @@ class ScenarioService:
         await self._scenarios_repo.ensure_indexes()
         return await self._scenarios_repo.list_for_participating_user(user_id=current_user.id or "")
 
-    async def get_for_author_or_reviewer(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
+    async def get_scenario_if_readable(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
-        actor_role = UserRole(current_user.role)
-        actor_user_id = current_user.id or ""
-        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
-        if not has_scenario_read_access(actor_role=actor_role, collaborator_role=collaborator_role):
+        if not can_read_scenario(user=current_user, scenario=scenario):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return scenario
 
@@ -109,30 +107,10 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
         actor_user_id = current_user.id or ""
-        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
-        if scenario.state == ScenarioState.DRAFT:
-            if not can_edit_draft(collaborator_role=collaborator_role, state=scenario.state):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only owner/editor can edit draft",
-                )
-        elif scenario.state == ScenarioState.PUBLISHED:
-            if not can_edit_published_content(collaborator_role=collaborator_role):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Only the scenario owner can edit published content",
-                )
-        elif scenario.state == ScenarioState.IN_REVIEW:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Scenario in review cannot be edited",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot edit scenario in this state",
-            )
+        if not can_update_scenario(user=current_user, scenario=scenario):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit this scenario")
 
+        prior_state = scenario.state
         updated = await self._scenarios_repo.update_draft_content(
             scenario_id=scenario_id,
             title=title,
@@ -157,10 +135,18 @@ class ScenarioService:
             state_snapshot=bumped.state,
             created_by_user_id=actor_user_id,
         )
+        event_type = (
+            ReviewEventType.UPDATE_IN_REVIEW
+            if prior_state == ScenarioState.IN_REVIEW
+            else ReviewEventType.DRAFT_SAVED
+        )
         await self._review_events_repo.create(
             scenario_id=bumped.id or "",
-            event_type=ReviewEventType.DRAFT_SAVED,
+            event_type=event_type,
             actor_user_id=actor_user_id,
+            actor_role=UserRole(current_user.role),
+            from_state=prior_state,
+            to_state=bumped.state,
         )
         return bumped
 
@@ -291,7 +277,7 @@ class ScenarioService:
         storage: MinioScenarioStorage,
         expires_in_seconds: int = 900,
     ) -> tuple[str, int]:
-        scenario = await self.get_for_author_or_reviewer(scenario_id=scenario_id, current_user=current_user)
+        scenario = await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
         target = None
         if scenario.cover_image is not None and scenario.cover_image.asset_id == asset_id:
             target = scenario.cover_image
@@ -309,14 +295,7 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
         actor_user_id = current_user.id or ""
-        actor_role = UserRole(current_user.role)
-        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
-        if not can_submit_for_review(
-            actor_role=actor_role,
-            collaborator_role=collaborator_role,
-            state=scenario.state,
-            scenario=scenario,
-        ):
+        if not can_submit_review(user=current_user, scenario=scenario):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot submit this scenario")
 
         if not is_valid_transition(scenario.state, ScenarioState.IN_REVIEW):
@@ -341,11 +320,12 @@ class ScenarioService:
             scenario_id=updated.id or "",
             event_type=ReviewEventType.SUBMITTED,
             actor_user_id=actor_user_id,
+            actor_role=UserRole(current_user.role),
             from_state=scenario.state,
             to_state=updated.state,
         )
-        reviewer_emails = await self._users_repo.list_verified_emails_by_role(UserRole.REVIEWER.value)
-        for address in reviewer_emails:
+        coordinator_emails = await self._users_repo.list_verified_emails_by_role(UserRole.COORDINATOR.value)
+        for address in coordinator_emails:
             await self._mailer.send_scenario_submitted_for_review(
                 to_email=address,
                 scenario_title=updated.title,
@@ -354,7 +334,7 @@ class ScenarioService:
         return updated
 
     async def list_collaborators(self, *, scenario_id: str, current_user: UserModel):
-        scenario = await self.get_for_author_or_reviewer(scenario_id=scenario_id, current_user=current_user)
+        scenario = await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
         return scenario.collaborators, scenario
 
     async def add_editor(self, *, scenario_id: str, editor_user_id: str, current_user: UserModel) -> ScenarioModel:
@@ -373,8 +353,8 @@ class ScenarioService:
         editor_user = await self._users_repo.get_by_id(editor_user_id)
         if editor_user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Editor user not found")
-        if editor_user.role != UserRole.AUTHOR:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only author users can be editors")
+        if editor_user.role != UserRole.INVESTIGATOR:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only investigator users can be editors")
 
         collaborators = [c.model_dump(mode="json") for c in scenario.collaborators]
         for collaborator in collaborators:
@@ -401,6 +381,7 @@ class ScenarioService:
             scenario_id=updated.id or "",
             event_type=ReviewEventType.COLLABORATOR_ADDED,
             actor_user_id=actor_user_id,
+            actor_role=UserRole(current_user.role),
         )
         return updated
 
@@ -432,6 +413,7 @@ class ScenarioService:
             scenario_id=updated.id or "",
             event_type=ReviewEventType.COLLABORATOR_REMOVED,
             actor_user_id=actor_user_id,
+            actor_role=UserRole(current_user.role),
         )
         return updated
 
@@ -439,18 +421,17 @@ class ScenarioService:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        actor_user_id = current_user.id or ""
-        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
-        if scenario.state == ScenarioState.DRAFT:
-            if can_edit_draft(collaborator_role=collaborator_role, state=scenario.state):
-                return scenario
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/editor can edit draft")
-        if scenario.state == ScenarioState.PUBLISHED:
-            if can_edit_published_content(collaborator_role=collaborator_role):
-                return scenario
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the scenario owner can edit published content",
-            )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit scenario in this state")
+        if not can_update_scenario(user=current_user, scenario=scenario):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit this scenario")
+        return scenario
+
+    async def delete_draft(self, *, scenario_id: str, current_user: UserModel) -> None:
+        scenario = await self._scenarios_repo.get_by_id(scenario_id)
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        if not can_delete_own_draft(user=current_user, scenario=scenario):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete this scenario")
+        deleted = await self._scenarios_repo.soft_delete_draft(scenario_id=scenario_id)
+        if deleted is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 

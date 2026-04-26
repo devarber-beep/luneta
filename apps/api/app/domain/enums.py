@@ -3,8 +3,8 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    AUTHOR = "author"
-    REVIEWER = "reviewer"
+    INVESTIGATOR = "investigator"
+    COORDINATOR = "coordinator"
 
 
 class UserAccountStatus(StrEnum):
@@ -25,9 +25,12 @@ class CollaboratorRole(StrEnum):
 
 
 class ReviewEventType(StrEnum):
+    CREATE_DRAFT = "create_draft"
     DRAFT_SAVED = "draft_saved"
     SUBMITTED = "submitted"
+    UPDATE_IN_REVIEW = "update_in_review"
     APPROVED = "approved"
+    REJECTED = "rejected"
     PUBLISHED = "published"
     COLLABORATOR_ADDED = "collaborator_added"
     COLLABORATOR_REMOVED = "collaborator_removed"

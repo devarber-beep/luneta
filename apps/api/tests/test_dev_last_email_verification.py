@@ -34,7 +34,7 @@ async def test_dev_last_email_verification_returns_last_signup_token(api_client)
             json={
                 "email": "snap@luneta.dev",
                 "password": "Password123!",
-                "role": "author",
+                "role": "investigator",
                 "nickname": "snap",
             },
         )

@@ -4,8 +4,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api_auth import get_current_user
 from app.db import get_db
+from app.deps.authz import require_permission
+from app.domain.authz_permissions import Permission
+from app.models.user import UserModel
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
 from app.repositories.users import UsersRepository
 from app.dev_email_verification_snapshot import get_last, record_last
@@ -103,7 +105,7 @@ async def login(payload: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db
 
 
 @router.get("/me", response_model=MeResponse)
-async def me(user=Depends(get_current_user)) -> MeResponse:
+async def me(user: UserModel = Depends(require_permission(Permission.USER_READ_SELF))) -> MeResponse:
     return MeResponse(
         user_id=user.id or "",
         email=user.email,
@@ -121,7 +123,7 @@ async def me(user=Depends(get_current_user)) -> MeResponse:
 @router.patch("/me", response_model=MeResponse)
 async def patch_me(
     payload: ProfilePatchRequest,
-    user=Depends(get_current_user),
+    user: UserModel = Depends(require_permission(Permission.USER_UPDATE_SELF)),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MeResponse:
     auth_service = AuthService(
@@ -152,7 +154,7 @@ async def patch_me(
 @router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
     payload: ChangePasswordRequest,
-    user=Depends(get_current_user),
+    user: UserModel = Depends(require_permission(Permission.USER_UPDATE_SELF)),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> None:
     auth_service = AuthService(

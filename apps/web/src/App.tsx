@@ -4,6 +4,7 @@ import {
   approveScenario,
   changeMyPassword,
   createScenario,
+  deleteScenario,
   deleteScenarioCoverAsset,
   deleteScenarioInlineAsset,
   getScenario,
@@ -16,6 +17,7 @@ import {
   patchScenario,
   publicScenario,
   publishScenario,
+  rejectScenario,
   reviewQueue,
   reorderScenarioInlineAssets,
   signup,
@@ -48,9 +50,9 @@ function HomePage() {
     <main style={layoutStyle}>
       <h1>Luneta</h1>
       <p>
-        Workflow: draft, save, submit for review (not editable while in review), approve and publish. Edits on a
-        published scenario remain draft changes until the next review; the public page keeps showing the last approved
-        version until then.
+        Workflow: draft, save, submit for review. Investigators cannot edit while a scenario is in review or approved;
+        coordinators can edit during review. Edits on a published scenario stay as draft until the next review cycle;
+        the public page keeps the last approved version until a coordinator republishes.
       </p>
       <nav style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
         <Link to="/signup">Signup</Link>
@@ -59,7 +61,7 @@ function HomePage() {
         <Link to="/my-scenarios">My scenarios</Link>
         {getToken() ? <Link to="/my-profile">My profile</Link> : null}
         <Link to="/scenarios/new">New draft</Link>
-        {getRole() === "reviewer" ? <Link to="/review">Review queue</Link> : null}
+        {getRole() === "coordinator" ? <Link to="/review">Review queue</Link> : null}
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
       <section style={{ marginTop: "2rem" }}>
@@ -82,7 +84,7 @@ function SignupPage() {
   const [email, setEmail] = useState("author@luneta.dev");
   const [password, setPassword] = useState("Password123!");
   const [nickname, setNickname] = useState("");
-  const [role, setCurrentRole] = useState<"author" | "reviewer">("author");
+  const [role, setCurrentRole] = useState<"investigator" | "coordinator">("investigator");
   const [message, setMessage] = useState("");
 
   const onSubmit = async (event: FormEvent) => {
@@ -112,9 +114,9 @@ function SignupPage() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" type="password" />
         <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="nickname" />
-        <select value={role} onChange={(e) => setCurrentRole(e.target.value as "author" | "reviewer")}>
-          <option value="author">author</option>
-          <option value="reviewer">reviewer</option>
+        <select value={role} onChange={(e) => setCurrentRole(e.target.value as "investigator" | "coordinator")}>
+          <option value="investigator">investigator</option>
+          <option value="coordinator">coordinator</option>
         </select>
         <button type="submit">Create user</button>
       </form>
@@ -166,7 +168,7 @@ function LoginPage() {
       const profile = await me(auth.access_token);
       setRole(profile.role);
       setMessage(`Signed in as ${profile.role}`);
-      if (profile.role === "reviewer") {
+      if (profile.role === "coordinator") {
         navigate("/review");
       } else {
         navigate("/my-scenarios");
@@ -400,6 +402,23 @@ function MyScenariosPage() {
     }
   };
 
+  const onDeleteDraft = async (id: string, title: string) => {
+    const token = getToken();
+    if (!token) {
+      return;
+    }
+    if (!window.confirm(`Delete draft “${title}”? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteScenario(token, id);
+      setMessage("Draft deleted.");
+      await load();
+    } catch (e) {
+      setMessage((e as Error).message);
+    }
+  };
+
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
   }, []);
@@ -407,7 +426,7 @@ function MyScenariosPage() {
   return (
     <main style={layoutStyle}>
       <h2>My scenarios</h2>
-      <p>Author or collaborator (owner/editor). Draft and published scenarios are opened by id.</p>
+      <p>Investigator or collaborator (owner/editor). Draft and published scenarios open by id.</p>
       <p>
         <Link to="/my-profile">My profile</Link>
       </p>
@@ -419,6 +438,14 @@ function MyScenariosPage() {
           <li key={s.id} style={{ marginBottom: "0.5rem" }}>
             <strong>{s.title}</strong> — {s.state}{" "}
             <Link to={`/scenarios/${s.id}/edit`}>Edit / workflow</Link>
+            {s.state === "draft" ? (
+              <>
+                {" "}
+                <button type="button" onClick={() => onDeleteDraft(s.id, s.title)}>
+                  Delete draft
+                </button>
+              </>
+            ) : null}
             {(s.state === "published" || s.state === "in_review") && s.first_published_at ? (
               <>
                 {" "}
@@ -480,6 +507,7 @@ function NewScenarioPage() {
 }
 
 function EditScenarioPage() {
+  const navigate = useNavigate();
   const params = useParams();
   const scenarioId = params.id ?? "";
   const [title, setTitle] = useState("");
@@ -694,8 +722,41 @@ function EditScenarioPage() {
     }
   };
 
-  const locked = state === "in_review" || state === "approved";
+  const role = getRole();
+  const coordinatorInReview = role === "coordinator" && state === "in_review";
+  const locked = state === "approved" || (state === "in_review" && !coordinatorInReview);
   const canSubmitReview = state === "draft" || state === "published";
+
+  const onPublishFromApproved = async () => {
+    const token = getToken();
+    if (!token || !scenarioId) {
+      return;
+    }
+    try {
+      const result = await publishScenario(token, scenarioId);
+      setState(result.state);
+      setMessage("Published.");
+      await load();
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
+
+  const onDeleteThisDraft = async () => {
+    const token = getToken();
+    if (!token || !scenarioId || state !== "draft") {
+      return;
+    }
+    if (!window.confirm("Delete this draft? This cannot be undone.")) {
+      return;
+    }
+    try {
+      await deleteScenario(token, scenarioId);
+      navigate("/my-scenarios");
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
 
   return (
     <main style={layoutStyle}>
@@ -704,11 +765,30 @@ function EditScenarioPage() {
       {state === "published" ? (
         <p style={{ color: "#444", fontSize: "0.95rem" }}>
           You can keep editing this as draft content. The public page keeps showing the latest approved version until
-          you submit for review and a reviewer republishes.
+          you submit for review and a coordinator republishes.
         </p>
       ) : null}
       {locked ? (
-        <p style={{ color: "#666" }}>In review or approved: content cannot be edited until the next cycle.</p>
+        <p style={{ color: "#666" }}>
+          {state === "approved"
+            ? "Approved: waiting for publish. Content cannot be edited."
+            : "In review (investigator view): content cannot be edited until the coordinator finishes review."}
+        </p>
+      ) : null}
+      {coordinatorInReview ? (
+        <p style={{ color: "#444", fontSize: "0.95rem" }}>
+          You can edit this scenario while it is in review (coordinator).
+        </p>
+      ) : null}
+      {state === "approved" && role === "coordinator" ? (
+        <div style={{ marginBottom: "0.75rem" }}>
+          <button type="button" onClick={() => onPublishFromApproved()}>
+            Publish
+          </button>
+          <span style={{ marginLeft: "0.5rem", color: "#666", fontSize: "0.9rem" }}>
+            (Use after Approve if you did not publish from the queue.)
+          </span>
+        </div>
       ) : null}
       {livePublicTitle != null && livePublicTitle !== "" ? (
         <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#f5f5f5", borderRadius: "6px" }}>
@@ -734,6 +814,11 @@ function EditScenarioPage() {
           {canSubmitReview ? (
             <button type="button" onClick={() => onSubmitReview()} disabled={locked}>
               Submit for review
+            </button>
+          ) : null}
+          {state === "draft" ? (
+            <button type="button" onClick={() => onDeleteThisDraft()} style={{ color: "crimson" }}>
+              Delete draft
             </button>
           ) : null}
         </div>
@@ -808,8 +893,10 @@ function ReviewPage() {
       scenario_id: string;
       slug: string;
       title: string;
+      author_user_id: string;
       state: string;
       has_prior_approval: boolean;
+      submitted_at?: string | null;
       live_public_slug?: string | null;
       live_public_title?: string | null;
       live_public_body_markdown?: string | null;
@@ -830,6 +917,37 @@ function ReviewPage() {
     load().catch((error: Error) => setMessage(error.message));
   }, []);
 
+  const onApproveOnly = async (scenarioId: string) => {
+    const token = getToken();
+    if (!token) {
+      return;
+    }
+    try {
+      await approveScenario(token, scenarioId);
+      setMessage("Approved. Open the scenario to publish, or use Approve & publish from the queue next time.");
+      await load();
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
+
+  const onReject = async (scenarioId: string) => {
+    const token = getToken();
+    if (!token) {
+      return;
+    }
+    if (!window.confirm("Send this scenario back to draft?")) {
+      return;
+    }
+    try {
+      await rejectScenario(token, scenarioId);
+      setMessage("Scenario returned to draft.");
+      await load();
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
+
   const onApprovePublish = async (scenarioId: string) => {
     const token = getToken();
     if (!token) {
@@ -847,11 +965,14 @@ function ReviewPage() {
 
   return (
     <main style={layoutStyle}>
-      <h2>Review Queue</h2>
+      <h2>Review queue</h2>
       <p>Current role: {getRole() ?? "no role"}</p>
       {items.map((item) => (
         <div key={item.scenario_id} style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}>
-          <strong>Draft candidate:</strong> {item.title} ({item.state})<br />
+          <strong>Draft candidate:</strong> {item.title} ({item.state})
+          <br />
+          <span style={{ fontSize: "0.85rem", color: "#555" }}>Owner user id: {item.author_user_id}</span>
+          <br />
           {item.has_prior_approval && item.live_public_title ? (
             <div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "#f9f9f9", borderRadius: "4px" }}>
               <strong>Current live public version:</strong> {item.live_public_title}
@@ -862,9 +983,17 @@ function ReviewPage() {
               ) : null}
             </div>
           ) : null}
-          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <Link to={`/scenarios/${item.scenario_id}/edit`}>Open scenario (draft)</Link>
-            <button onClick={() => onApprovePublish(item.scenario_id)}>Approve + Publish</button>
+            <button type="button" onClick={() => onReject(item.scenario_id)}>
+              Reject (back to draft)
+            </button>
+            <button type="button" onClick={() => onApproveOnly(item.scenario_id)}>
+              Approve only
+            </button>
+            <button type="button" onClick={() => onApprovePublish(item.scenario_id)}>
+              Approve &amp; publish
+            </button>
             {item.has_prior_approval && item.live_public_slug ? (
               <Link to={`/public/${item.live_public_slug}`}>View public (live)</Link>
             ) : null}
