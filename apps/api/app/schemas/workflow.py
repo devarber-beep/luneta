@@ -12,7 +12,11 @@ class ReviewQueueItem(BaseModel):
     title: str
     author_user_id: str
     state: ScenarioState
+    has_prior_approval: bool = False
     submitted_at: datetime | None = None
+    live_public_slug: str | None = None
+    live_public_title: str | None = None
+    live_public_body_markdown: str | None = None
 
 
 class ReviewQueueResponse(BaseModel):

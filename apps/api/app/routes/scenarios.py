@@ -1,30 +1,32 @@
 """Scenario routes for create/read/edit/submit-review."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.api_auth import get_current_user
+from app.core.permissions import has_republication_pending
 from app.db import get_db
+from app.domain.enums import ScenarioState
 from app.repositories.review_events import ReviewEventsRepository
-from app.repositories.scenario_comments import ScenarioCommentsRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.scenarios import (
     AddCollaboratorRequest,
-    ScenarioCommentCreateRequest,
-    ScenarioCommentResponse,
-    ScenarioCommentsResponse,
+    ReorderInlineAssetsRequest,
     ScenarioCreateRequest,
     ScenarioCollaboratorsResponse,
     ScenarioCollaboratorResponse,
     ScenarioPatchRequest,
     ScenarioResponse,
     ScenarioSummaryResponse,
+    ScenarioAssetReadUrlResponse,
     SubmitReviewResponse,
 )
+from app.services.mailer_service import MailerService
 from app.services.scenario_service import ScenarioService
+from app.storage.minio_storage import MinioScenarioStorage
 
 router = APIRouter()
 
@@ -34,12 +36,20 @@ def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
         scenarios_repo=ScenariosRepository(db),
         revisions_repo=ScenarioRevisionsRepository(db),
         review_events_repo=ReviewEventsRepository(db),
-        comments_repo=ScenarioCommentsRepository(db),
         users_repo=UsersRepository(db),
+        mailer=MailerService(),
     )
 
 
 def _to_response(scenario) -> ScenarioResponse:
+    show_live = scenario.state == ScenarioState.IN_REVIEW or has_republication_pending(scenario=scenario)
+    live_slug = live_title = live_body = None
+    if show_live and scenario.public_slug is not None:
+        live_slug = scenario.public_slug
+        live_title = scenario.public_title
+        live_body = scenario.public_body_markdown
+    cover_image = scenario.cover_image.model_dump() if scenario.cover_image is not None else None
+    inline_assets = [asset.model_dump() for asset in scenario.inline_assets]
     return ScenarioResponse(
         id=scenario.id or "",
         slug=scenario.slug,
@@ -57,22 +67,36 @@ def _to_response(scenario) -> ScenarioResponse:
         ],
         state=scenario.state,
         current_revision_number=scenario.current_revision_number,
+        submitted_for_review_at=scenario.submitted_for_review_at,
+        submitted_for_review_by_user_id=scenario.submitted_for_review_by_user_id,
+        approved_at=scenario.approved_at,
+        first_approved_at=scenario.first_approved_at,
+        approved_by_user_id=scenario.approved_by_user_id,
+        published_at=scenario.published_at,
+        first_published_at=scenario.first_published_at,
+        published_by_user_id=scenario.published_by_user_id,
+        public_revision_number=scenario.public_revision_number,
+        last_state_changed_at=scenario.last_state_changed_at,
+        summary=scenario.summary,
+        categories=scenario.categories,
+        tags=scenario.tags,
+        keywords_normalized=scenario.keywords_normalized,
+        cover_image=cover_image,
+        inline_assets=inline_assets,
+        ethical_considerations=scenario.ethical_considerations,
+        risk_assessment=scenario.risk_assessment,
+        sensitive_data_involved=scenario.sensitive_data_involved,
+        avg_rating=scenario.avg_rating,
+        rating_count=scenario.rating_count,
+        rating_sum=scenario.rating_sum,
+        favorites_count=scenario.favorites_count,
+        archived_at=scenario.archived_at,
+        deleted_at=scenario.deleted_at,
         created_at=scenario.created_at,
         updated_at=scenario.updated_at,
-    )
-
-
-def _to_comment_response(comment) -> ScenarioCommentResponse:
-    return ScenarioCommentResponse(
-        id=comment.id or "",
-        scenario_id=comment.scenario_id,
-        author_user_id=comment.author_user_id,
-        body_markdown=comment.body_markdown,
-        revision_number=comment.revision_number,
-        section_key=comment.section_key,
-        field_path=comment.field_path,
-        created_at=comment.created_at,
-        updated_at=comment.updated_at,
+        live_public_slug=live_slug,
+        live_public_title=live_title,
+        live_public_body_markdown=live_body,
     )
 
 
@@ -84,7 +108,6 @@ async def create_scenario(
 ) -> ScenarioResponse:
     scenario = await _service(db).create_draft(
         current_user=current_user,
-        slug=payload.slug,
         title=payload.title,
         body_markdown=payload.body_markdown,
     )
@@ -100,10 +123,11 @@ async def list_my_scenarios(
     return [
         ScenarioSummaryResponse(
             id=s.id or "",
-            slug=s.slug,
+            slug=s.public_slug if s.published_at is not None else s.slug,
             title=s.title,
             state=s.state,
             updated_at=s.updated_at,
+            first_published_at=s.first_published_at,
         )
         for s in scenarios
     ]
@@ -134,6 +158,10 @@ async def patch_scenario(
         current_user=current_user,
         title=payload.title,
         body_markdown=payload.body_markdown,
+        summary=payload.summary,
+        categories=payload.categories,
+        tags=payload.tags,
+        sensitive_data_involved=payload.sensitive_data_involved,
     )
     return _to_response(scenario)
 
@@ -152,6 +180,121 @@ async def submit_review(
         scenario_id=scenario.id or "",
         state=scenario.state,
     )
+
+
+@router.post("/{scenario_id}/assets/cover", response_model=ScenarioResponse)
+async def upload_cover_asset(
+    scenario_id: str,
+    file: UploadFile = File(...),
+    alt_text: str | None = Form(default=None),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioResponse:
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only image files are allowed")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+    scenario = await _service(db).upload_cover_image(
+        scenario_id=scenario_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+        content=content,
+        content_type=content_type,
+        alt_text=alt_text,
+    )
+    return _to_response(scenario)
+
+
+@router.post("/{scenario_id}/assets/inline", response_model=ScenarioResponse)
+async def upload_inline_asset(
+    scenario_id: str,
+    file: UploadFile = File(...),
+    alt_text: str | None = Form(default=None),
+    order: int = Form(default=0),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioResponse:
+    content_type = (file.content_type or "").lower()
+    if not content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only image files are allowed")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+    scenario = await _service(db).upload_inline_image(
+        scenario_id=scenario_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+        content=content,
+        content_type=content_type,
+        alt_text=alt_text,
+        order=order,
+    )
+    return _to_response(scenario)
+
+
+@router.delete("/{scenario_id}/assets/cover", response_model=ScenarioResponse)
+async def delete_cover_asset(
+    scenario_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioResponse:
+    scenario = await _service(db).remove_cover_image(
+        scenario_id=scenario_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+    )
+    return _to_response(scenario)
+
+
+@router.delete("/{scenario_id}/assets/inline/{asset_id}", response_model=ScenarioResponse)
+async def delete_inline_asset(
+    scenario_id: str,
+    asset_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioResponse:
+    scenario = await _service(db).remove_inline_image(
+        scenario_id=scenario_id,
+        asset_id=asset_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+    )
+    return _to_response(scenario)
+
+
+@router.post("/{scenario_id}/assets/inline/reorder", response_model=ScenarioResponse)
+async def reorder_inline_assets(
+    scenario_id: str,
+    payload: ReorderInlineAssetsRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioResponse:
+    scenario = await _service(db).reorder_inline_images(
+        scenario_id=scenario_id,
+        asset_ids=payload.asset_ids,
+        current_user=current_user,
+    )
+    return _to_response(scenario)
+
+
+@router.get("/{scenario_id}/assets/{asset_id}/read-url", response_model=ScenarioAssetReadUrlResponse)
+async def get_asset_read_url(
+    scenario_id: str,
+    asset_id: str,
+    expires_in_seconds: int = 900,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> ScenarioAssetReadUrlResponse:
+    signed_url, expires = await _service(db).resolve_asset_read_url(
+        scenario_id=scenario_id,
+        asset_id=asset_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+        expires_in_seconds=expires_in_seconds,
+    )
+    return ScenarioAssetReadUrlResponse(asset_id=asset_id, signed_url=signed_url, expires_in_seconds=expires)
 
 
 @router.get("/{scenario_id}/collaborators", response_model=ScenarioCollaboratorsResponse)
@@ -208,35 +351,3 @@ async def remove_collaborator(
     return _to_response(scenario)
 
 
-@router.get("/{scenario_id}/comments", response_model=ScenarioCommentsResponse)
-async def list_comments(
-    scenario_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
-) -> ScenarioCommentsResponse:
-    comments = await _service(db).list_comments(
-        scenario_id=scenario_id,
-        current_user=current_user,
-    )
-    return ScenarioCommentsResponse(
-        scenario_id=scenario_id,
-        items=[_to_comment_response(comment) for comment in comments],
-    )
-
-
-@router.post("/{scenario_id}/comments", response_model=ScenarioCommentResponse)
-async def create_comment(
-    scenario_id: str,
-    payload: ScenarioCommentCreateRequest,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user=Depends(get_current_user),
-) -> ScenarioCommentResponse:
-    comment = await _service(db).add_comment(
-        scenario_id=scenario_id,
-        current_user=current_user,
-        body_markdown=payload.body_markdown,
-        revision_number=payload.revision_number,
-        section_key=payload.section_key,
-        field_path=payload.field_path,
-    )
-    return _to_comment_response(comment)

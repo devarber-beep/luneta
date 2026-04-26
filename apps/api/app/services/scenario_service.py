@@ -6,24 +6,24 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 
 from app.core.permissions import (
-    can_add_comment,
     can_edit_draft,
+    can_edit_published_content,
     can_manage_collaborators,
     can_submit_for_review,
-    can_view_comments,
     get_collaborator_role,
+    has_republication_pending,
     has_scenario_read_access,
     is_valid_transition,
 )
 from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
-from app.models.scenario_comment import ScenarioCommentModel
 from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
-from app.repositories.scenario_comments import ScenarioCommentsRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
+from app.services.mailer_service import MailerService, NoopMailer
+from app.storage.minio_storage import MinioScenarioStorage
 
 
 class ScenarioService:
@@ -33,20 +33,19 @@ class ScenarioService:
         scenarios_repo: ScenariosRepository,
         revisions_repo: ScenarioRevisionsRepository,
         review_events_repo: ReviewEventsRepository,
-        comments_repo: ScenarioCommentsRepository,
         users_repo: UsersRepository,
+        mailer: MailerService | NoopMailer | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._revisions_repo = revisions_repo
         self._review_events_repo = review_events_repo
-        self._comments_repo = comments_repo
         self._users_repo = users_repo
+        self._mailer = mailer if mailer is not None else MailerService()
 
     async def create_draft(
         self,
         *,
         current_user: UserModel,
-        slug: str,
         title: str,
         body_markdown: str,
     ) -> ScenarioModel:
@@ -58,7 +57,6 @@ class ScenarioService:
         await self._review_events_repo.ensure_indexes()
 
         scenario = await self._scenarios_repo.create(
-            slug=slug,
             title=title,
             body_markdown=body_markdown,
             author_user_id=current_user.id or "",
@@ -101,6 +99,10 @@ class ScenarioService:
         current_user: UserModel,
         title: str | None,
         body_markdown: str | None,
+        summary: str | None = None,
+        categories: list[str] | None = None,
+        tags: list[str] | None = None,
+        sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
@@ -108,13 +110,37 @@ class ScenarioService:
 
         actor_user_id = current_user.id or ""
         collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
-        if not can_edit_draft(collaborator_role=collaborator_role, state=scenario.state):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/editor can edit draft")
+        if scenario.state == ScenarioState.DRAFT:
+            if not can_edit_draft(collaborator_role=collaborator_role, state=scenario.state):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only owner/editor can edit draft",
+                )
+        elif scenario.state == ScenarioState.PUBLISHED:
+            if not can_edit_published_content(collaborator_role=collaborator_role):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only the scenario owner can edit published content",
+                )
+        elif scenario.state == ScenarioState.IN_REVIEW:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Scenario in review cannot be edited",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot edit scenario in this state",
+            )
 
         updated = await self._scenarios_repo.update_draft_content(
             scenario_id=scenario_id,
             title=title,
             body_markdown=body_markdown,
+            summary=summary,
+            categories=categories,
+            tags=tags,
+            sensitive_data_involved=sensitive_data_involved,
         )
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -138,6 +164,145 @@ class ScenarioService:
         )
         return bumped
 
+    async def upload_cover_image(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+        content: bytes,
+        content_type: str,
+        alt_text: str | None,
+    ) -> ScenarioModel:
+        scenario = await self._get_editable_for_assets(scenario_id=scenario_id, current_user=current_user)
+        storage.ensure_bucket()
+        asset = storage.upload_image(
+            scenario_id=scenario_id,
+            scope="cover",
+            content=content,
+            content_type=content_type,
+            alt_text=alt_text,
+            order=0,
+        )
+        updated = await self._scenarios_repo.set_cover_image(scenario_id=scenario_id, asset=asset.model_dump())
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return updated
+
+    async def upload_inline_image(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+        content: bytes,
+        content_type: str,
+        alt_text: str | None,
+        order: int,
+    ) -> ScenarioModel:
+        scenario = await self._get_editable_for_assets(scenario_id=scenario_id, current_user=current_user)
+        storage.ensure_bucket()
+        asset = storage.upload_image(
+            scenario_id=scenario_id,
+            scope="inline",
+            content=content,
+            content_type=content_type,
+            alt_text=alt_text,
+            order=order,
+        )
+        updated = await self._scenarios_repo.add_inline_image(scenario_id=scenario_id, asset=asset.model_dump())
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return updated
+
+    async def remove_inline_image(
+        self,
+        *,
+        scenario_id: str,
+        asset_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+    ) -> ScenarioModel:
+        scenario = await self._get_editable_for_assets(scenario_id=scenario_id, current_user=current_user)
+        target = next((a for a in scenario.inline_assets if a.asset_id == asset_id), None)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inline asset not found")
+        storage.ensure_bucket()
+        storage.delete_object(storage_key=target.storage_key)
+        updated = await self._scenarios_repo.remove_inline_image(scenario_id=scenario_id, asset_id=asset_id)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        # Re-compact order sequence.
+        assets = [a.model_dump() for a in sorted(updated.inline_assets, key=lambda x: x.order)]
+        for idx, asset in enumerate(assets):
+            asset["order"] = idx
+        repacked = await self._scenarios_repo.replace_inline_assets(scenario_id=scenario_id, assets=assets)
+        if repacked is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return repacked
+
+    async def remove_cover_image(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+    ) -> ScenarioModel:
+        scenario = await self._get_editable_for_assets(scenario_id=scenario_id, current_user=current_user)
+        if scenario.cover_image is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cover image not found")
+        storage.ensure_bucket()
+        storage.delete_object(storage_key=scenario.cover_image.storage_key)
+        updated = await self._scenarios_repo.clear_cover_image(scenario_id=scenario_id)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return updated
+
+    async def reorder_inline_images(
+        self,
+        *,
+        scenario_id: str,
+        asset_ids: list[str],
+        current_user: UserModel,
+    ) -> ScenarioModel:
+        scenario = await self._get_editable_for_assets(scenario_id=scenario_id, current_user=current_user)
+        current = {a.asset_id: a.model_dump() for a in scenario.inline_assets}
+        if set(asset_ids) != set(current.keys()):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="asset_ids must contain exactly all existing inline asset ids",
+            )
+        reordered: list[dict] = []
+        for idx, asset_id in enumerate(asset_ids):
+            row = current[asset_id]
+            row["order"] = idx
+            reordered.append(row)
+        updated = await self._scenarios_repo.replace_inline_assets(scenario_id=scenario_id, assets=reordered)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return updated
+
+    async def resolve_asset_read_url(
+        self,
+        *,
+        scenario_id: str,
+        asset_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+        expires_in_seconds: int = 900,
+    ) -> tuple[str, int]:
+        scenario = await self.get_for_author_or_reviewer(scenario_id=scenario_id, current_user=current_user)
+        target = None
+        if scenario.cover_image is not None and scenario.cover_image.asset_id == asset_id:
+            target = scenario.cover_image
+        if target is None:
+            target = next((a for a in scenario.inline_assets if a.asset_id == asset_id), None)
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+        storage.ensure_bucket()
+        exp = max(60, min(expires_in_seconds, 3600))
+        return storage.presigned_get_url(storage_key=target.storage_key, expires_seconds=exp), exp
+
     async def submit_review(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
@@ -150,15 +315,24 @@ class ScenarioService:
             actor_role=actor_role,
             collaborator_role=collaborator_role,
             state=scenario.state,
+            scenario=scenario,
         ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot submit this scenario")
 
         if not is_valid_transition(scenario.state, ScenarioState.IN_REVIEW):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
 
+        if scenario.state == ScenarioState.PUBLISHED:
+            if not has_republication_pending(scenario=scenario):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No changes to submit for republication",
+                )
+
         updated = await self._scenarios_repo.set_state(
             scenario_id=scenario_id,
             state=ScenarioState.IN_REVIEW,
+            actor_user_id=actor_user_id,
         )
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -170,6 +344,13 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
         )
+        reviewer_emails = await self._users_repo.list_verified_emails_by_role(UserRole.REVIEWER.value)
+        for address in reviewer_emails:
+            await self._mailer.send_scenario_submitted_for_review(
+                to_email=address,
+                scenario_title=updated.title,
+                scenario_id=updated.id or "",
+            )
         return updated
 
     async def list_collaborators(self, *, scenario_id: str, current_user: UserModel):
@@ -254,91 +435,22 @@ class ScenarioService:
         )
         return updated
 
-    async def list_comments(
-        self,
-        *,
-        scenario_id: str,
-        current_user: UserModel | None,
-    ) -> list[ScenarioCommentModel]:
+    async def _get_editable_for_assets(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        actor_role = UserRole(current_user.role) if current_user is not None else None
-        actor_user_id = current_user.id or "" if current_user is not None else ""
-        collaborator_role = (
-            get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id) if current_user is not None else None
-        )
-        if not can_view_comments(
-            scenario=scenario,
-            actor_role=actor_role,
-            collaborator_role=collaborator_role,
-        ):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-        return await self._comments_repo.list_by_scenario_id(scenario_id=scenario.id or "")
+        actor_user_id = current_user.id or ""
+        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
+        if scenario.state == ScenarioState.DRAFT:
+            if can_edit_draft(collaborator_role=collaborator_role, state=scenario.state):
+                return scenario
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner/editor can edit draft")
+        if scenario.state == ScenarioState.PUBLISHED:
+            if can_edit_published_content(collaborator_role=collaborator_role):
+                return scenario
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the scenario owner can edit published content",
+            )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit scenario in this state")
 
-    async def list_public_comments_by_slug(self, *, slug: str) -> tuple[ScenarioModel, list[ScenarioCommentModel]]:
-        scenario = await self._scenarios_repo.get_by_slug_and_state(slug=slug, state=ScenarioState.PUBLISHED)
-        if scenario is None or scenario.published_at is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._comments_repo.ensure_indexes()
-        comments = await self._comments_repo.list_by_scenario_id(scenario_id=scenario.id or "")
-        return scenario, comments
-
-    async def add_comment(
-        self,
-        *,
-        scenario_id: str,
-        current_user: UserModel,
-        body_markdown: str,
-        revision_number: int | None,
-        section_key: str | None,
-        field_path: str | None,
-    ) -> ScenarioCommentModel:
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        actor_role = UserRole(current_user.role)
-        collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=current_user.id or "")
-        if not can_add_comment(
-            scenario=scenario,
-            actor_role=actor_role,
-            collaborator_role=collaborator_role,
-        ):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot comment on this scenario")
-        await self._comments_repo.ensure_indexes()
-        comment = await self._comments_repo.create(
-            scenario_id=scenario.id or "",
-            author_user_id=current_user.id or "",
-            body_markdown=body_markdown,
-            revision_number=revision_number,
-            section_key=section_key,
-            field_path=field_path,
-        )
-        await self._review_events_repo.create(
-            scenario_id=scenario.id or "",
-            event_type=ReviewEventType.COMMENT_ADDED,
-            actor_user_id=current_user.id or "",
-        )
-        return comment
-
-    async def add_public_comment_by_slug(
-        self,
-        *,
-        slug: str,
-        current_user: UserModel,
-        body_markdown: str,
-        revision_number: int | None,
-        section_key: str | None,
-        field_path: str | None,
-    ) -> ScenarioCommentModel:
-        scenario = await self._scenarios_repo.get_by_slug_and_state(slug=slug, state=ScenarioState.PUBLISHED)
-        if scenario is None or scenario.published_at is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        return await self.add_comment(
-            scenario_id=scenario.id or "",
-            current_user=current_user,
-            body_markdown=body_markdown,
-            revision_number=revision_number,
-            section_key=section_key,
-            field_path=field_path,
-        )

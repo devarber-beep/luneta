@@ -33,12 +33,15 @@ class EmailVerificationService:
         )
         return raw_token
 
-    async def verify(self, *, token: str) -> bool:
+    async def verify(self, *, token: str) -> str | None:
+        """Return the user's email if verification succeeded, else None."""
         token_hash = hash_email_token(token)
         token_record = await self._tokens_repo.get_active_by_token_hash(token_hash)
         if token_record is None:
-            return False
+            return None
         consumed = await self._tokens_repo.consume(token_record.id or "")
         if not consumed:
-            return False
-        return await self._users_repo.mark_email_verified(token_record.user_id)
+            return None
+        if not await self._users_repo.mark_email_verified(token_record.user_id):
+            return None
+        return token_record.email

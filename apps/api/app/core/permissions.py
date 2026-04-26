@@ -7,7 +7,7 @@ ALLOWED_WORKFLOW_TRANSITIONS: dict[ScenarioState, set[ScenarioState]] = {
     ScenarioState.DRAFT: {ScenarioState.IN_REVIEW},
     ScenarioState.IN_REVIEW: {ScenarioState.APPROVED},
     ScenarioState.APPROVED: {ScenarioState.PUBLISHED},
-    ScenarioState.PUBLISHED: set(),
+    ScenarioState.PUBLISHED: {ScenarioState.IN_REVIEW},
 }
 
 
@@ -24,17 +24,40 @@ def get_collaborator_role(*, scenario: ScenarioModel, actor_user_id: str) -> Col
     return None
 
 
+def has_republication_pending(*, scenario: ScenarioModel) -> bool:
+    """Published scenario with working copy differing from last live public snapshot."""
+    if scenario.public_slug is None:
+        return False
+    return (
+        scenario.title != scenario.public_title
+        or scenario.body_markdown != scenario.public_body_markdown
+        or scenario.slug != scenario.public_slug
+    )
+
+
 def can_submit_for_review(
     *,
     actor_role: UserRole,
     collaborator_role: CollaboratorRole | None,
     state: ScenarioState,
+    scenario: ScenarioModel,
 ) -> bool:
-    return actor_role == UserRole.AUTHOR and collaborator_role == CollaboratorRole.OWNER and state == ScenarioState.DRAFT
+    if actor_role != UserRole.AUTHOR or collaborator_role != CollaboratorRole.OWNER:
+        return False
+    if state == ScenarioState.DRAFT:
+        return True
+    if state == ScenarioState.PUBLISHED:
+        return scenario.first_published_at is not None and has_republication_pending(scenario=scenario)
+    return False
 
 
 def can_edit_draft(*, collaborator_role: CollaboratorRole | None, state: ScenarioState) -> bool:
     return collaborator_role in {CollaboratorRole.OWNER, CollaboratorRole.EDITOR} and state == ScenarioState.DRAFT
+
+
+def can_edit_published_content(*, collaborator_role: CollaboratorRole | None) -> bool:
+    """Only the scenario owner (author) may edit content after publish."""
+    return collaborator_role == CollaboratorRole.OWNER
 
 
 def can_manage_collaborators(*, collaborator_role: CollaboratorRole | None) -> bool:
@@ -57,20 +80,3 @@ def is_publicly_visible(state: ScenarioState) -> bool:
     return state == ScenarioState.PUBLISHED
 
 
-def can_view_comments(*, scenario: ScenarioModel, actor_role: UserRole | None, collaborator_role: CollaboratorRole | None) -> bool:
-    if scenario.state == ScenarioState.PUBLISHED:
-        return True
-    if actor_role is None:
-        return False
-    return has_scenario_read_access(actor_role=actor_role, collaborator_role=collaborator_role)
-
-
-def can_add_comment(
-    *,
-    scenario: ScenarioModel,
-    actor_role: UserRole,
-    collaborator_role: CollaboratorRole | None,
-) -> bool:
-    if scenario.state == ScenarioState.PUBLISHED:
-        return actor_role in {UserRole.AUTHOR, UserRole.REVIEWER}
-    return has_scenario_read_access(actor_role=actor_role, collaborator_role=collaborator_role)

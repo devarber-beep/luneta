@@ -20,6 +20,21 @@ class _InsertOneResult:
 @dataclass
 class _UpdateResult:
     modified_count: int
+    matched_count: int = 1
+
+
+def _apply_update_pipeline(doc: dict[str, Any], pipeline: list[dict[str, Any]]) -> dict[str, Any]:
+    out = dict(doc)
+    for stage in pipeline:
+        if "$set" not in stage:
+            continue
+        for k, v in stage["$set"].items():
+            if isinstance(v, str) and v.startswith("$") and not v.startswith("$$"):
+                src = v[1:]
+                out[k] = out.get(src)
+            else:
+                out[k] = v
+    return out
 
 
 class FakeCursor:
@@ -64,21 +79,52 @@ class FakeCollection:
                 return dict(doc)
         return None
 
-    async def update_one(self, query: dict[str, Any], update: dict[str, Any]) -> _UpdateResult:
+    async def update_one(
+        self, query: dict[str, Any], update: dict[str, Any] | list[dict[str, Any]]
+    ) -> _UpdateResult:
         for idx, doc in enumerate(self._docs):
             if not _matches(doc, query):
                 continue
-            updated = dict(doc)
-            for key, value in update.get("$set", {}).items():
-                updated[key] = value
-            for key, value in update.get("$inc", {}).items():
-                updated[key] = updated.get(key, 0) + value
-            self._docs[idx] = updated
-            return _UpdateResult(modified_count=1)
-        return _UpdateResult(modified_count=0)
+            if isinstance(update, list):
+                self._docs[idx] = _apply_update_pipeline(doc, update)
+            else:
+                updated = dict(doc)
+                for key, value in update.get("$set", {}).items():
+                    updated[key] = value
+                for key, value in update.get("$inc", {}).items():
+                    updated[key] = updated.get(key, 0) + value
+                self._docs[idx] = updated
+            return _UpdateResult(modified_count=1, matched_count=1)
+        return _UpdateResult(modified_count=0, matched_count=0)
 
-    def find(self, query: dict[str, Any]) -> FakeCursor:
-        return FakeCursor([dict(doc) for doc in self._docs if _matches(doc, query)])
+    async def update_many(
+        self, query: dict[str, Any], update: dict[str, Any] | list[dict[str, Any]]
+    ) -> _UpdateResult:
+        modified = 0
+        for idx, doc in enumerate(self._docs):
+            if not _matches(doc, query):
+                continue
+            if isinstance(update, list):
+                self._docs[idx] = _apply_update_pipeline(doc, update)
+            else:
+                updated = dict(doc)
+                for key, value in update.get("$set", {}).items():
+                    updated[key] = value
+                for key, value in update.get("$inc", {}).items():
+                    updated[key] = updated.get(key, 0) + value
+                self._docs[idx] = updated
+            modified += 1
+        return _UpdateResult(modified_count=modified, matched_count=modified)
+
+    def find(self, query: dict[str, Any], projection: dict[str, Any] | None = None) -> FakeCursor:
+        matched = [dict(doc) for doc in self._docs if _matches(doc, query)]
+        if projection:
+            keys = {k for k, v in projection.items() if v and k != "_id"}
+            if projection.get("_id") == 0:
+                matched = [{k: doc[k] for k in keys if k in doc} for doc in matched]
+            else:
+                matched = [{k: doc.get(k) for k in keys if k in doc} for doc in matched]
+        return FakeCursor(matched)
 
 
 def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
@@ -88,11 +134,43 @@ def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
             return False
         rest = {k: v for k, v in query.items() if k != "$or"}
         return _matches(doc, rest) if rest else True
+    if "$and" in query:
+        parts = query["$and"]
+        if not isinstance(parts, list) or not all(_matches(doc, p) for p in parts):
+            return False
+        rest = {k: v for k, v in query.items() if k != "$and"}
+        return _matches(doc, rest) if rest else True
     for key, expected in query.items():
         value = doc.get(key)
         if isinstance(expected, dict):
-            if "$gt" in expected and not (value is not None and value > expected["$gt"]):
+            if "$in" in expected:
+                allowed = expected["$in"]
+                if value not in allowed:
+                    return False
+                continue
+            if "$ne" in expected and value == expected["$ne"]:
                 return False
+            if "$ne" in expected:
+                continue
+            if "$type" in expected:
+                want = expected["$type"]
+                if want == "string" and not isinstance(value, str):
+                    return False
+                continue
+            if "$exists" in expected:
+                exists = key in doc
+                if expected["$exists"] and not exists:
+                    return False
+                if not expected["$exists"] and exists:
+                    return False
+                continue
+            if "$gt" in expected:
+                threshold = expected["$gt"]
+                if threshold is None:
+                    # Match real Mongo: $gt null does not select dates; tests follow repository ($ne: null).
+                    return False
+                elif not (value is not None and value > threshold):
+                    return False
             continue
         if key == "collaborators.user_id":
             collabs = doc.get("collaborators") or []

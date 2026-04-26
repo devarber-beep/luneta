@@ -35,6 +35,7 @@ async def test_dev_last_email_verification_returns_last_signup_token(api_client)
                 "email": "snap@luneta.dev",
                 "password": "Password123!",
                 "role": "author",
+                "nickname": "snap",
             },
         )
         assert signup.status_code == 200

@@ -14,12 +14,18 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     s3_endpoint: str = "http://localhost:9000"
+    s3_public_endpoint: str = "http://localhost:9000"
+    s3_region: str = "us-east-1"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
     s3_bucket_luneta: str = "luneta-assets"
 
+    web_url: str = "http://localhost:5173"
+    email_from: str = "Luneta <no-reply@luneta.local>"
     email_smtp_host: str = "localhost"
     email_smtp_port: int = 1025
+    # When true, SMTP errors are logged but do not fail API requests (recommended for dev/tests).
+    email_fail_silently: bool = True
     email_verification_token_ttl_minutes: int = 60
     # When true, the last signup email verification token is kept in memory and exposed via
     # GET /auth/dev/last-email-verification. Never enable in production.

@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from app.domain.enums import ReviewEventType, ScenarioState, UserRole
-from app.models.scenario import ScenarioModel
+from app.models.scenario import ScenarioModel, slugify_title
 from app.models.user import UserModel
 from app.schemas.workflow import ReviewQueueItem
+from app.services.mailer_service import NoopMailer
 from app.services.scenario_service import ScenarioService
 from app.services.workflow_service import WorkflowService
 
@@ -20,16 +21,17 @@ class _FakeScenariosRepo:
     async def ensure_indexes(self) -> None:
         return None
 
-    async def create(self, *, slug: str, title: str, body_markdown: str, author_user_id: str) -> ScenarioModel:
+    async def create(self, *, title: str, body_markdown: str, author_user_id: str) -> ScenarioModel:
         now = datetime.now(UTC)
         self.scenario = ScenarioModel(
             _id=str(self.id_seq),
-            slug=slug,
+            slug=slugify_title(title),
             title=title,
             body_markdown=body_markdown,
             author_user_id=author_user_id,
             state=ScenarioState.DRAFT,
             current_revision_number=1,
+            last_state_changed_at=now,
             created_at=now,
             updated_at=now,
         )
@@ -40,14 +42,33 @@ class _FakeScenariosRepo:
             return self.scenario
         return None
 
-    async def update_draft_content(self, *, scenario_id: str, title: str | None, body_markdown: str | None):
+    async def update_draft_content(
+        self,
+        *,
+        scenario_id: str,
+        title: str | None,
+        body_markdown: str | None,
+        summary: str | None,
+        categories: list[str] | None,
+        tags: list[str] | None,
+        sensitive_data_involved: bool | None,
+    ):
         if not self.scenario or self.scenario.id != scenario_id:
             return None
         data = self.scenario.model_dump()
         if title is not None:
             data["title"] = title
+            data["slug"] = slugify_title(title)[:80]
         if body_markdown is not None:
             data["body_markdown"] = body_markdown
+        if summary is not None:
+            data["summary"] = summary
+        if categories is not None:
+            data["categories"] = categories
+        if tags is not None:
+            data["tags"] = tags
+        if sensitive_data_involved is not None:
+            data["sensitive_data_involved"] = sensitive_data_involved
         data["updated_at"] = datetime.now(UTC)
         self.scenario = ScenarioModel.model_validate(data)
         return self.scenario
@@ -61,14 +82,32 @@ class _FakeScenariosRepo:
         self.scenario = ScenarioModel.model_validate(data)
         return self.scenario
 
-    async def set_state(self, *, scenario_id: str, state: ScenarioState):
+    async def set_state(self, *, scenario_id: str, state: ScenarioState, actor_user_id: str):
         if not self.scenario or self.scenario.id != scenario_id:
             return None
         data = self.scenario.model_dump()
         data["state"] = state
+        data["last_state_changed_at"] = datetime.now(UTC)
         data["updated_at"] = datetime.now(UTC)
+        if state == ScenarioState.IN_REVIEW:
+            data["submitted_for_review_at"] = datetime.now(UTC)
+            data["submitted_for_review_by_user_id"] = actor_user_id
+        if state == ScenarioState.APPROVED:
+            now = datetime.now(UTC)
+            data["approved_at"] = now
+            data["approved_by_user_id"] = actor_user_id
+            if data.get("first_approved_at") is None:
+                data["first_approved_at"] = now
         if state == ScenarioState.PUBLISHED:
-            data["published_at"] = datetime.now(UTC)
+            now = datetime.now(UTC)
+            data["published_at"] = now
+            if data.get("first_published_at") is None:
+                data["first_published_at"] = now
+            data["published_by_user_id"] = actor_user_id
+            data["public_title"] = data.get("title")
+            data["public_body_markdown"] = data.get("body_markdown")
+            data["public_slug"] = data.get("slug")
+            data["public_revision_number"] = data.get("current_revision_number")
         self.scenario = ScenarioModel.model_validate(data)
         return self.scenario
 
@@ -118,25 +157,8 @@ class _FakeUsersRepo:
     async def get_by_id(self, user_id: str) -> UserModel | None:
         return self.users.get(user_id)
 
-
-@dataclass
-class _FakeCommentsRepo:
-    comments: list[dict] = None
-
-    def __post_init__(self) -> None:
-        self.comments = []
-
-    async def ensure_indexes(self) -> None:
-        return None
-
-    async def create(self, **kwargs):
-        now = datetime.now(UTC)
-        comment = {"_id": str(len(self.comments) + 1), "created_at": now, "updated_at": now, **kwargs}
-        self.comments.append(comment)
-        return comment
-
-    async def list_by_scenario_id(self, *, scenario_id: str):
-        return [c for c in self.comments if c["scenario_id"] == scenario_id]
+    async def list_verified_emails_by_role(self, role: str) -> list[str]:
+        return [str(u.email) for u in self.users.values() if str(u.role) == role and u.is_email_verified]
 
 
 def _author() -> UserModel:
@@ -144,9 +166,14 @@ def _author() -> UserModel:
     return UserModel(
         _id="author-1",
         email="author@luneta.dev",
+        email_normalized="author@luneta.dev",
         password_hash="x",
+        password_updated_at=now,
         role=UserRole.AUTHOR,
         is_email_verified=True,
+        email_verified_at=now,
+        nickname="author",
+        nickname_normalized="author",
         created_at=now,
         updated_at=now,
     )
@@ -157,9 +184,14 @@ def _reviewer() -> UserModel:
     return UserModel(
         _id="reviewer-1",
         email="reviewer@luneta.dev",
+        email_normalized="reviewer@luneta.dev",
         password_hash="x",
+        password_updated_at=now,
         role=UserRole.REVIEWER,
         is_email_verified=True,
+        email_verified_at=now,
+        nickname="reviewer",
+        nickname_normalized="reviewer",
         created_at=now,
         updated_at=now,
     )
@@ -170,26 +202,28 @@ async def test_vertical_slice_happy_path_unit() -> None:
     revisions_repo = _FakeRevisionsRepo()
     review_events_repo = _FakeReviewEventsRepo()
     users_repo = _FakeUsersRepo()
-    comments_repo = _FakeCommentsRepo()
-
+    noop_mailer = NoopMailer()
     scenario_service = ScenarioService(
         scenarios_repo=scenarios_repo,
         revisions_repo=revisions_repo,
         review_events_repo=review_events_repo,
-        comments_repo=comments_repo,
         users_repo=users_repo,
+        mailer=noop_mailer,
     )
     workflow_service = WorkflowService(
         scenarios_repo=scenarios_repo,
         review_events_repo=review_events_repo,
+        users_repo=users_repo,
+        mailer=noop_mailer,
     )
 
     author = _author()
     reviewer = _reviewer()
+    users_repo.users[author.id or ""] = author
+    users_repo.users[reviewer.id or ""] = reviewer
 
     created = await scenario_service.create_draft(
         current_user=author,
-        slug="mi-escenario",
         title="Mi escenario",
         body_markdown="Version 1",
     )
@@ -211,6 +245,7 @@ async def test_vertical_slice_happy_path_unit() -> None:
 
     queue: list[ReviewQueueItem] = await workflow_service.review_queue(current_user=reviewer)
     assert len(queue) == 1
+    assert queue[0].slug == slugify_title("Mi escenario editado")
 
     approved, _ = await workflow_service.approve(
         scenario_id=created.id or "",
@@ -224,21 +259,25 @@ async def test_vertical_slice_happy_path_unit() -> None:
     )
     assert published.state == ScenarioState.PUBLISHED
 
-    comment = await scenario_service.add_comment(
+    rev_after_publish = published.current_revision_number
+    patched_live = await scenario_service.patch_draft(
         scenario_id=created.id or "",
-        current_user=reviewer,
-        body_markdown="Buen escenario",
-        revision_number=2,
-        section_key="body",
-        field_path="body_markdown",
+        current_user=author,
+        title="Titulo tras publicar",
+        body_markdown="Contenido vivo tras publicar",
     )
-    assert comment["body_markdown"] == "Buen escenario"
-    comments = await scenario_service.list_comments(scenario_id=created.id or "", current_user=reviewer)
-    assert len(comments) == 1
+    assert patched_live.title == "Titulo tras publicar"
+    assert patched_live.current_revision_number == rev_after_publish + 1
+    assert patched_live.state == ScenarioState.PUBLISHED
+
+    resubmitted = await scenario_service.submit_review(
+        scenario_id=created.id or "",
+        current_user=author,
+    )
+    assert resubmitted.state == ScenarioState.IN_REVIEW
 
     event_types = [event["event_type"] for event in review_events_repo.events]
     assert ReviewEventType.DRAFT_SAVED in event_types
-    assert ReviewEventType.SUBMITTED in event_types
+    assert event_types.count(ReviewEventType.SUBMITTED) == 2
     assert ReviewEventType.APPROVED in event_types
     assert ReviewEventType.PUBLISHED in event_types
-    assert ReviewEventType.COMMENT_ADDED in event_types

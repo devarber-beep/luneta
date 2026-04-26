@@ -22,8 +22,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -48,6 +48,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/luneta
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      WEB_URL: http://localhost:5173
       EMAIL_SMTP_HOST: mailhog
       EMAIL_SMTP_PORT: 1025
     env_file:
@@ -66,6 +68,8 @@ services:
       MONGODB_URI: mongodb://mongo:27017/luneta
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      WEB_URL: http://localhost:5173
       EMAIL_SMTP_HOST: mailhog
       EMAIL_SMTP_PORT: 1025
     env_file:

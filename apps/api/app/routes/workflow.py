@@ -8,7 +8,9 @@ from app.api_auth import get_current_user
 from app.db import get_db
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.scenarios import ScenariosRepository
+from app.repositories.users import UsersRepository
 from app.schemas.workflow import ReviewQueueResponse, WorkflowActionResponse
+from app.services.mailer_service import MailerService
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -18,6 +20,8 @@ def _service(db: AsyncIOMotorDatabase) -> WorkflowService:
     return WorkflowService(
         scenarios_repo=ScenariosRepository(db),
         review_events_repo=ReviewEventsRepository(db),
+        users_repo=UsersRepository(db),
+        mailer=MailerService(),
     )
 
 

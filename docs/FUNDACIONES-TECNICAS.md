@@ -56,7 +56,7 @@ luneta/
       Dockerfile
       ...
   infra/
-    docker/                 # compose legacy o scripts
+    docker/                 # Docker adicional / scripts
     mongo-init/             # opcional: scripts init MongoDB
     scripts/
   packages/

@@ -17,6 +17,7 @@ async def test_vertical_slice_http_happy_path(api_client):
                 "email": "author@luneta.dev",
                 "password": "Password123!",
                 "role": "author",
+                "nickname": "author",
             },
         )
         assert signup_author.status_code == 200
@@ -37,10 +38,18 @@ async def test_vertical_slice_http_happy_path(api_client):
     author_token = login_author.json()["access_token"]
     author_headers = {"Authorization": f"Bearer {author_token}"}
 
+    patch_profile = await api_client.patch(
+        "/auth/me",
+        json={"nickname": "author", "first_name": "Test", "last_name": "Author"},
+        headers=author_headers,
+    )
+    assert patch_profile.status_code == 200
+    assert patch_profile.json()["first_name"] == "Test"
+    assert patch_profile.json()["last_name"] == "Author"
+
     create = await api_client.post(
         "/scenarios",
         json={
-            "slug": "escenario-e2e",
             "title": "Escenario E2E",
             "body_markdown": "Contenido inicial",
         },
@@ -54,7 +63,7 @@ async def test_vertical_slice_http_happy_path(api_client):
     mine = await api_client.get("/scenarios/mine", headers=author_headers)
     assert mine.status_code == 200
     assert len(mine.json()) == 1
-    assert mine.json()[0]["slug"] == "escenario-e2e"
+    assert mine.json()[0]["title"] == "Escenario E2E"
 
     patch_draft = await api_client.patch(
         f"/scenarios/{scenario_id}",
@@ -71,20 +80,6 @@ async def test_vertical_slice_http_happy_path(api_client):
     assert submit.status_code == 200
     assert submit.json()["state"] == "in_review"
 
-    create_comment = await api_client.post(
-        f"/scenarios/{scenario_id}/comments",
-        json={
-            "body_markdown": "Comentario interno",
-            "revision_number": 2,
-            "section_key": "body",
-            "field_path": "body_markdown",
-        },
-        headers=author_headers,
-    )
-    assert create_comment.status_code == 200
-    assert create_comment.json()["scenario_id"] == scenario_id
-    assert create_comment.json()["body_markdown"] == "Comentario interno"
-
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="reviewer-token"):
         signup_reviewer = await api_client.post(
             "/auth/signup",
@@ -92,6 +87,7 @@ async def test_vertical_slice_http_happy_path(api_client):
                 "email": "reviewer@luneta.dev",
                 "password": "Password123!",
                 "role": "reviewer",
+                "nickname": "reviewer",
             },
         )
         assert signup_reviewer.status_code == 200
@@ -114,13 +110,8 @@ async def test_vertical_slice_http_happy_path(api_client):
     assert queue.status_code == 200
     assert len(queue.json()["items"]) == 1
     assert queue.json()["items"][0]["scenario_id"] == scenario_id
-
-    list_comments = await api_client.get(
-        f"/scenarios/{scenario_id}/comments",
-        headers=reviewer_headers,
-    )
-    assert list_comments.status_code == 200
-    assert len(list_comments.json()["items"]) == 1
+    scenario_slug = queue.json()["items"][0]["slug"]
+    assert queue.json()["items"][0]["has_prior_approval"] is False
 
     approve = await api_client.post(
         f"/workflow/scenarios/{scenario_id}/approve",
@@ -136,28 +127,85 @@ async def test_vertical_slice_http_happy_path(api_client):
     assert publish.status_code == 200
     assert publish.json()["state"] == "published"
 
-    catalog = await api_client.get("/public/scenarios")
-    assert catalog.status_code == 200
-    slugs = [row["slug"] for row in catalog.json()]
-    assert "escenario-e2e" in slugs
+    catalog_after_first_publish = await api_client.get("/public/scenarios")
+    assert catalog_after_first_publish.status_code == 200
+    rows0 = catalog_after_first_publish.json()
+    assert len(rows0) == 1
+    stable_public_slug = rows0[0]["slug"]
+    assert rows0[0]["title"] == "Escenario E2E"
 
-    public_read = await api_client.get("/public/scenarios/escenario-e2e")
-    assert public_read.status_code == 200
-    assert public_read.json()["slug"] == "escenario-e2e"
-    assert public_read.json()["id"] == scenario_id
-
-    pub_comments = await api_client.get("/public/scenarios/escenario-e2e/comments")
-    assert pub_comments.status_code == 200
-    assert pub_comments.json()["slug"] == "escenario-e2e"
-    assert len(pub_comments.json()["items"]) >= 1
-
-    pub_post = await api_client.post(
-        "/public/scenarios/escenario-e2e/comments",
-        json={"body_markdown": "Comentario en publicado"},
+    patch_published = await api_client.patch(
+        f"/scenarios/{scenario_id}",
+        json={"title": "Escenario E2E (editado tras publicar)"},
         headers=author_headers,
     )
-    assert pub_post.status_code == 200
-    assert pub_post.json()["body_markdown"] == "Comentario en publicado"
+    assert patch_published.status_code == 200
+    assert patch_published.json()["title"] == "Escenario E2E (editado tras publicar)"
+    assert patch_published.json()["state"] == "published"
 
-    pub_comments2 = await api_client.get("/public/scenarios/escenario-e2e/comments")
-    assert len(pub_comments2.json()["items"]) >= 2
+    catalog_while_pending_review = await api_client.get("/public/scenarios")
+    assert catalog_while_pending_review.status_code == 200
+    row_pub = catalog_while_pending_review.json()[0]
+    assert row_pub["slug"] == stable_public_slug
+    assert row_pub["title"] == "Escenario E2E"
+
+    public_read_before_submit = await api_client.get(f"/public/scenarios/{stable_public_slug}")
+    assert public_read_before_submit.status_code == 200
+    assert public_read_before_submit.json()["title"] == "Escenario E2E"
+
+    submit_repub = await api_client.post(
+        f"/scenarios/{scenario_id}/submit-review",
+        headers=author_headers,
+    )
+    assert submit_repub.status_code == 200
+    assert submit_repub.json()["state"] == "in_review"
+
+    queue_again = await api_client.get("/workflow/review-queue", headers=reviewer_headers)
+    assert queue_again.status_code == 200
+    assert len(queue_again.json()["items"]) == 1
+    assert queue_again.json()["items"][0]["has_prior_approval"] is True
+    assert queue_again.json()["items"][0]["title"] == "Escenario E2E (editado tras publicar)"
+    assert queue_again.json()["items"][0]["live_public_title"] == "Escenario E2E"
+
+    catalog = await api_client.get("/public/scenarios")
+    assert catalog.status_code == 200
+    ids = [row["id"] for row in catalog.json()]
+    assert scenario_id in ids
+    assert catalog.json()[0]["title"] == "Escenario E2E"
+
+    public_read = await api_client.get(f"/public/scenarios/{stable_public_slug}")
+    assert public_read.status_code == 200
+    assert public_read.json()["id"] == scenario_id
+    assert public_read.json()["slug"] == stable_public_slug
+    assert public_read.json()["title"] == "Escenario E2E"
+
+    approve2 = await api_client.post(
+        f"/workflow/scenarios/{scenario_id}/approve",
+        headers=reviewer_headers,
+    )
+    assert approve2.status_code == 200
+    publish2 = await api_client.post(
+        f"/workflow/scenarios/{scenario_id}/publish",
+        headers=reviewer_headers,
+    )
+    assert publish2.status_code == 200
+
+    catalog_final = await api_client.get("/public/scenarios")
+    assert catalog_final.status_code == 200
+    final_slug = catalog_final.json()[0]["slug"]
+    public_read_after = await api_client.get(f"/public/scenarios/{final_slug}")
+    assert public_read_after.status_code == 200
+    assert public_read_after.json()["title"] == "Escenario E2E (editado tras publicar)"
+
+    change_pw = await api_client.post(
+        "/auth/me/change-password",
+        json={"current_password": "Password123!", "new_password": "Newpass456!"},
+        headers=author_headers,
+    )
+    assert change_pw.status_code == 204
+
+    login_after_pw_change = await api_client.post(
+        "/auth/login",
+        json={"email": "author@luneta.dev", "password": "Newpass456!"},
+    )
+    assert login_after_pw_change.status_code == 200

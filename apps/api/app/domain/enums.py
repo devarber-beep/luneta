@@ -7,6 +7,11 @@ class UserRole(StrEnum):
     REVIEWER = "reviewer"
 
 
+class UserAccountStatus(StrEnum):
+    ACTIVE = "active"
+    DISABLED = "disabled"
+
+
 class ScenarioState(StrEnum):
     DRAFT = "draft"
     IN_REVIEW = "in_review"
@@ -26,4 +31,3 @@ class ReviewEventType(StrEnum):
     PUBLISHED = "published"
     COLLABORATOR_ADDED = "collaborator_added"
     COLLABORATOR_REMOVED = "collaborator_removed"
-    COMMENT_ADDED = "comment_added"
