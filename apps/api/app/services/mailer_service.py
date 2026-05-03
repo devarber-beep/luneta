@@ -129,7 +129,7 @@ class MailerService:
         public_url = f"{base}/public/{public_slug}"
         subject = f"Your scenario is live: {scenario_title}"
         body = (
-            f"Your scenario has been approved and published.\n\n"
+            f"Your scenario has been published.\n\n"
             f"Title: {scenario_title}\n"
             f"Public link: {public_url}\n"
         )

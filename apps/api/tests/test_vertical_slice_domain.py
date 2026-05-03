@@ -10,7 +10,7 @@ from app.core.permissions import (
     is_publicly_visible,
     is_valid_transition,
 )
-from app.core.scenario_access import can_approve_scenario, can_publish_scenario, can_read_scenario
+from app.core.scenario_access import can_publish_scenario, can_read_scenario
 from app.domain.enums import CollaboratorRole, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
@@ -47,9 +47,8 @@ def _scenario(*, state: ScenarioState) -> ScenarioModel:
 
 def test_valid_transitions() -> None:
     assert is_valid_transition(ScenarioState.DRAFT, ScenarioState.IN_REVIEW)
-    assert is_valid_transition(ScenarioState.IN_REVIEW, ScenarioState.APPROVED)
+    assert is_valid_transition(ScenarioState.IN_REVIEW, ScenarioState.PUBLISHED)
     assert is_valid_transition(ScenarioState.IN_REVIEW, ScenarioState.DRAFT)
-    assert is_valid_transition(ScenarioState.APPROVED, ScenarioState.PUBLISHED)
     assert is_valid_transition(ScenarioState.PUBLISHED, ScenarioState.IN_REVIEW)
 
 
@@ -138,10 +137,7 @@ def test_submit_approve_publish_permissions() -> None:
     )
     in_review_other = _scenario(state=ScenarioState.IN_REVIEW)
     in_review_other = in_review_other.model_copy(update={"author_user_id": "other"})
-    approved_other = _scenario(state=ScenarioState.APPROVED)
-    approved_other = approved_other.model_copy(update={"author_user_id": "other"})
-    assert can_approve_scenario(user=reviewer, scenario=in_review_other)
-    assert can_publish_scenario(user=reviewer, scenario=approved_other)
+    assert can_publish_scenario(user=reviewer, scenario=in_review_other)
     author = UserModel(
         _id="author",
         email="a@a.dev",
@@ -156,7 +152,7 @@ def test_submit_approve_publish_permissions() -> None:
         created_at=now,
         updated_at=now,
     )
-    assert not can_approve_scenario(user=author, scenario=in_review_other)
+    assert not can_publish_scenario(user=author, scenario=in_review_other)
 
 
 def test_public_visibility() -> None:

@@ -113,13 +113,6 @@ async def test_vertical_slice_http_happy_path(api_client):
     scenario_slug = queue.json()["items"][0]["slug"]
     assert queue.json()["items"][0]["has_prior_approval"] is False
 
-    approve = await api_client.post(
-        f"/workflow/scenarios/{scenario_id}/approve",
-        headers=reviewer_headers,
-    )
-    assert approve.status_code == 200
-    assert approve.json()["state"] == "approved"
-
     publish = await api_client.post(
         f"/workflow/scenarios/{scenario_id}/publish",
         headers=reviewer_headers,
@@ -179,11 +172,6 @@ async def test_vertical_slice_http_happy_path(api_client):
     assert public_read.json()["slug"] == stable_public_slug
     assert public_read.json()["title"] == "Escenario E2E"
 
-    approve2 = await api_client.post(
-        f"/workflow/scenarios/{scenario_id}/approve",
-        headers=reviewer_headers,
-    )
-    assert approve2.status_code == 200
     publish2 = await api_client.post(
         f"/workflow/scenarios/{scenario_id}/publish",
         headers=reviewer_headers,

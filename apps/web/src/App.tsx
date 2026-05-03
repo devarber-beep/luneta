@@ -1,7 +1,6 @@
 import { type CSSProperties, type FormEvent, type ReactElement, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  approveScenario,
   changeMyPassword,
   createScenario,
   deleteScenario,
@@ -50,9 +49,9 @@ function HomePage() {
     <main style={layoutStyle}>
       <h1>Luneta</h1>
       <p>
-        Workflow: draft, save, submit for review. Investigators cannot edit while a scenario is in review or approved;
+        Workflow: draft, save, submit for review. Investigators cannot edit while a scenario is in review;
         coordinators can edit during review. Edits on a published scenario stay as draft until the next review cycle;
-        the public page keeps the last approved version until a coordinator republishes.
+        the public page keeps the last live version until a coordinator publishes again.
       </p>
       <nav style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
         <Link to="/signup">Signup</Link>
@@ -724,23 +723,8 @@ function EditScenarioPage() {
 
   const role = getRole();
   const coordinatorInReview = role === "coordinator" && state === "in_review";
-  const locked = state === "approved" || (state === "in_review" && !coordinatorInReview);
+  const locked = state === "in_review" && !coordinatorInReview;
   const canSubmitReview = state === "draft" || state === "published";
-
-  const onPublishFromApproved = async () => {
-    const token = getToken();
-    if (!token || !scenarioId) {
-      return;
-    }
-    try {
-      const result = await publishScenario(token, scenarioId);
-      setState(result.state);
-      setMessage("Published.");
-      await load();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
 
   const onDeleteThisDraft = async () => {
     const token = getToken();
@@ -764,31 +748,19 @@ function EditScenarioPage() {
       <p>State: {state}</p>
       {state === "published" ? (
         <p style={{ color: "#444", fontSize: "0.95rem" }}>
-          You can keep editing this as draft content. The public page keeps showing the latest approved version until
-          you submit for review and a coordinator republishes.
+          You can keep editing this as draft content. The public page keeps showing the latest live version until you
+          submit for review and a coordinator publishes again.
         </p>
       ) : null}
       {locked ? (
         <p style={{ color: "#666" }}>
-          {state === "approved"
-            ? "Approved: waiting for publish. Content cannot be edited."
-            : "In review (investigator view): content cannot be edited until the coordinator finishes review."}
+          In review (investigator view): content cannot be edited until the coordinator publishes or rejects.
         </p>
       ) : null}
       {coordinatorInReview ? (
         <p style={{ color: "#444", fontSize: "0.95rem" }}>
           You can edit this scenario while it is in review (coordinator).
         </p>
-      ) : null}
-      {state === "approved" && role === "coordinator" ? (
-        <div style={{ marginBottom: "0.75rem" }}>
-          <button type="button" onClick={() => onPublishFromApproved()}>
-            Publish
-          </button>
-          <span style={{ marginLeft: "0.5rem", color: "#666", fontSize: "0.9rem" }}>
-            (Use after Approve if you did not publish from the queue.)
-          </span>
-        </div>
       ) : null}
       {livePublicTitle != null && livePublicTitle !== "" ? (
         <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#f5f5f5", borderRadius: "6px" }}>
@@ -917,20 +889,6 @@ function ReviewPage() {
     load().catch((error: Error) => setMessage(error.message));
   }, []);
 
-  const onApproveOnly = async (scenarioId: string) => {
-    const token = getToken();
-    if (!token) {
-      return;
-    }
-    try {
-      await approveScenario(token, scenarioId);
-      setMessage("Approved. Open the scenario to publish, or use Approve & publish from the queue next time.");
-      await load();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
   const onReject = async (scenarioId: string) => {
     const token = getToken();
     if (!token) {
@@ -948,15 +906,14 @@ function ReviewPage() {
     }
   };
 
-  const onApprovePublish = async (scenarioId: string) => {
+  const onPublish = async (scenarioId: string) => {
     const token = getToken();
     if (!token) {
       return;
     }
     try {
-      await approveScenario(token, scenarioId);
       await publishScenario(token, scenarioId);
-      setMessage("Scenario approved and published.");
+      setMessage("Scenario published.");
       await load();
     } catch (error) {
       setMessage((error as Error).message);
@@ -988,11 +945,8 @@ function ReviewPage() {
             <button type="button" onClick={() => onReject(item.scenario_id)}>
               Reject (back to draft)
             </button>
-            <button type="button" onClick={() => onApproveOnly(item.scenario_id)}>
-              Approve only
-            </button>
-            <button type="button" onClick={() => onApprovePublish(item.scenario_id)}>
-              Approve &amp; publish
+            <button type="button" onClick={() => onPublish(item.scenario_id)}>
+              Publish
             </button>
             {item.has_prior_approval && item.live_public_slug ? (
               <Link to={`/public/${item.live_public_slug}`}>View public (live)</Link>

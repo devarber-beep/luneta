@@ -1,4 +1,4 @@
-"""Workflow service for reviewer queue, approve and publish."""
+"""Workflow service for reviewer queue, publish from review, and reject."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 
 from app.core.permissions import is_valid_transition
-from app.core.scenario_access import can_approve_scenario, can_publish_scenario, can_reject_scenario
+from app.core.scenario_access import can_publish_scenario, can_reject_scenario
 from app.domain.enums import ReviewEventType, ScenarioState, UserRole
 from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
@@ -52,31 +52,6 @@ class WorkflowService:
                 )
             )
         return items
-
-    async def approve(self, *, scenario_id: str, current_user: UserModel):
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        if not can_approve_scenario(user=current_user, scenario=scenario):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot approve this scenario")
-        if not is_valid_transition(scenario.state, ScenarioState.APPROVED):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
-        updated = await self._scenarios_repo.set_state(
-            scenario_id=scenario_id,
-            state=ScenarioState.APPROVED,
-            actor_user_id=current_user.id or "",
-        )
-        if updated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._review_events_repo.create(
-            scenario_id=updated.id or "",
-            event_type=ReviewEventType.APPROVED,
-            actor_user_id=current_user.id or "",
-            actor_role=UserRole(current_user.role),
-            from_state=scenario.state,
-            to_state=updated.state,
-        )
-        return updated, datetime.now(UTC)
 
     async def reject(self, *, scenario_id: str, current_user: UserModel):
         scenario = await self._scenarios_repo.get_by_id(scenario_id)

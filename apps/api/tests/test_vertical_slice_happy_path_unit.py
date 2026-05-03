@@ -92,17 +92,15 @@ class _FakeScenariosRepo:
         if state == ScenarioState.IN_REVIEW:
             data["submitted_for_review_at"] = datetime.now(UTC)
             data["submitted_for_review_by_user_id"] = actor_user_id
-        if state == ScenarioState.APPROVED:
-            now = datetime.now(UTC)
-            data["approved_at"] = now
-            data["approved_by_user_id"] = actor_user_id
-            if data.get("first_approved_at") is None:
-                data["first_approved_at"] = now
         if state == ScenarioState.PUBLISHED:
             now = datetime.now(UTC)
             data["published_at"] = now
+            data["approved_at"] = now
+            data["approved_by_user_id"] = actor_user_id
             if data.get("first_published_at") is None:
                 data["first_published_at"] = now
+            if data.get("first_approved_at") is None:
+                data["first_approved_at"] = now
             data["published_by_user_id"] = actor_user_id
             data["public_title"] = data.get("title")
             data["public_body_markdown"] = data.get("body_markdown")
@@ -247,12 +245,6 @@ async def test_vertical_slice_happy_path_unit() -> None:
     assert len(queue) == 1
     assert queue[0].slug == slugify_title("Mi escenario editado")
 
-    approved, _ = await workflow_service.approve(
-        scenario_id=created.id or "",
-        current_user=reviewer,
-    )
-    assert approved.state == ScenarioState.APPROVED
-
     published, _ = await workflow_service.publish(
         scenario_id=created.id or "",
         current_user=reviewer,
@@ -276,9 +268,14 @@ async def test_vertical_slice_happy_path_unit() -> None:
     )
     assert resubmitted.state == ScenarioState.IN_REVIEW
 
+    republished, _ = await workflow_service.publish(
+        scenario_id=created.id or "",
+        current_user=reviewer,
+    )
+    assert republished.state == ScenarioState.PUBLISHED
+
     event_types = [event["event_type"] for event in review_events_repo.events]
     assert ReviewEventType.CREATE_DRAFT in event_types
     assert ReviewEventType.DRAFT_SAVED in event_types
     assert event_types.count(ReviewEventType.SUBMITTED) == 2
-    assert ReviewEventType.APPROVED in event_types
-    assert ReviewEventType.PUBLISHED in event_types
+    assert event_types.count(ReviewEventType.PUBLISHED) == 2

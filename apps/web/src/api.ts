@@ -73,7 +73,7 @@ export type ScenarioResponse = {
   title: string;
   body_markdown: string;
   author_user_id: string;
-  state: "draft" | "in_review" | "approved" | "published";
+  state: "draft" | "in_review" | "published";
   current_revision_number: number;
   created_at: string;
   updated_at: string;
@@ -258,13 +258,6 @@ export async function reviewQueue(token: string): Promise<{
   }>;
 }> {
   return request("/workflow/review-queue", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-export async function approveScenario(token: string, id: string): Promise<WorkflowActionResponse> {
-  return request(`/workflow/scenarios/${id}/approve`, {
-    method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
 }

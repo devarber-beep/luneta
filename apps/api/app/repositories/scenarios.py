@@ -206,24 +206,6 @@ class ScenariosRepository:
                 },
             )
             return await self.get_by_id(scenario_id)
-        if state == ScenarioState.APPROVED:
-            await self._collection.update_one(
-                {"_id": oid},
-                {
-                    "$set": {
-                        "state": ScenarioState.APPROVED.value,
-                        "approved_at": now,
-                        "approved_by_user_id": actor_user_id,
-                        "last_state_changed_at": now,
-                        "updated_at": now,
-                    }
-                },
-            )
-            await self._collection.update_one(
-                {"_id": oid, "first_approved_at": None},
-                {"$set": {"first_approved_at": now}},
-            )
-            return await self.get_by_id(scenario_id)
         if state == ScenarioState.PUBLISHED:
             await self._collection.update_one(
                 {"_id": oid},
@@ -233,6 +215,8 @@ class ScenariosRepository:
                             "state": ScenarioState.PUBLISHED.value,
                             "published_at": now,
                             "published_by_user_id": actor_user_id,
+                            "approved_at": now,
+                            "approved_by_user_id": actor_user_id,
                             "public_revision_number": "$current_revision_number",
                             "last_state_changed_at": now,
                             "updated_at": now,
@@ -246,6 +230,10 @@ class ScenariosRepository:
             await self._collection.update_one(
                 {"_id": oid, "first_published_at": None},
                 {"$set": {"first_published_at": now}},
+            )
+            await self._collection.update_one(
+                {"_id": oid, "first_approved_at": None},
+                {"$set": {"first_approved_at": now}},
             )
             return await self.get_by_id(scenario_id)
         set_doc: dict[str, Any] = {"state": state.value, "last_state_changed_at": now, "updated_at": now}

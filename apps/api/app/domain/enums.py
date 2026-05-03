@@ -15,7 +15,6 @@ class UserAccountStatus(StrEnum):
 class ScenarioState(StrEnum):
     DRAFT = "draft"
     IN_REVIEW = "in_review"
-    APPROVED = "approved"
     PUBLISHED = "published"
 
 
@@ -29,7 +28,6 @@ class ReviewEventType(StrEnum):
     DRAFT_SAVED = "draft_saved"
     SUBMITTED = "submitted"
     UPDATE_IN_REVIEW = "update_in_review"
-    APPROVED = "approved"
     REJECTED = "rejected"
     PUBLISHED = "published"
     COLLABORATOR_ADDED = "collaborator_added"

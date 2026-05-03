@@ -5,8 +5,7 @@ from app.models.scenario import ScenarioModel
 
 ALLOWED_WORKFLOW_TRANSITIONS: dict[ScenarioState, set[ScenarioState]] = {
     ScenarioState.DRAFT: {ScenarioState.IN_REVIEW},
-    ScenarioState.IN_REVIEW: {ScenarioState.APPROVED, ScenarioState.DRAFT},
-    ScenarioState.APPROVED: {ScenarioState.PUBLISHED},
+    ScenarioState.IN_REVIEW: {ScenarioState.PUBLISHED, ScenarioState.DRAFT},
     ScenarioState.PUBLISHED: {ScenarioState.IN_REVIEW},
 }
 

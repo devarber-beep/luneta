@@ -8,7 +8,6 @@ import pytest
 from app.core.permissions import is_valid_transition
 from app.core.rbac_policy import permissions_for_user, user_has_permission
 from app.core.scenario_access import (
-    can_approve_scenario,
     can_publish_scenario,
     can_read_scenario,
     can_reject_scenario,
@@ -61,10 +60,9 @@ def _scenario(
     )
 
 
-def test_rbac_author_cannot_approve_or_publish() -> None:
+def test_rbac_author_cannot_publish() -> None:
     u = _user(user_id="u1", role=UserRole.INVESTIGATOR)
     perms = permissions_for_user(user=u)
-    assert Permission.SCENARIO_APPROVE not in perms
     assert Permission.SCENARIO_PUBLISH not in perms
     assert Permission.SCENARIO_READ_REVIEW_QUEUE not in perms
     assert Permission.SCENARIO_CREATE_DRAFT in perms
@@ -73,21 +71,19 @@ def test_rbac_author_cannot_approve_or_publish() -> None:
 def test_rbac_reviewer_has_queue_and_workflow_permissions() -> None:
     u = _user(user_id="r1", role=UserRole.COORDINATOR)
     assert user_has_permission(user=u, permission=Permission.SCENARIO_READ_REVIEW_QUEUE)
-    assert user_has_permission(user=u, permission=Permission.SCENARIO_APPROVE)
+    assert user_has_permission(user=u, permission=Permission.SCENARIO_PUBLISH)
 
 
-def test_coordinator_cannot_approve_or_publish_own_scenario() -> None:
+def test_coordinator_cannot_publish_own_submission() -> None:
     coord = _user(user_id="same", role=UserRole.COORDINATOR)
     sc = _scenario(author_id="same", state=ScenarioState.IN_REVIEW)
-    assert not can_approve_scenario(user=coord, scenario=sc)
-    sc2 = _scenario(author_id="same", state=ScenarioState.APPROVED)
-    assert not can_publish_scenario(user=coord, scenario=sc2)
+    assert not can_publish_scenario(user=coord, scenario=sc)
 
 
-def test_coordinator_can_approve_others_in_review() -> None:
+def test_coordinator_can_publish_others_in_review() -> None:
     coord = _user(user_id="r1", role=UserRole.COORDINATOR)
     sc = _scenario(author_id="a1", state=ScenarioState.IN_REVIEW)
-    assert can_approve_scenario(user=coord, scenario=sc)
+    assert can_publish_scenario(user=coord, scenario=sc)
 
 
 def test_coordinator_cannot_reject_own_submission() -> None:
@@ -132,8 +128,8 @@ def test_in_review_to_draft_is_valid_reject_transition() -> None:
 
 
 @pytest.mark.asyncio
-async def test_http_reviewer_cannot_approve_own_scenario(api_client) -> None:
-    """Regression: self-approval must be rejected at the service/policy layer."""
+async def test_http_reviewer_cannot_publish_own_scenario(api_client) -> None:
+    """Regression: self-publish from review must be rejected at the service/policy layer."""
     from unittest.mock import patch
 
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="rev-self-token"):
@@ -163,5 +159,5 @@ async def test_http_reviewer_cannot_approve_own_scenario(api_client) -> None:
     sid = create.json()["id"]
     sub = await api_client.post(f"/scenarios/{sid}/submit-review", headers=headers)
     assert sub.status_code == 200
-    appr = await api_client.post(f"/workflow/scenarios/{sid}/approve", headers=headers)
-    assert appr.status_code == 403
+    pub = await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=headers)
+    assert pub.status_code == 403

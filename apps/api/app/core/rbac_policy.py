@@ -25,7 +25,6 @@ _COORDINATOR_PERMISSIONS: frozenset[Permission] = _INVESTIGATOR_PERMISSIONS | fr
     {
         Permission.SCENARIO_READ_REVIEW_QUEUE,
         Permission.SCENARIO_UPDATE_IN_REVIEW,
-        Permission.SCENARIO_APPROVE,
         Permission.SCENARIO_REJECT,
         Permission.SCENARIO_PUBLISH,
     }

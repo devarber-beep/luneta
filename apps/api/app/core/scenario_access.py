@@ -30,7 +30,7 @@ def can_read_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
     if _is_participant(scenario=scenario, user_id=uid):
         return True
     if role == UserRole.COORDINATOR and Permission.SCENARIO_READ_REVIEW_QUEUE in granted:
-        if scenario.state in (ScenarioState.IN_REVIEW, ScenarioState.APPROVED):
+        if scenario.state == ScenarioState.IN_REVIEW:
             return True
     return False
 
@@ -72,22 +72,12 @@ def _not_own_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
     return (user.id or "") != scenario.author_user_id
 
 
-def can_approve_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
-    if scenario.deleted_at is not None:
-        return False
-    if Permission.SCENARIO_APPROVE not in permissions_for_user(user=user):
-        return False
-    if scenario.state != ScenarioState.IN_REVIEW:
-        return False
-    return _not_own_scenario(user=user, scenario=scenario)
-
-
 def can_publish_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
     if scenario.deleted_at is not None:
         return False
     if Permission.SCENARIO_PUBLISH not in permissions_for_user(user=user):
         return False
-    if scenario.state != ScenarioState.APPROVED:
+    if scenario.state != ScenarioState.IN_REVIEW:
         return False
     return _not_own_scenario(user=user, scenario=scenario)
 

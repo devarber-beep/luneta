@@ -13,7 +13,6 @@ class Permission(StrEnum):
     SCENARIO_SUBMIT_REVIEW = "scenario_submit_review"
     SCENARIO_READ_REVIEW_QUEUE = "scenario_read_review_queue"
     SCENARIO_UPDATE_IN_REVIEW = "scenario_update_in_review"
-    SCENARIO_APPROVE = "scenario_approve"
     SCENARIO_REJECT = "scenario_reject"
     SCENARIO_PUBLISH = "scenario_publish"
     USER_READ_SELF = "user_read_self"

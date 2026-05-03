@@ -36,20 +36,6 @@ async def review_queue(
     return ReviewQueueResponse(items=items)
 
 
-@router.post("/scenarios/{scenario_id}/approve", response_model=WorkflowActionResponse)
-async def approve(
-    scenario_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_APPROVE)),
-) -> WorkflowActionResponse:
-    scenario, changed_at = await _service(db).approve(scenario_id=scenario_id, current_user=current_user)
-    return WorkflowActionResponse(
-        scenario_id=scenario.id or "",
-        state=scenario.state,
-        changed_at=changed_at,
-    )
-
-
 @router.post("/scenarios/{scenario_id}/reject", response_model=WorkflowActionResponse)
 async def reject(
     scenario_id: str,
