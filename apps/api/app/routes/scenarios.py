@@ -6,11 +6,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.permissions import has_republication_pending
 from app.db import get_db
-from app.deps.authz import require_any_permission, require_permission
+from app.deps.authz import require_active_user_with_permission, require_any_active_permission
 from app.domain.authz_permissions import Permission
 from app.domain.enums import ScenarioState
 from app.models.user import UserModel
+from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.review_events import ReviewEventsRepository
+from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
+from app.repositories.scenario_classification import ScenarioClassificationRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
@@ -39,24 +42,27 @@ def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
         revisions_repo=ScenarioRevisionsRepository(db),
         review_events_repo=ReviewEventsRepository(db),
         users_repo=UsersRepository(db),
+        assignments_repo=ReviewerAssignmentsRepository(db),
+        classification_repo=ScenarioClassificationRepository(db),
+        ethical_repo=EthicalRisksRepository(db),
         mailer=MailerService(),
     )
 
 
 def _to_response(scenario) -> ScenarioResponse:
     show_live = scenario.state == ScenarioState.IN_REVIEW or has_republication_pending(scenario=scenario)
-    live_slug = live_title = live_body = None
+    live_title = live_description = None
     if show_live and scenario.public_slug is not None:
-        live_slug = scenario.public_slug
         live_title = scenario.public_title
-        live_body = scenario.public_body_markdown
+        live_description = scenario.public_description
     cover_image = scenario.cover_image.model_dump() if scenario.cover_image is not None else None
     inline_assets = [asset.model_dump() for asset in scenario.inline_assets]
     return ScenarioResponse(
         id=scenario.id or "",
-        slug=scenario.slug,
         title=scenario.title,
-        body_markdown=scenario.body_markdown,
+        description=scenario.description,
+        category_ids=scenario.category_ids,
+        ethical_risk_ids=scenario.ethical_risk_ids,
         author_user_id=scenario.author_user_id,
         collaborators=[
             ScenarioCollaboratorResponse(
@@ -71,6 +77,10 @@ def _to_response(scenario) -> ScenarioResponse:
         current_revision_number=scenario.current_revision_number,
         submitted_for_review_at=scenario.submitted_for_review_at,
         submitted_for_review_by_user_id=scenario.submitted_for_review_by_user_id,
+        review_feedback_note=scenario.review_feedback_note,
+        review_feedback_at=scenario.review_feedback_at,
+        not_suitable_reason=scenario.not_suitable_reason,
+        not_suitable_at=scenario.not_suitable_at,
         approved_at=scenario.approved_at,
         first_approved_at=scenario.first_approved_at,
         approved_by_user_id=scenario.approved_by_user_id,
@@ -96,9 +106,8 @@ def _to_response(scenario) -> ScenarioResponse:
         deleted_at=scenario.deleted_at,
         created_at=scenario.created_at,
         updated_at=scenario.updated_at,
-        live_public_slug=live_slug,
         live_public_title=live_title,
-        live_public_body_markdown=live_body,
+        live_public_description=live_description,
     )
 
 
@@ -106,12 +115,12 @@ def _to_response(scenario) -> ScenarioResponse:
 async def create_scenario(
     payload: ScenarioCreateRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_CREATE_DRAFT)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_CREATE_DRAFT)),
 ) -> ScenarioResponse:
     scenario = await _service(db).create_draft(
         current_user=current_user,
         title=payload.title,
-        body_markdown=payload.body_markdown,
+        description=payload.description,
     )
     return _to_response(scenario)
 
@@ -119,17 +128,17 @@ async def create_scenario(
 @router.get("/mine", response_model=list[ScenarioSummaryResponse])
 async def list_my_scenarios(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_READ_OWN)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
     scenarios = await _service(db).list_my_scenarios(current_user=current_user)
     return [
         ScenarioSummaryResponse(
             id=s.id or "",
-            slug=s.public_slug if s.published_at is not None else s.slug,
             title=s.title,
             state=s.state,
             updated_at=s.updated_at,
             first_published_at=s.first_published_at,
+            public_path=f"/public/{s.public_slug}" if s.public_slug else None,
         )
         for s in scenarios
     ]
@@ -140,7 +149,7 @@ async def get_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+        require_any_active_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
     ),
 ) -> ScenarioResponse:
     scenario = await _service(db).get_scenario_if_readable(
@@ -156,18 +165,21 @@ async def patch_scenario(
     payload: ScenarioPatchRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
+    raw = payload.model_dump(exclude_unset=True)
     scenario = await _service(db).patch_draft(
         scenario_id=scenario_id,
         current_user=current_user,
-        title=payload.title,
-        body_markdown=payload.body_markdown,
-        summary=payload.summary,
-        categories=payload.categories,
-        tags=payload.tags,
-        sensitive_data_involved=payload.sensitive_data_involved,
+        title=raw.get("title"),
+        description=raw.get("description"),
+        summary=raw.get("summary"),
+        categories=raw.get("categories"),
+        tags=raw.get("tags"),
+        category_ids=raw.get("category_ids"),
+        ethical_risk_ids=raw.get("ethical_risk_ids"),
+        sensitive_data_involved=raw.get("sensitive_data_involved"),
     )
     return _to_response(scenario)
 
@@ -176,7 +188,7 @@ async def patch_scenario(
 async def delete_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_DELETE_OWN)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_DELETE_OWN)),
 ) -> None:
     await _service(db).delete_draft(scenario_id=scenario_id, current_user=current_user)
 
@@ -185,9 +197,25 @@ async def delete_scenario(
 async def submit_review(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_SUBMIT_REVIEW)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_SUBMIT_REVIEW)),
 ) -> SubmitReviewResponse:
     scenario = await _service(db).submit_review(
+        scenario_id=scenario_id,
+        current_user=current_user,
+    )
+    return SubmitReviewResponse(
+        scenario_id=scenario.id or "",
+        state=scenario.state,
+    )
+
+
+@router.post("/{scenario_id}/start-applying-changes", response_model=SubmitReviewResponse)
+async def start_applying_changes(
+    scenario_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_SUBMIT_REVIEW)),
+) -> SubmitReviewResponse:
+    scenario = await _service(db).start_applying_changes(
         scenario_id=scenario_id,
         current_user=current_user,
     )
@@ -204,7 +232,7 @@ async def upload_cover_asset(
     alt_text: str | None = Form(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
     content_type = (file.content_type or "").lower()
@@ -232,7 +260,7 @@ async def upload_inline_asset(
     order: int = Form(default=0),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
     content_type = (file.content_type or "").lower()
@@ -258,7 +286,7 @@ async def delete_cover_asset(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_cover_image(
@@ -275,7 +303,7 @@ async def delete_inline_asset(
     asset_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_inline_image(
@@ -293,7 +321,7 @@ async def reorder_inline_assets(
     payload: ReorderInlineAssetsRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
+        require_any_active_permission(Permission.SCENARIO_UPDATE_OWN, Permission.SCENARIO_UPDATE_IN_REVIEW)
     ),
 ) -> ScenarioResponse:
     scenario = await _service(db).reorder_inline_images(
@@ -311,7 +339,7 @@ async def get_asset_read_url(
     expires_in_seconds: int = 900,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+        require_any_active_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
     ),
 ) -> ScenarioAssetReadUrlResponse:
     signed_url, expires = await _service(db).resolve_asset_read_url(
@@ -329,7 +357,7 @@ async def list_collaborators(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+        require_any_active_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
     ),
 ) -> ScenarioCollaboratorsResponse:
     collaborators, scenario = await _service(db).list_collaborators(
@@ -355,7 +383,7 @@ async def add_collaborator(
     scenario_id: str,
     payload: AddCollaboratorRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_UPDATE_OWN)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
     scenario = await _service(db).add_editor(
         scenario_id=scenario_id,
@@ -370,7 +398,7 @@ async def remove_collaborator(
     scenario_id: str,
     user_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_UPDATE_OWN)),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
     scenario = await _service(db).remove_editor(
         scenario_id=scenario_id,

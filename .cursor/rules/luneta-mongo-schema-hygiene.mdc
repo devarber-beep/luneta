@@ -1,0 +1,13 @@
+---
+description: Mongo e incoherencias de esquema — migración/limpieza solo con confirmación explícita del usuario
+alwaysApply: true
+---
+
+# Datos e incoherencias en Mongo (Luneta, fases tempranas)
+
+- Los modelos Pydantic de persistencia reflejan el **contrato actual** del documento: no hay normalización en lectura para formas antiguas. Si el esquema cambia, la BD debe **migrarse** (scripts o tareas puntuales), no compensarse en el modelo salvo decisión explícita del usuario.
+- Cuando un cambio de código o de esquema **puede dejar filas incoherentes** en Mongo (campos obligatorios nuevos, renombres, reglas nuevas, etc.), el agente debe:
+  - **Señalar** qué colecciones y qué criterios de migración o limpieza aplican.
+  - **Proponer** script de migración, borrado acotado o corrección puntual si hace falta.
+  - **No ejecutar** borrados masivos, `drop`, ni comandos destructivos contra la base de datos **sin confirmación previa del usuario** en el chat (preguntar de forma explícita y esperar respuesta afirmativa).
+- La limpieza o migración en BD es decisión del usuario tras ser informado; el código asume documentos alineados con el modelo vigente.

@@ -9,24 +9,26 @@ from app.domain.enums import CollaboratorRole, ScenarioState
 
 class ScenarioSummaryResponse(BaseModel):
     id: str
-    slug: str
     title: str
     state: ScenarioState
     updated_at: datetime
     first_published_at: datetime | None = None
+    public_path: str | None = None
 
 
 class ScenarioCreateRequest(BaseModel):
     title: str = Field(min_length=3, max_length=120)
-    body_markdown: str = Field(min_length=1)
+    description: str = Field(min_length=1, max_length=2000)
 
 
 class ScenarioPatchRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=120)
-    body_markdown: str | None = Field(default=None, min_length=1)
+    description: str | None = Field(default=None, min_length=1, max_length=2000)
     summary: str | None = Field(default=None, max_length=500)
     categories: list[str] | None = None
     tags: list[str] | None = None
+    category_ids: list[str] | None = None
+    ethical_risk_ids: list[str] | None = None
     sensitive_data_involved: bool | None = None
 
 
@@ -49,15 +51,20 @@ class ScenarioAssessmentResponse(BaseModel):
 
 class ScenarioResponse(BaseModel):
     id: str
-    slug: str
     title: str
-    body_markdown: str
+    description: str
+    category_ids: list[str] = Field(default_factory=list)
+    ethical_risk_ids: list[str] = Field(default_factory=list)
     author_user_id: str
     collaborators: list["ScenarioCollaboratorResponse"]
     state: ScenarioState
     current_revision_number: int
     submitted_for_review_at: datetime | None = None
     submitted_for_review_by_user_id: str | None = None
+    review_feedback_note: str | None = None
+    review_feedback_at: datetime | None = None
+    not_suitable_reason: str | None = None
+    not_suitable_at: datetime | None = None
     approved_at: datetime | None = None
     first_approved_at: datetime | None = None
     approved_by_user_id: str | None = None
@@ -83,9 +90,8 @@ class ScenarioResponse(BaseModel):
     deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-    live_public_slug: str | None = None
     live_public_title: str | None = None
-    live_public_body_markdown: str | None = None
+    live_public_description: str | None = None
 
 
 class SubmitReviewResponse(BaseModel):

@@ -1,0 +1,15 @@
+---
+description: Mongo alineado con modelos Pydantic; sin compat con esquemas viejos; defaults Pydantic = tolerancia a omisiones menores
+alwaysApply: true
+---
+
+# Contrato persistencia ↔ modelo (Luneta, backend)
+
+- El backend **asume documentos coherentes** con los modelos Pydantic de `app/models`: tipos y enums correctos, campos obligatorios presentes. Si algo es inválido o falta lo que no tiene default, **debe fallar la validación** (error claro en runtime o en tests), no enmascararse con lógica ad hoc.
+- **Prohibido** salvo decisión explícita del usuario en el chat:
+  - `model_validator` / `field_validator` que **muten** el dict leído para “encajar” datos viejos, incompletos o de otro esquema.
+  - **Rellenar o derivar** en lectura campos que deben venir persistidos (p. ej. slug desde título, nickname desde email, defaults a mano antes de `model_validate`).
+  - Ramas de **compatibilidad** con “modelos antiguos” o colecciones obsoletas en código de aplicación.
+- Si el esquema cambia, la corrección es **migración o limpieza en BD** (scripts, tareas puntuales), alineada con la regla de higiene Mongo del proyecto.
+- Los repositorios deben limitarse a **leer** y llamar a `Model.model_validate(doc)` (tras conversiones mecánicas como `_id` → string), sin lógica de “arreglar” el documento.
+- Los **`Field(default=...)`** de Pydantic son la **tolerancia explícita y aceptada** a **pequeños fallos**: si en Mongo falta la clave, se aplica el valor por defecto de producto. Eso no es compatibilidad con “otro esquema” ni relleno derivado de otros campos; es omisión menor frente a un default conocido. El código que **escribe** debe persistir esos campos de forma habitual para no depender del default en lectura. Si un campo debe existir siempre en BD por negocio, mejor **requerido sin default** y migrar.

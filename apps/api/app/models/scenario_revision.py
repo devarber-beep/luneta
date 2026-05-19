@@ -13,7 +13,7 @@ class ScenarioRevisionModel(BaseModel):
     scenario_id: str
     revision_number: int
     title: str
-    body_markdown: str
+    description: str
     state_snapshot: ScenarioState
     created_by_user_id: str
     created_at: datetime

@@ -1,0 +1,17 @@
+---
+description: Frontend UI text must be English only
+globs: apps/web/src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Language Policy (English Only)
+
+- Any user-facing frontend text in `apps/web/src` must be written in English.
+- Do not add Spanish (or mixed-language) labels, buttons, placeholders, toasts, helper text, empty states, or error copy in the frontend.
+- When editing existing UI, convert nearby non-English strings to English for consistency.
+- Route labels and navigation copy shown to users must also be English.
+
+## Examples
+
+- Bad: `"Volver"`, `"Mis escenarios"`, `"Enviado a revision"`
+- Good: `"Back"`, `"My scenarios"`, `"Submitted for review"`

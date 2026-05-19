@@ -14,17 +14,23 @@ from app.core.permissions import (
 from app.core.scenario_access import (
     can_delete_own_draft,
     can_read_scenario,
+    can_start_applying_changes_scenario,
     can_submit_review,
     can_update_scenario,
 )
 from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
+from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.review_events import ReviewEventsRepository
+from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
+from app.repositories.scenario_classification import ScenarioClassificationRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
+from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 from app.services.mailer_service import MailerService, NoopMailer
+from app.services.scenario_submit_validation import ensure_ready_for_submit
 from app.storage.minio_storage import MinioScenarioStorage
 
 
@@ -36,35 +42,54 @@ class ScenarioService:
         revisions_repo: ScenarioRevisionsRepository,
         review_events_repo: ReviewEventsRepository,
         users_repo: UsersRepository,
+        assignments_repo: ReviewerAssignmentsRepository,
+        classification_repo: ScenarioClassificationRepository,
+        ethical_repo: EthicalRisksRepository,
         mailer: MailerService | NoopMailer | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._revisions_repo = revisions_repo
         self._review_events_repo = review_events_repo
         self._users_repo = users_repo
+        self._assignments_repo = assignments_repo
+        self._classification_repo = classification_repo
+        self._ethical_repo = ethical_repo
         self._mailer = mailer if mailer is not None else MailerService()
+
+    async def _portfolio_for(self, user: UserModel) -> frozenset[str]:
+        return await portfolio_investigator_ids_for_user(
+            user=user,
+            assignments_repo=self._assignments_repo,
+        )
 
     async def create_draft(
         self,
         *,
         current_user: UserModel,
         title: str,
-        body_markdown: str,
+        description: str,
     ) -> ScenarioModel:
         await self._scenarios_repo.ensure_indexes()
         await self._revisions_repo.ensure_indexes()
         await self._review_events_repo.ensure_indexes()
 
+        desc = description.strip()
+        if len(desc) < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Description is required",
+            )
+
         scenario = await self._scenarios_repo.create(
             title=title,
-            body_markdown=body_markdown,
+            description=desc,
             author_user_id=current_user.id or "",
         )
         await self._revisions_repo.create_snapshot(
             scenario_id=scenario.id or "",
             revision_number=scenario.current_revision_number,
             title=scenario.title,
-            body_markdown=scenario.body_markdown,
+            description=scenario.description,
             state_snapshot=scenario.state,
             created_by_user_id=current_user.id or "",
         )
@@ -86,7 +111,10 @@ class ScenarioService:
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
-        if not can_read_scenario(user=current_user, scenario=scenario):
+        portfolio = await self._portfolio_for(current_user)
+        if not can_read_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return scenario
 
@@ -95,11 +123,13 @@ class ScenarioService:
         *,
         scenario_id: str,
         current_user: UserModel,
-        title: str | None,
-        body_markdown: str | None,
+        title: str | None = None,
+        description: str | None = None,
         summary: str | None = None,
         categories: list[str] | None = None,
         tags: list[str] | None = None,
+        category_ids: list[str] | None = None,
+        ethical_risk_ids: list[str] | None = None,
         sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
@@ -107,17 +137,28 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
         actor_user_id = current_user.id or ""
-        if not can_update_scenario(user=current_user, scenario=scenario):
+        portfolio = await self._portfolio_for(current_user)
+        if not can_update_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit this scenario")
 
         prior_state = scenario.state
+        if description is not None and not description.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Description cannot be empty",
+            )
+
         updated = await self._scenarios_repo.update_draft_content(
             scenario_id=scenario_id,
             title=title,
-            body_markdown=body_markdown,
+            description=description.strip() if description is not None else None,
             summary=summary,
             categories=categories,
             tags=tags,
+            category_ids=category_ids,
+            ethical_risk_ids=ethical_risk_ids,
             sensitive_data_involved=sensitive_data_involved,
         )
         if updated is None:
@@ -131,7 +172,7 @@ class ScenarioService:
             scenario_id=bumped.id or "",
             revision_number=bumped.current_revision_number,
             title=bumped.title,
-            body_markdown=bumped.body_markdown,
+            description=bumped.description,
             state_snapshot=bumped.state,
             created_by_user_id=actor_user_id,
         )
@@ -298,7 +339,7 @@ class ScenarioService:
         if not can_submit_review(user=current_user, scenario=scenario):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot submit this scenario")
 
-        if not is_valid_transition(scenario.state, ScenarioState.IN_REVIEW):
+        if not is_valid_transition(scenario.state, ScenarioState.QUEUED):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
 
         if scenario.state == ScenarioState.PUBLISHED:
@@ -308,9 +349,14 @@ class ScenarioService:
                     detail="No changes to submit for republication",
                 )
 
-        updated = await self._scenarios_repo.set_state(
+        await ensure_ready_for_submit(
+            scenario=scenario,
+            classification_repo=self._classification_repo,
+            ethical_repo=self._ethical_repo,
+        )
+
+        updated = await self._scenarios_repo.submit_to_queue(
             scenario_id=scenario_id,
-            state=ScenarioState.IN_REVIEW,
             actor_user_id=actor_user_id,
         )
         if updated is None:
@@ -324,13 +370,39 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
         )
-        coordinator_emails = await self._users_repo.list_verified_emails_by_role(UserRole.COORDINATOR.value)
-        for address in coordinator_emails:
+        reviewer_emails = await self._users_repo.list_verified_emails_by_roles(
+            [UserRole.REVIEWER.value, UserRole.ADMIN.value]
+        )
+        for address in reviewer_emails:
             await self._mailer.send_scenario_submitted_for_review(
                 to_email=address,
                 scenario_title=updated.title,
                 scenario_id=updated.id or "",
             )
+        return updated
+
+    async def start_applying_changes(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
+        scenario = await self._scenarios_repo.get_by_id(scenario_id)
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        if not can_start_applying_changes_scenario(user=current_user, scenario=scenario):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot start applying changes on this scenario",
+            )
+        if not is_valid_transition(scenario.state, ScenarioState.APPLYING_CHANGES):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        updated = await self._scenarios_repo.start_applying_changes(scenario_id=scenario_id)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        await self._review_events_repo.create(
+            scenario_id=updated.id or "",
+            event_type=ReviewEventType.APPLYING_CHANGES_STARTED,
+            actor_user_id=current_user.id or "",
+            actor_role=UserRole(current_user.role),
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
         return updated
 
     async def list_collaborators(self, *, scenario_id: str, current_user: UserModel):
@@ -343,7 +415,7 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
         actor_user_id = current_user.id or ""
-        actor_collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
+        actor_collaborator_role = get_collaborator_role(scenario=scenario, user_id=actor_user_id)
         if not can_manage_collaborators(collaborator_role=actor_collaborator_role):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage collaborators")
 
@@ -353,8 +425,11 @@ class ScenarioService:
         editor_user = await self._users_repo.get_by_id(editor_user_id)
         if editor_user is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Editor user not found")
-        if editor_user.role != UserRole.INVESTIGATOR:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only investigator users can be editors")
+        if editor_user.role not in (UserRole.INVESTIGATOR, UserRole.REVIEWER, UserRole.ADMIN):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only investigator, reviewer, or admin users can be editors",
+            )
 
         collaborators = [c.model_dump(mode="json") for c in scenario.collaborators]
         for collaborator in collaborators:
@@ -391,7 +466,7 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
 
         actor_user_id = current_user.id or ""
-        actor_collaborator_role = get_collaborator_role(scenario=scenario, actor_user_id=actor_user_id)
+        actor_collaborator_role = get_collaborator_role(scenario=scenario, user_id=actor_user_id)
         if not can_manage_collaborators(collaborator_role=actor_collaborator_role):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage collaborators")
 
@@ -421,7 +496,10 @@ class ScenarioService:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        if not can_update_scenario(user=current_user, scenario=scenario):
+        portfolio = await self._portfolio_for(current_user)
+        if not can_update_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit this scenario")
         return scenario
 

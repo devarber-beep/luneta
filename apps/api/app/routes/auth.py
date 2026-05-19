@@ -1,11 +1,12 @@
 """Authentication routes for vertical slice."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
-from app.deps.authz import require_permission
+from app.deps.authz import require_permission, require_profile_editable
+from app.deps.storage import get_user_avatar_storage
 from app.domain.authz_permissions import Permission
 from app.models.user import UserModel
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
@@ -23,12 +24,17 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     VerifyEmailResponse,
 )
+from app.presenters.me_response import build_me_response
 from app.services.auth_service import AuthService
 from app.services.email_verification_service import EmailVerificationService
 from app.services.mailer_service import MailerService
 from app.settings import settings
+from app.storage.minio_storage import MinioUserAvatarStorage
 
 router = APIRouter()
+
+_MAX_AVATAR_BYTES = 2 * 1024 * 1024
+_ALLOWED_AVATAR_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
 @router.post("/signup", response_model=SignupResponse)
@@ -53,13 +59,14 @@ async def signup(payload: SignupRequest, db: AsyncIOMotorDatabase = Depends(get_
     user = await auth_service.signup(
         email=payload.email,
         password=payload.password,
-        role=payload.role,
         nickname=payload.nickname,
     )
-    verification_token = await email_verification_service.issue_token(user_id=user.id or "", email=user.email)
+    verification_token = await email_verification_service.issue_token(
+        user_id=user.id or "", email=str(user.email_normalized)
+    )
     if settings.dev_expose_last_email_verification_token:
-        record_last(email=user.email, token=verification_token)
-    await mailer_service.send_verification_email(to_email=user.email, token=verification_token)
+        record_last(email=str(user.email_normalized), token=verification_token)
+    await mailer_service.send_verification_email(to_email=str(user.email_normalized), token=verification_token)
     return SignupResponse(user_id=user.id or "", requires_email_verification=True)
 
 
@@ -100,61 +107,86 @@ async def login(payload: LoginRequest, db: AsyncIOMotorDatabase = Depends(get_db
         token_secret=settings.auth_token_secret,
         token_ttl_seconds=settings.auth_token_ttl_seconds,
     )
-    token = await auth_service.login(email=payload.email, password=payload.password)
-    return LoginResponse(access_token=token)
+    result = await auth_service.login(email=payload.email, password=payload.password)
+    return LoginResponse(
+        access_token=result.access_token,
+        must_change_password=result.must_change_password,
+    )
 
 
 @router.get("/me", response_model=MeResponse)
-async def me(user: UserModel = Depends(require_permission(Permission.USER_READ_SELF))) -> MeResponse:
-    return MeResponse(
-        user_id=user.id or "",
-        email=user.email,
-        role=user.role,
-        is_email_verified=user.is_email_verified,
-        email_verified_at=user.email_verified_at,
-        nickname=user.nickname,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        avatar=user.avatar.model_dump() if user.avatar is not None else None,
-        last_login_at=user.last_login_at,
-    )
+async def me(
+    user: UserModel = Depends(require_permission(Permission.USER_READ_SELF)),
+    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
+) -> MeResponse:
+    return build_me_response(user=user, storage=storage)
 
 
 @router.patch("/me", response_model=MeResponse)
 async def patch_me(
     payload: ProfilePatchRequest,
-    user: UserModel = Depends(require_permission(Permission.USER_UPDATE_SELF)),
+    user: UserModel = Depends(require_profile_editable()),
     db: AsyncIOMotorDatabase = Depends(get_db),
+    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
 ) -> MeResponse:
     auth_service = AuthService(
         users_repo=UsersRepository(db),
         token_secret=settings.auth_token_secret,
         token_ttl_seconds=settings.auth_token_ttl_seconds,
     )
-    updated = await auth_service.update_profile(
+    updated = await auth_service.update_profile(user=user, patch=payload)
+    return build_me_response(user=updated, storage=storage)
+
+
+@router.post("/me/avatar", response_model=MeResponse)
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    user: UserModel = Depends(require_profile_editable()),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
+) -> MeResponse:
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _ALLOWED_AVATAR_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Avatar must be JPEG, PNG, or WebP",
+        )
+    raw = await file.read()
+    if len(raw) > _MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Avatar too large")
+    auth_service = AuthService(
+        users_repo=UsersRepository(db),
+        token_secret=settings.auth_token_secret,
+        token_ttl_seconds=settings.auth_token_ttl_seconds,
+    )
+    updated = await auth_service.upload_avatar(
         user=user,
-        nickname=payload.nickname,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
+        content=raw,
+        content_type=content_type,
+        storage=storage,
     )
-    return MeResponse(
-        user_id=updated.id or "",
-        email=updated.email,
-        role=updated.role,
-        is_email_verified=updated.is_email_verified,
-        email_verified_at=updated.email_verified_at,
-        nickname=updated.nickname,
-        first_name=updated.first_name,
-        last_name=updated.last_name,
-        avatar=updated.avatar.model_dump() if updated.avatar is not None else None,
-        last_login_at=updated.last_login_at,
+    return build_me_response(user=updated, storage=storage)
+
+
+@router.delete("/me/avatar", response_model=MeResponse)
+async def delete_my_avatar(
+    user: UserModel = Depends(require_profile_editable()),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
+) -> MeResponse:
+    auth_service = AuthService(
+        users_repo=UsersRepository(db),
+        token_secret=settings.auth_token_secret,
+        token_ttl_seconds=settings.auth_token_ttl_seconds,
     )
+    updated = await auth_service.remove_avatar(user=user, storage=storage)
+    return build_me_response(user=updated, storage=storage)
 
 
 @router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
     payload: ChangePasswordRequest,
-    user: UserModel = Depends(require_permission(Permission.USER_UPDATE_SELF)),
+    user: UserModel = Depends(require_permission(Permission.USER_CHANGE_OWN_PASSWORD)),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> None:
     auth_service = AuthService(
@@ -167,4 +199,4 @@ async def change_password(
         current_password=payload.current_password,
         new_password=payload.new_password,
     )
-    await MailerService().send_password_changed_notification(to_email=user.email)
+    await MailerService().send_password_changed_notification(to_email=str(user.email_normalized))

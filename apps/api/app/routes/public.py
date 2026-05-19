@@ -19,9 +19,9 @@ async def list_public_scenarios(db: AsyncIOMotorDatabase = Depends(get_db)) -> l
     return [
         PublicScenarioListItem(
             id=s.id or "",
-            slug=s.public_slug,
-            title=s.public_title,
+            title=s.public_title or s.title,
             published_at=s.published_at or s.updated_at,
+            public_path=f"/public/{s.public_slug}",
         )
         for s in scenarios
     ]
@@ -55,9 +55,8 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
     ]
     return PublicScenarioResponse(
         id=scenario.id or "",
-        slug=scenario.public_slug,
-        title=scenario.public_title,
-        body_markdown=scenario.public_body_markdown,
+        title=scenario.public_title or scenario.title,
+        description=scenario.public_description or scenario.description,
         published_at=scenario.published_at or scenario.updated_at,
         cover_image=cover,
         inline_assets=inline_assets,

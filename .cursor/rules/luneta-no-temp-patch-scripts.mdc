@@ -1,0 +1,27 @@
+---
+description: No one-off Python/shell patch scripts in the repo; edit sources directly
+alwaysApply: true
+---
+
+# No temporary patch scripts
+
+Do **not** create throwaway scripts in the tree to apply a single change (e.g. `fix_app.py`, `trim_app.py`, `fix_editor_ui.py`, ad-hoc runners under `apps/web/` or repo root).
+
+## Do instead
+
+- Edit the real source files with the editor tools (`StrReplace`, `Write`, etc.).
+- For repetitive refactors across many files, use the same tools in batches or a **Task** subagent — still without leaving a script file behind unless the user asks for a **durable** utility.
+
+## Durable scripts only when appropriate
+
+- **Migration, seed, or ops** tasks belong under `infra/scripts/` (or an existing scripts folder), with a clear module docstring describing **what it does** and **when to run it**.
+- Do **not** add those under `apps/web/` or mixed into `apps/api/app/`.
+
+## Before finishing a task
+
+- If a temporary script was created during the session, **delete it** before handing off; do not leave it untracked or committed.
+- Never run `git checkout -- <file>` to recover from a bad edit without telling the user that **uncommitted work in that file may be lost**.
+
+## If the user explicitly asks for a script
+
+- Put it in the right place (`infra/scripts/` for DB/ops), name it by **purpose** (not `fix_*`), and mention it in the response so they can keep or remove it consciously.

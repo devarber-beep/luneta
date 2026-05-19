@@ -8,7 +8,7 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.domain.enums import CollaboratorRole, ScenarioState
+from app.domain.enums import CollaboratorRole, ReviewOutcome, ScenarioState
 from app.models.scenario import ScenarioModel, slugify_title
 
 
@@ -35,7 +35,7 @@ class ScenariosRepository:
         self,
         *,
         title: str,
-        body_markdown: str,
+        description: str,
         author_user_id: str,
     ) -> ScenarioModel:
         now = datetime.now(UTC)
@@ -43,7 +43,9 @@ class ScenariosRepository:
         doc = {
             "slug": slug,
             "title": title,
-            "body_markdown": body_markdown,
+            "description": description,
+            "category_ids": [],
+            "ethical_risk_ids": [],
             "author_user_id": author_user_id,
             "collaborators": [
                 {
@@ -72,6 +74,16 @@ class ScenariosRepository:
             "deleted_at": None,
             "submitted_for_review_at": None,
             "submitted_for_review_by_user_id": None,
+            "review_started_at": None,
+            "review_feedback_note": None,
+            "review_feedback_at": None,
+            "review_feedback_by_user_id": None,
+            "not_suitable_reason": None,
+            "not_suitable_at": None,
+            "not_suitable_by_user_id": None,
+            "last_reviewed_at": None,
+            "last_reviewed_by_user_id": None,
+            "last_review_outcome": None,
             "approved_at": None,
             "first_approved_at": None,
             "approved_by_user_id": None,
@@ -102,11 +114,13 @@ class ScenariosRepository:
         *,
         scenario_id: str,
         title: str | None,
-        body_markdown: str | None,
+        description: str | None,
         summary: str | None,
         categories: list[str] | None,
         tags: list[str] | None,
-        sensitive_data_involved: bool | None,
+        category_ids: list[str] | None = None,
+        ethical_risk_ids: list[str] | None = None,
+        sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None
@@ -114,8 +128,12 @@ class ScenariosRepository:
         if title is not None:
             set_doc["title"] = title
             set_doc["slug"] = await self._allocate_unique_slug(title=title, exclude_id=scenario_id)
-        if body_markdown is not None:
-            set_doc["body_markdown"] = body_markdown
+        if description is not None:
+            set_doc["description"] = description
+        if category_ids is not None:
+            set_doc["category_ids"] = category_ids
+        if ethical_risk_ids is not None:
+            set_doc["ethical_risk_ids"] = ethical_risk_ids
         if summary is not None:
             set_doc["summary"] = summary
         if categories is not None:
@@ -187,25 +205,141 @@ class ScenariosRepository:
         )
         return await self.get_by_id(scenario_id)
 
+    async def submit_to_queue(self, *, scenario_id: str, actor_user_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.QUEUED.value,
+                    "submitted_for_review_at": now,
+                    "submitted_for_review_by_user_id": actor_user_id,
+                    "review_started_at": None,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def start_review(self, *, scenario_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.IN_REVIEW.value,
+                    "review_started_at": now,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def request_changes(
+        self,
+        *,
+        scenario_id: str,
+        reviewer_user_id: str,
+        note: str,
+    ) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.CHANGES_REQUIRED.value,
+                    "review_feedback_note": note,
+                    "review_feedback_at": now,
+                    "review_feedback_by_user_id": reviewer_user_id,
+                    "last_reviewed_at": now,
+                    "last_reviewed_by_user_id": reviewer_user_id,
+                    "last_review_outcome": ReviewOutcome.CHANGES_REQUIRED.value,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def mark_not_suitable(
+        self,
+        *,
+        scenario_id: str,
+        reviewer_user_id: str,
+        reason: str | None,
+    ) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.NOT_SUITABLE.value,
+                    "not_suitable_reason": reason,
+                    "not_suitable_at": now,
+                    "not_suitable_by_user_id": reviewer_user_id,
+                    "last_reviewed_at": now,
+                    "last_reviewed_by_user_id": reviewer_user_id,
+                    "last_review_outcome": ReviewOutcome.NOT_SUITABLE.value,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def start_applying_changes(self, *, scenario_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.APPLYING_CHANGES.value,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
+    async def reopen_from_not_suitable(self, *, scenario_id: str) -> ScenarioModel | None:
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "state": ScenarioState.DRAFT.value,
+                    "not_suitable_reason": None,
+                    "not_suitable_at": None,
+                    "not_suitable_by_user_id": None,
+                    "submitted_for_review_at": None,
+                    "submitted_for_review_by_user_id": None,
+                    "review_started_at": None,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
     async def set_state(self, *, scenario_id: str, state: ScenarioState, actor_user_id: str) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None
         oid = ObjectId(scenario_id)
         now = datetime.now(UTC)
-        if state == ScenarioState.IN_REVIEW:
-            await self._collection.update_one(
-                {"_id": oid},
-                {
-                    "$set": {
-                        "state": ScenarioState.IN_REVIEW.value,
-                        "submitted_for_review_at": now,
-                        "submitted_for_review_by_user_id": actor_user_id,
-                        "last_state_changed_at": now,
-                        "updated_at": now,
-                    }
-                },
-            )
-            return await self.get_by_id(scenario_id)
         if state == ScenarioState.PUBLISHED:
             await self._collection.update_one(
                 {"_id": oid},
@@ -221,8 +355,11 @@ class ScenariosRepository:
                             "last_state_changed_at": now,
                             "updated_at": now,
                             "public_title": "$title",
-                            "public_body_markdown": "$body_markdown",
+                            "public_description": "$description",
                             "public_slug": "$slug",
+                            "last_reviewed_at": now,
+                            "last_reviewed_by_user_id": actor_user_id,
+                            "last_review_outcome": ReviewOutcome.PUBLISHED.value,
                         }
                     }
                 ],
@@ -263,24 +400,6 @@ class ScenariosRepository:
         )
         return await self.get_by_id(scenario_id)
 
-    async def reject_to_draft(self, *, scenario_id: str) -> ScenarioModel | None:
-        if not ObjectId.is_valid(scenario_id):
-            return None
-        now = datetime.now(UTC)
-        await self._collection.update_one(
-            {"_id": ObjectId(scenario_id)},
-            {
-                "$set": {
-                    "state": ScenarioState.DRAFT.value,
-                    "submitted_for_review_at": None,
-                    "submitted_for_review_by_user_id": None,
-                    "last_state_changed_at": now,
-                    "updated_at": now,
-                }
-            },
-        )
-        return await self.get_by_id(scenario_id)
-
     async def soft_delete_draft(self, *, scenario_id: str) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None
@@ -292,8 +411,69 @@ class ScenariosRepository:
         return await self.get_by_id(scenario_id)
 
     async def list_by_state(self, *, state: ScenarioState) -> list[ScenarioModel]:
+        return await self.list_by_states(states=[state])
+
+    async def list_by_states(
+        self,
+        *,
+        states: list[ScenarioState],
+        author_user_id: str | None = None,
+        submitted_from: datetime | None = None,
+        submitted_to: datetime | None = None,
+    ) -> list[ScenarioModel]:
+        query: dict[str, Any] = {
+            "state": {"$in": [s.value for s in states]},
+            "deleted_at": None,
+        }
+        if author_user_id:
+            query["author_user_id"] = author_user_id
+        if submitted_from is not None or submitted_to is not None:
+            date_clause: dict[str, Any] = {}
+            if submitted_from is not None:
+                date_clause["$gte"] = submitted_from
+            if submitted_to is not None:
+                date_clause["$lte"] = submitted_to
+            query["submitted_for_review_at"] = date_clause
         items: list[ScenarioModel] = []
-        cursor = self._collection.find({"state": state.value, "deleted_at": None}).sort("updated_at", -1)
+        cursor = self._collection.find(query).sort("submitted_for_review_at", -1)
+        async for doc in cursor:
+            model = self._to_model(doc)
+            if model is not None:
+                items.append(model)
+        return items
+
+    async def list_reviewed(
+        self,
+        *,
+        reviewer_user_id: str | None = None,
+        author_user_id: str | None = None,
+        submitted_from: datetime | None = None,
+        submitted_to: datetime | None = None,
+    ) -> list[ScenarioModel]:
+        query: dict[str, Any] = {
+            "deleted_at": None,
+            "last_reviewed_at": {"$ne": None},
+            "state": {
+                "$in": [
+                    ScenarioState.PUBLISHED.value,
+                    ScenarioState.CHANGES_REQUIRED.value,
+                    ScenarioState.NOT_SUITABLE.value,
+                ]
+            },
+        }
+        if reviewer_user_id:
+            query["last_reviewed_by_user_id"] = reviewer_user_id
+        if author_user_id:
+            query["author_user_id"] = author_user_id
+        if submitted_from is not None or submitted_to is not None:
+            date_clause: dict[str, Any] = {}
+            if submitted_from is not None:
+                date_clause["$gte"] = submitted_from
+            if submitted_to is not None:
+                date_clause["$lte"] = submitted_to
+            query["last_reviewed_at"] = date_clause
+        items: list[ScenarioModel] = []
+        cursor = self._collection.find(query).sort("last_reviewed_at", -1)
         async for doc in cursor:
             model = self._to_model(doc)
             if model is not None:
@@ -306,9 +486,10 @@ class ScenariosRepository:
             {
                 "published_at": {"$ne": None},
                 "deleted_at": None,
+                "state": {"$ne": ScenarioState.NOT_SUITABLE.value},
                 "public_slug": {"$type": "string"},
                 "public_title": {"$type": "string"},
-                "public_body_markdown": {"$type": "string"},
+                "public_description": {"$type": "string"},
             }
         ).sort("updated_at", -1)
         async for doc in cursor:

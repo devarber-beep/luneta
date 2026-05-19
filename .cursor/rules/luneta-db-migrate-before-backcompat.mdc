@@ -1,0 +1,11 @@
+---
+description: Orden de trabajo — migrar o alinear Mongo antes de añadir compatibilidad con datos antiguos en código
+alwaysApply: true
+---
+
+# Base de datos antes que compatibilidad en código
+
+- Si el esquema o el contrato de persistencia cambian y en Mongo quedan documentos en **forma antigua** o **incoherentes** con el modelo actual, **no** implementar primero ramas de compatibilidad en la app (consultas duales, fallbacks por campo ausente, normalización al leer, “soportar ambos formatos”, etc.).
+- **Siempre antes**: **migrar, actualizar o limpiar** la base de datos (script puntual, `update_many` acotado, borrado de filas inválidas con acuerdo del usuario cuando sea destructivo) hasta que los documentos estén alineados con la versión actual del código.
+- Tras la BD alineada, el código puede asumir **un solo** contrato; encaja con `luneta-backend-persistence-contract.mdc` y `luneta-mongo-schema-hygiene.mdc`.
+- **Excepción**: compatibilidad temporal en código **solo** si el usuario lo pide **explícitamente** en el chat (y dejando claro que es transitorio y con plan de retirada).

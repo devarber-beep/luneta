@@ -23,6 +23,25 @@ async def test_dev_last_email_verification_disabled_by_default(api_client) -> No
 
 
 @pytest.mark.asyncio
+async def test_signup_persists_registered_role(api_client, fake_db) -> None:
+    from unittest.mock import patch
+
+    with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="reg-role-token"):
+        r = await api_client.post(
+            "/auth/signup",
+            json={
+                "email": "regonly@luneta.dev",
+                "password": "Password123!",
+                "nickname": "regonly",
+            },
+        )
+    assert r.status_code == 200
+    doc = await fake_db["users"].find_one({"email_normalized": "regonly@luneta.dev"})
+    assert doc is not None
+    assert doc["role"] == "registered"
+
+
+@pytest.mark.asyncio
 async def test_dev_last_email_verification_returns_last_signup_token(api_client) -> None:
     verify_token = "dev-snapshot-token"
     with (
@@ -34,7 +53,6 @@ async def test_dev_last_email_verification_returns_last_signup_token(api_client)
             json={
                 "email": "snap@luneta.dev",
                 "password": "Password123!",
-                "role": "investigator",
                 "nickname": "snap",
             },
         )

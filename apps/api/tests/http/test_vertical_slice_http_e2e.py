@@ -1,13 +1,56 @@
 """HTTP integration test for the vertical slice happy path."""
 from __future__ import annotations
 
+import os
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
 
 
+def _use_real_mongo() -> bool:
+    return os.environ.get("LUNETA_TEST_REAL_DB", "").strip().lower() in ("1", "true", "yes")
+
+
+def _queue_row_for_scenario(items: list[dict], scenario_id: str) -> dict:
+    matches = [i for i in items if i.get("scenario_id") == scenario_id]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def _public_catalog_row_for(rows: list[dict], *, scenario_id: str) -> dict:
+    matches = [r for r in rows if r.get("id") == scenario_id]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def _slug_from_public_path(public_path: str) -> str:
+    prefix = "/public/"
+    assert public_path.startswith(prefix), public_path
+    return public_path[len(prefix) :]
+
+
+async def _set_user_role(fake_db, *, email: str, role: str) -> None:
+    await fake_db["users"].update_one(
+        {"email_normalized": email.strip().lower()},
+        {"$set": {"role": role}},
+    )
+
+
+async def _assign_reviewer_portfolio(
+    fake_db, *, reviewer_user_id: str, investigator_user_id: str
+) -> None:
+    await fake_db["reviewer_assignments"].insert_one(
+        {
+            "reviewer_user_id": reviewer_user_id,
+            "investigator_user_id": investigator_user_id,
+            "created_at": datetime.now(UTC),
+        }
+    )
+
+
 @pytest.mark.asyncio
-async def test_vertical_slice_http_happy_path(api_client):
+async def test_vertical_slice_http_happy_path(api_client, fake_db):
     verify_token = "test-verify-token"
 
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value=verify_token):
@@ -16,7 +59,6 @@ async def test_vertical_slice_http_happy_path(api_client):
             json={
                 "email": "author@luneta.dev",
                 "password": "Password123!",
-                "role": "investigator",
                 "nickname": "author",
             },
         )
@@ -26,6 +68,8 @@ async def test_vertical_slice_http_happy_path(api_client):
         verify_author = await api_client.post("/auth/verify-email", json={"token": verify_token})
         assert verify_author.status_code == 200
         assert verify_author.json()["verified"] is True
+
+    await _set_user_role(fake_db, email="author@luneta.dev", role="investigator")
 
     login_author = await api_client.post(
         "/auth/login",
@@ -51,7 +95,7 @@ async def test_vertical_slice_http_happy_path(api_client):
         "/scenarios",
         json={
             "title": "Escenario E2E",
-            "body_markdown": "Contenido inicial",
+            "description": "E2E scenario description for reviewers",
         },
         headers=author_headers,
     )
@@ -67,18 +111,59 @@ async def test_vertical_slice_http_happy_path(api_client):
 
     patch_draft = await api_client.patch(
         f"/scenarios/{scenario_id}",
-        json={"body_markdown": "Contenido revisado"},
+        json={"description": "E2E scenario description updated"},
         headers=author_headers,
     )
     assert patch_draft.status_code == 200
     assert patch_draft.json()["current_revision_number"] == 2
+
+    now = datetime.now(UTC)
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {
+            "slug": "e2e-cat",
+            "label": "E2E Category",
+            "is_active": True,
+            "sort_order": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    cat_id = str(cat.inserted_id)
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {
+            "slug": "e2e-risk",
+            "label": "E2E Risk",
+            "is_active": True,
+            "sort_order": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    risk_id = str(risk.inserted_id)
+
+    cover_upload = await api_client.post(
+        f"/scenarios/{scenario_id}/assets/cover",
+        headers=author_headers,
+        files={"file": ("cover.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+    )
+    assert cover_upload.status_code == 200
+
+    meta_patch = await api_client.patch(
+        f"/scenarios/{scenario_id}",
+        json={
+            "category_ids": [cat_id],
+            "ethical_risk_ids": [risk_id],
+        },
+        headers=author_headers,
+    )
+    assert meta_patch.status_code == 200
 
     submit = await api_client.post(
         f"/scenarios/{scenario_id}/submit-review",
         headers=author_headers,
     )
     assert submit.status_code == 200
-    assert submit.json()["state"] == "in_review"
+    assert submit.json()["state"] == "queued"
 
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="reviewer-token"):
         signup_reviewer = await api_client.post(
@@ -86,7 +171,6 @@ async def test_vertical_slice_http_happy_path(api_client):
             json={
                 "email": "reviewer@luneta.dev",
                 "password": "Password123!",
-                "role": "coordinator",
                 "nickname": "reviewer",
             },
         )
@@ -94,6 +178,15 @@ async def test_vertical_slice_http_happy_path(api_client):
 
         verify_reviewer = await api_client.post("/auth/verify-email", json={"token": "reviewer-token"})
         assert verify_reviewer.status_code == 200
+
+    await _set_user_role(fake_db, email="reviewer@luneta.dev", role="reviewer")
+    reviewer_doc = await fake_db["users"].find_one({"email_normalized": "reviewer@luneta.dev"})
+    assert reviewer_doc is not None
+    await _assign_reviewer_portfolio(
+        fake_db,
+        reviewer_user_id=str(reviewer_doc["_id"]),
+        investigator_user_id=author_user_id,
+    )
 
     login_reviewer = await api_client.post(
         "/auth/login",
@@ -108,10 +201,19 @@ async def test_vertical_slice_http_happy_path(api_client):
 
     queue = await api_client.get("/workflow/review-queue", headers=reviewer_headers)
     assert queue.status_code == 200
-    assert len(queue.json()["items"]) == 1
-    assert queue.json()["items"][0]["scenario_id"] == scenario_id
-    scenario_slug = queue.json()["items"][0]["slug"]
-    assert queue.json()["items"][0]["has_prior_approval"] is False
+    q_items = queue.json()["items"]
+    if not _use_real_mongo():
+        assert len(q_items) == 1
+    q0 = _queue_row_for_scenario(q_items, scenario_id)
+    assert q0["has_prior_approval"] is False
+    assert q0["live_public_path"] is None
+
+    start_review = await api_client.post(
+        f"/workflow/scenarios/{scenario_id}/start-review",
+        headers=reviewer_headers,
+    )
+    assert start_review.status_code == 200
+    assert start_review.json()["state"] == "in_review"
 
     publish = await api_client.post(
         f"/workflow/scenarios/{scenario_id}/publish",
@@ -123,9 +225,11 @@ async def test_vertical_slice_http_happy_path(api_client):
     catalog_after_first_publish = await api_client.get("/public/scenarios")
     assert catalog_after_first_publish.status_code == 200
     rows0 = catalog_after_first_publish.json()
-    assert len(rows0) == 1
-    stable_public_slug = rows0[0]["slug"]
-    assert rows0[0]["title"] == "Escenario E2E"
+    if not _use_real_mongo():
+        assert len(rows0) == 1
+    row_pub0 = _public_catalog_row_for(rows0, scenario_id=scenario_id)
+    stable_public_slug = _slug_from_public_path(row_pub0["public_path"])
+    assert row_pub0["title"] == "Escenario E2E"
 
     patch_published = await api_client.patch(
         f"/scenarios/{scenario_id}",
@@ -138,8 +242,8 @@ async def test_vertical_slice_http_happy_path(api_client):
 
     catalog_while_pending_review = await api_client.get("/public/scenarios")
     assert catalog_while_pending_review.status_code == 200
-    row_pub = catalog_while_pending_review.json()[0]
-    assert row_pub["slug"] == stable_public_slug
+    row_pub = _public_catalog_row_for(catalog_while_pending_review.json(), scenario_id=scenario_id)
+    assert _slug_from_public_path(row_pub["public_path"]) == stable_public_slug
     assert row_pub["title"] == "Escenario E2E"
 
     public_read_before_submit = await api_client.get(f"/public/scenarios/{stable_public_slug}")
@@ -151,26 +255,35 @@ async def test_vertical_slice_http_happy_path(api_client):
         headers=author_headers,
     )
     assert submit_repub.status_code == 200
-    assert submit_repub.json()["state"] == "in_review"
+    assert submit_repub.json()["state"] == "queued"
 
     queue_again = await api_client.get("/workflow/review-queue", headers=reviewer_headers)
     assert queue_again.status_code == 200
-    assert len(queue_again.json()["items"]) == 1
-    assert queue_again.json()["items"][0]["has_prior_approval"] is True
-    assert queue_again.json()["items"][0]["title"] == "Escenario E2E (editado tras publicar)"
-    assert queue_again.json()["items"][0]["live_public_title"] == "Escenario E2E"
+    qa_items = queue_again.json()["items"]
+    if not _use_real_mongo():
+        assert len(qa_items) == 1
+    qa0 = _queue_row_for_scenario(qa_items, scenario_id)
+    assert qa0["has_prior_approval"] is True
+    assert qa0["title"] == "Escenario E2E (editado tras publicar)"
+    assert qa0["live_public_title"] == "Escenario E2E"
 
     catalog = await api_client.get("/public/scenarios")
     assert catalog.status_code == 200
-    ids = [row["id"] for row in catalog.json()]
+    cat_rows = catalog.json()
+    ids = [row["id"] for row in cat_rows]
     assert scenario_id in ids
-    assert catalog.json()[0]["title"] == "Escenario E2E"
+    assert _public_catalog_row_for(cat_rows, scenario_id=scenario_id)["title"] == "Escenario E2E"
 
     public_read = await api_client.get(f"/public/scenarios/{stable_public_slug}")
     assert public_read.status_code == 200
     assert public_read.json()["id"] == scenario_id
-    assert public_read.json()["slug"] == stable_public_slug
     assert public_read.json()["title"] == "Escenario E2E"
+
+    start_review2 = await api_client.post(
+        f"/workflow/scenarios/{scenario_id}/start-review",
+        headers=reviewer_headers,
+    )
+    assert start_review2.status_code == 200
 
     publish2 = await api_client.post(
         f"/workflow/scenarios/{scenario_id}/publish",
@@ -180,7 +293,9 @@ async def test_vertical_slice_http_happy_path(api_client):
 
     catalog_final = await api_client.get("/public/scenarios")
     assert catalog_final.status_code == 200
-    final_slug = catalog_final.json()[0]["slug"]
+    final_slug = _slug_from_public_path(
+        _public_catalog_row_for(catalog_final.json(), scenario_id=scenario_id)["public_path"]
+    )
     public_read_after = await api_client.get(f"/public/scenarios/{final_slug}")
     assert public_read_after.status_code == 200
     assert public_read_after.json()["title"] == "Escenario E2E (editado tras publicar)"

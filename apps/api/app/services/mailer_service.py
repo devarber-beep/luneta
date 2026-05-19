@@ -51,6 +51,33 @@ class NoopMailer:
     ) -> None:
         return None
 
+    async def send_review_outcome_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        outcome: str,
+        detail: str | None,
+    ) -> None:
+        return None
+
+    async def send_scenario_reopened_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+    ) -> None:
+        return None
+
+    async def send_investigator_invite(
+        self,
+        *,
+        to_email: str,
+        temporary_password: str,
+        verification_token: str,
+    ) -> None:
+        return None
+
 
 class MailerService:
     def __init__(self) -> None:
@@ -132,5 +159,60 @@ class MailerService:
             f"Your scenario has been published.\n\n"
             f"Title: {scenario_title}\n"
             f"Public link: {public_url}\n"
+        )
+        await self._send(to_email=to_email, subject=subject, body=body)
+
+    async def send_review_outcome_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        outcome: str,
+        detail: str | None,
+    ) -> None:
+        base = self._s.web_url.rstrip("/")
+        mine_url = f"{base}/mine"
+        if outcome == "changes_required":
+            subject = f"Changes requested for your scenario: {scenario_title}"
+            lead = "A reviewer requested changes before this scenario can be published."
+        else:
+            subject = f"Scenario marked as not suitable: {scenario_title}"
+            lead = "A reviewer marked this scenario as not suitable for publication."
+        body = f"{lead}\n\nTitle: {scenario_title}\n"
+        if detail:
+            body += f"\nReviewer note:\n{detail}\n"
+        body += f"\nOpen your scenarios: {mine_url}\n"
+        await self._send(to_email=to_email, subject=subject, body=body)
+
+    async def send_scenario_reopened_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+    ) -> None:
+        subject = f"Your scenario was reopened: {scenario_title}"
+        base = self._s.web_url.rstrip("/")
+        body = (
+            f"An administrator reopened your scenario so you can edit it again.\n\n"
+            f"Title: {scenario_title}\n\n"
+            f"Open your scenarios: {base}/mine\n"
+        )
+        await self._send(to_email=to_email, subject=subject, body=body)
+
+    async def send_investigator_invite(
+        self,
+        *,
+        to_email: str,
+        temporary_password: str,
+        verification_token: str,
+    ) -> None:
+        base = self._s.web_url.rstrip("/")
+        link = f"{base}/verify-email?token={verification_token}"
+        subject = "Your Luneta investigator account"
+        body = (
+            "An administrator has created an investigator account for this email address in Luneta.\n\n"
+            f"Your temporary password (you must change it after first successful sign-in): {temporary_password}\n\n"
+            f"Verify your email before signing in:\n{link}\n\n"
+            "If you did not expect this message, contact your administrator.\n"
         )
         await self._send(to_email=to_email, subject=subject, body=body)

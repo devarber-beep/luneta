@@ -1,4 +1,4 @@
-"""Workflow service for reviewer queue, publish from review, and reject."""
+"""Workflow service for reviewer queue, review actions, and publish."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -6,14 +6,23 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 
 from app.core.permissions import is_valid_transition
-from app.core.scenario_access import can_publish_scenario, can_reject_scenario
+from app.core.scenario_access import (
+    can_mark_not_suitable_scenario,
+    can_publish_scenario,
+    can_reopen_not_suitable,
+    can_request_changes_scenario,
+    can_start_review_scenario,
+)
+from app.core.reviewer_portfolio import reviewer_has_investigator_in_portfolio
 from app.domain.enums import ReviewEventType, ScenarioState, UserRole
 from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
+from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
-from app.schemas.workflow import ReviewQueueItem
+from app.schemas.workflow import ReviewQueueItem, ReviewedScenarioItem
 from app.services.mailer_service import MailerService, NoopMailer
+from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 
 
 class WorkflowService:
@@ -23,62 +32,208 @@ class WorkflowService:
         scenarios_repo: ScenariosRepository,
         review_events_repo: ReviewEventsRepository,
         users_repo: UsersRepository,
+        assignments_repo: ReviewerAssignmentsRepository,
         mailer: MailerService | NoopMailer | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._review_events_repo = review_events_repo
         self._users_repo = users_repo
+        self._assignments_repo = assignments_repo
         self._mailer = mailer if mailer is not None else MailerService()
 
-    async def review_queue(self, *, current_user: UserModel) -> list[ReviewQueueItem]:
-        scenarios = await self._scenarios_repo.list_by_state(state=ScenarioState.IN_REVIEW)
+    async def review_queue(
+        self,
+        *,
+        current_user: UserModel,
+        author_user_id: str | None = None,
+        submitted_from: datetime | None = None,
+        submitted_to: datetime | None = None,
+    ) -> list[ReviewQueueItem]:
+        scenarios = await self._scenarios_repo.list_by_states(
+            states=[ScenarioState.QUEUED, ScenarioState.IN_REVIEW],
+            author_user_id=author_user_id,
+            submitted_from=submitted_from,
+            submitted_to=submitted_to,
+        )
+        portfolio = await portfolio_investigator_ids_for_user(
+            user=current_user,
+            assignments_repo=self._assignments_repo,
+        )
         items: list[ReviewQueueItem] = []
         for scenario in scenarios:
-            live_slug = scenario.public_slug if scenario.public_slug is not None else None
-            live_title = scenario.public_title if scenario.public_title is not None else None
-            live_body = scenario.public_body_markdown if scenario.public_body_markdown is not None else None
+            if UserRole(current_user.role) == UserRole.REVIEWER and not reviewer_has_investigator_in_portfolio(
+                user=current_user,
+                investigator_user_id=scenario.author_user_id,
+                portfolio_investigator_ids=portfolio,
+            ):
+                continue
+            items.append(self._to_queue_item(scenario))
+        return items
+
+    async def reviewed_list(
+        self,
+        *,
+        current_user: UserModel,
+        author_user_id: str | None = None,
+        submitted_from: datetime | None = None,
+        submitted_to: datetime | None = None,
+    ) -> list[ReviewedScenarioItem]:
+        reviewer_filter: str | None = None
+        if UserRole(current_user.role) == UserRole.REVIEWER:
+            reviewer_filter = current_user.id or ""
+        scenarios = await self._scenarios_repo.list_reviewed(
+            reviewer_user_id=reviewer_filter,
+            author_user_id=author_user_id,
+            submitted_from=submitted_from,
+            submitted_to=submitted_to,
+        )
+        portfolio = await portfolio_investigator_ids_for_user(
+            user=current_user,
+            assignments_repo=self._assignments_repo,
+        )
+        items: list[ReviewedScenarioItem] = []
+        for scenario in scenarios:
+            if UserRole(current_user.role) == UserRole.REVIEWER and not reviewer_has_investigator_in_portfolio(
+                user=current_user,
+                investigator_user_id=scenario.author_user_id,
+                portfolio_investigator_ids=portfolio,
+            ):
+                continue
+            if scenario.last_reviewed_at is None:
+                continue
+            live_slug = scenario.public_slug
             items.append(
-                ReviewQueueItem(
+                ReviewedScenarioItem(
                     scenario_id=scenario.id or "",
-                    slug=scenario.slug,
                     title=scenario.title,
                     author_user_id=scenario.author_user_id,
                     state=scenario.state,
-                    has_prior_approval=scenario.first_approved_at is not None,
-                    submitted_at=scenario.submitted_for_review_at or scenario.last_state_changed_at,
-                    live_public_slug=live_slug,
-                    live_public_title=live_title,
-                    live_public_body_markdown=live_body,
+                    last_reviewed_at=scenario.last_reviewed_at,
+                    last_review_outcome=scenario.last_review_outcome,
+                    live_public_path=f"/public/{live_slug}" if live_slug else None,
                 )
             )
         return items
 
-    async def reject(self, *, scenario_id: str, current_user: UserModel):
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        if not can_reject_scenario(user=current_user, scenario=scenario):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot reject this scenario")
-        if not is_valid_transition(scenario.state, ScenarioState.DRAFT):
+    async def start_review(self, *, scenario_id: str, current_user: UserModel):
+        scenario = await self._require_scenario(scenario_id)
+        portfolio = await self._portfolio(current_user)
+        if not can_start_review_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot start review")
+        if not is_valid_transition(scenario.state, ScenarioState.IN_REVIEW):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
-        updated = await self._scenarios_repo.reject_to_draft(scenario_id=scenario_id)
+        updated = await self._scenarios_repo.start_review(scenario_id=scenario_id)
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._review_events_repo.create(
+        await self._record_event(
             scenario_id=updated.id or "",
-            event_type=ReviewEventType.REJECTED,
-            actor_user_id=current_user.id or "",
-            actor_role=UserRole(current_user.role),
+            event_type=ReviewEventType.REVIEW_STARTED,
+            actor=current_user,
             from_state=scenario.state,
             to_state=updated.state,
         )
         return updated, datetime.now(UTC)
 
-    async def publish(self, *, scenario_id: str, current_user: UserModel):
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
+    async def request_changes(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        note: str,
+    ):
+        scenario = await self._require_scenario(scenario_id)
+        portfolio = await self._portfolio(current_user)
+        if not can_request_changes_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot request changes")
+        if not is_valid_transition(scenario.state, ScenarioState.CHANGES_REQUIRED):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        updated = await self._scenarios_repo.request_changes(
+            scenario_id=scenario_id,
+            reviewer_user_id=current_user.id or "",
+            note=note.strip(),
+        )
+        if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        if not can_publish_scenario(user=current_user, scenario=scenario):
+        await self._record_event(
+            scenario_id=updated.id or "",
+            event_type=ReviewEventType.CHANGES_REQUESTED,
+            actor=current_user,
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        await self._notify_author_outcome(scenario=updated, outcome="changes_required", detail=note)
+        return updated, datetime.now(UTC)
+
+    async def mark_not_suitable(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        reason: str | None,
+    ):
+        scenario = await self._require_scenario(scenario_id)
+        portfolio = await self._portfolio(current_user)
+        if not can_mark_not_suitable_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot mark as not suitable")
+        if not is_valid_transition(scenario.state, ScenarioState.NOT_SUITABLE):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        updated = await self._scenarios_repo.mark_not_suitable(
+            scenario_id=scenario_id,
+            reviewer_user_id=current_user.id or "",
+            reason=reason.strip() if reason else None,
+        )
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        await self._record_event(
+            scenario_id=updated.id or "",
+            event_type=ReviewEventType.MARKED_NOT_SUITABLE,
+            actor=current_user,
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        await self._notify_author_outcome(
+            scenario=updated,
+            outcome="not_suitable",
+            detail=reason,
+        )
+        return updated, datetime.now(UTC)
+
+    async def reopen(self, *, scenario_id: str, current_user: UserModel):
+        scenario = await self._require_scenario(scenario_id)
+        if not can_reopen_not_suitable(user=current_user, scenario=scenario):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot reopen scenario")
+        if not is_valid_transition(scenario.state, ScenarioState.DRAFT):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        updated = await self._scenarios_repo.reopen_from_not_suitable(scenario_id=scenario_id)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        await self._record_event(
+            scenario_id=updated.id or "",
+            event_type=ReviewEventType.REOPENED_FROM_NOT_SUITABLE,
+            actor=current_user,
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        author = await self._users_repo.get_by_id(updated.author_user_id)
+        if author is not None and author.email_verified_at is not None:
+            await self._mailer.send_scenario_reopened_to_author(
+                to_email=str(author.email_normalized),
+                scenario_title=updated.title,
+            )
+        return updated, datetime.now(UTC)
+
+    async def publish(self, *, scenario_id: str, current_user: UserModel):
+        scenario = await self._require_scenario(scenario_id)
+        portfolio = await self._portfolio(current_user)
+        if not can_publish_scenario(
+            user=current_user, scenario=scenario, portfolio_investigator_ids=portfolio
+        ):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot publish this scenario")
         if not is_valid_transition(scenario.state, ScenarioState.PUBLISHED):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
@@ -89,21 +244,77 @@ class WorkflowService:
         )
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._review_events_repo.create(
+        await self._record_event(
             scenario_id=updated.id or "",
             event_type=ReviewEventType.PUBLISHED,
-            actor_user_id=current_user.id or "",
-            actor_role=UserRole(current_user.role),
+            actor=current_user,
             from_state=scenario.state,
             to_state=updated.state,
         )
         author = await self._users_repo.get_by_id(updated.author_user_id)
         slug = updated.public_slug or updated.slug
         title = updated.public_title or updated.title
-        if author is not None and author.is_email_verified and slug:
+        if author is not None and author.email_verified_at is not None and slug:
             await self._mailer.send_scenario_live_to_author(
-                to_email=author.email,
+                to_email=str(author.email_normalized),
                 scenario_title=title,
                 public_slug=slug,
             )
         return updated, datetime.now(UTC)
+
+    def _to_queue_item(self, scenario) -> ReviewQueueItem:
+        live_slug = scenario.public_slug
+        live_title = scenario.public_title
+        live_description = scenario.public_description
+        return ReviewQueueItem(
+            scenario_id=scenario.id or "",
+            title=scenario.title,
+            author_user_id=scenario.author_user_id,
+            state=scenario.state,
+            has_prior_approval=scenario.first_approved_at is not None,
+            submitted_at=scenario.submitted_for_review_at or scenario.last_state_changed_at,
+            live_public_title=live_title,
+            live_public_description=live_description,
+            live_public_path=f"/public/{live_slug}" if live_slug else None,
+        )
+
+    async def _require_scenario(self, scenario_id: str):
+        scenario = await self._scenarios_repo.get_by_id(scenario_id)
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        return scenario
+
+    async def _portfolio(self, user: UserModel) -> frozenset[str]:
+        return await portfolio_investigator_ids_for_user(
+            user=user,
+            assignments_repo=self._assignments_repo,
+        )
+
+    async def _record_event(
+        self,
+        *,
+        scenario_id: str,
+        event_type: ReviewEventType,
+        actor: UserModel,
+        from_state: ScenarioState,
+        to_state: ScenarioState,
+    ) -> None:
+        await self._review_events_repo.create(
+            scenario_id=scenario_id,
+            event_type=event_type,
+            actor_user_id=actor.id or "",
+            actor_role=UserRole(actor.role),
+            from_state=from_state,
+            to_state=to_state,
+        )
+
+    async def _notify_author_outcome(self, *, scenario, outcome: str, detail: str | None) -> None:
+        author = await self._users_repo.get_by_id(scenario.author_user_id)
+        if author is None or author.email_verified_at is None:
+            return
+        await self._mailer.send_review_outcome_to_author(
+            to_email=str(author.email_normalized),
+            scenario_title=scenario.title,
+            outcome=outcome,
+            detail=detail,
+        )

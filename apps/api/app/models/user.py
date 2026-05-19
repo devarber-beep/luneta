@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.domain.enums import UserRole
+from app.domain.enums import UserAccountStatus, UserRole
 
 
 class UserAvatarModel(BaseModel):
@@ -18,21 +18,25 @@ class UserAvatarModel(BaseModel):
 
 
 class UserModel(BaseModel):
+    """``users`` document. Login and uniqueness use ``email_normalized``; verified when ``email_verified_at`` is set."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     id: str | None = Field(default=None, alias="_id")
-    email: EmailStr
-    email_normalized: str
+    email_normalized: EmailStr
     password_hash: str
     password_updated_at: datetime
     role: UserRole
-    is_email_verified: bool = False
+    account_status: UserAccountStatus = UserAccountStatus.ACTIVE
     email_verified_at: datetime | None = None
     nickname: str = Field(min_length=2, max_length=40)
     nickname_normalized: str
     first_name: str | None = Field(default=None, max_length=60)
     last_name: str | None = Field(default=None, max_length=60)
+    organization: str | None = Field(default=None, max_length=200)
+    biography: str | None = Field(default=None, max_length=4000)
     avatar: UserAvatarModel | None = None
+    must_change_password: bool = False
     last_login_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

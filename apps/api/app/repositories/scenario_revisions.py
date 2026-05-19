@@ -25,7 +25,7 @@ class ScenarioRevisionsRepository:
         scenario_id: str,
         revision_number: int,
         title: str,
-        body_markdown: str,
+        description: str,
         state_snapshot: ScenarioState,
         created_by_user_id: str,
     ) -> ScenarioRevisionModel:
@@ -33,7 +33,7 @@ class ScenarioRevisionsRepository:
             "scenario_id": scenario_id,
             "revision_number": revision_number,
             "title": title,
-            "body_markdown": body_markdown,
+            "description": description,
             "state_snapshot": state_snapshot.value,
             "created_by_user_id": created_by_user_id,
             "created_at": datetime.now(UTC),

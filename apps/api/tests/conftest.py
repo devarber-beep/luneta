@@ -1,7 +1,14 @@
-"""Shared test fixtures with in-memory DB override."""
+"""Shared test fixtures with in-memory DB override.
+
+Set LUNETA_TEST_REAL_DB=1 to run HTTP tests against MongoDB from MONGODB_URI (e.g. Docker).
+A session-start hook removes rows tied to fixed test emails so runs stay repeatable.
+Run pytest from ``apps/api`` so ``.env`` loads if present.
+"""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -9,7 +16,101 @@ from bson import ObjectId
 from httpx import ASGITransport, AsyncClient
 
 from app.db import get_db
+from app.deps.storage import get_user_avatar_storage
 from app.main import app
+from app.models.user import UserAvatarModel
+
+
+def use_real_mongo() -> bool:
+    return os.environ.get("LUNETA_TEST_REAL_DB", "").strip().lower() in ("1", "true", "yes")
+
+
+class _FakeUserAvatarStorage:
+    bucket: str = "test-bucket"
+
+    def ensure_bucket(self) -> None:
+        return None
+
+    def upload_avatar(self, *, user_id: str, content: bytes, content_type: str) -> UserAvatarModel:
+        return UserAvatarModel(
+            bucket=self.bucket,
+            object_key=f"users/{user_id}/avatar/fake-id",
+            version_id=None,
+            content_type=content_type,
+            size_bytes=len(content),
+            updated_at=datetime.now(UTC),
+        )
+
+    def delete_object(self, *, object_key: str) -> None:
+        return None
+
+    def presigned_get_url(self, *, object_key: str, expires_seconds: int = 900) -> str:
+        return f"http://test-presigned/{object_key}"
+
+
+# Emails used by integration tests; purged from Mongo when LUNETA_TEST_REAL_DB=1.
+_INTEGRATION_TEST_EMAILS: tuple[str, ...] = (
+    "author@luneta.dev",
+    "reviewer@luneta.dev",
+    "selfrev@luneta.dev",
+    "regonly@luneta.dev",
+    "snap@luneta.dev",
+    "mcplogin@luneta.dev",
+    "mcpgate@luneta.dev",
+    "mcpprof@luneta.dev",
+    "mcpavatar@luneta.dev",
+    "mcpdis@luneta.dev",
+    "admrf1@luneta.dev",
+    "invcreate@luneta.dev",
+    "regprom@luneta.dev",
+    "revonly@luneta.dev",
+    "invcreate2@luneta.dev",
+    "invrev@luneta.dev",
+    "todeact@luneta.dev",
+    "auditinv@luneta.dev",
+    "phase1admin@luneta.dev",
+    "disabledinv@luneta.dev",
+    "phase1rev@luneta.dev",
+    "phase1inv@luneta.dev",
+    "catalogadmin@luneta.dev",
+)
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    if not use_real_mongo():
+        return
+    from app.db import reset_client
+
+    reset_client()
+    from pymongo import MongoClient
+
+    from app.settings import settings
+
+    client = MongoClient(settings.mongodb_uri)
+    db = client.get_default_database()
+    normalized = [e.strip().lower() for e in _INTEGRATION_TEST_EMAILS]
+    users = list(db.users.find({"email_normalized": {"$in": normalized}}, {"_id": 1}))
+    user_id_strs = [str(u["_id"]) for u in users]
+    if user_id_strs:
+        scenarios = list(db.scenarios.find({"author_user_id": {"$in": user_id_strs}}, {"_id": 1}))
+        scenario_id_strs = [str(s["_id"]) for s in scenarios]
+        if scenario_id_strs:
+            db.review_events.delete_many({"scenario_id": {"$in": scenario_id_strs}})
+            db.scenario_revisions.delete_many({"scenario_id": {"$in": scenario_id_strs}})
+        db.scenarios.delete_many({"author_user_id": {"$in": user_id_strs}})
+    db.users.delete_many({"email_normalized": {"$in": normalized}})
+    for email in _INTEGRATION_TEST_EMAILS:
+        db.email_verification_tokens.delete_many({"email": email})
+    client.close()
+
+
+@pytest.fixture(autouse=True)
+def _motor_singleton_per_test():
+    yield
+    if use_real_mongo():
+        from app.db import reset_client
+
+        reset_client()
 
 
 @dataclass
@@ -21,6 +122,11 @@ class _InsertOneResult:
 class _UpdateResult:
     modified_count: int
     matched_count: int = 1
+
+
+@dataclass
+class _DeleteResult:
+    deleted_count: int
 
 
 def _apply_update_pipeline(doc: dict[str, Any], pipeline: list[dict[str, Any]]) -> dict[str, Any]:
@@ -42,9 +148,14 @@ class FakeCursor:
         self._docs = docs
         self._idx = 0
 
-    def sort(self, key: str, direction: int) -> "FakeCursor":
-        reverse = direction == -1
-        self._docs = sorted(self._docs, key=lambda doc: doc.get(key), reverse=reverse)
+    def sort(self, key: str | list[tuple[str, int]], direction: int | None = None) -> "FakeCursor":
+        if isinstance(key, list):
+            for field, dir_int in reversed(key):
+                reverse = dir_int == -1
+                self._docs = sorted(self._docs, key=lambda doc, f=field: doc.get(f), reverse=reverse)
+        else:
+            reverse = (direction or 1) == -1
+            self._docs = sorted(self._docs, key=lambda doc, f=key: doc.get(f), reverse=reverse)
         return self
 
     def __aiter__(self) -> "FakeCursor":
@@ -96,6 +207,13 @@ class FakeCollection:
                 self._docs[idx] = updated
             return _UpdateResult(modified_count=1, matched_count=1)
         return _UpdateResult(modified_count=0, matched_count=0)
+
+    async def delete_one(self, query: dict[str, Any]) -> _DeleteResult:
+        for idx, doc in enumerate(self._docs):
+            if _matches(doc, query):
+                del self._docs[idx]
+                return _DeleteResult(deleted_count=1)
+        return _DeleteResult(deleted_count=0)
 
     async def update_many(
         self, query: dict[str, Any], update: dict[str, Any] | list[dict[str, Any]]
@@ -193,16 +311,27 @@ class FakeDB:
 
 
 @pytest.fixture
-def fake_db() -> FakeDB:
-    return FakeDB()
+async def fake_db():
+    if use_real_mongo():
+        db = await get_db()
+        yield db
+    else:
+        yield FakeDB()
 
 
 @pytest.fixture
-async def api_client(fake_db: FakeDB):
-    async def _get_test_db():
-        return fake_db
+async def api_client(fake_db):
+    if use_real_mongo():
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            yield client
+    else:
+        async def _get_test_db():
+            return fake_db
 
-    app.dependency_overrides[get_db] = _get_test_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield client
-    app.dependency_overrides.clear()
+        app.dependency_overrides[get_db] = _get_test_db
+        app.dependency_overrides[get_user_avatar_storage] = lambda: _FakeUserAvatarStorage()
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                yield client
+        finally:
+            app.dependency_overrides.clear()

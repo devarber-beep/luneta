@@ -30,3 +30,43 @@ def require_any_permission(*permissions: Permission) -> Callable[..., UserModel]
         return user
 
     return _dep
+
+
+def require_active_user_with_permission(permission: Permission) -> Callable[..., UserModel]:
+    """RBAC plus full session (blocked while ``must_change_password`` is true)."""
+
+    async def _dep(user: UserModel = Depends(require_permission(permission))) -> UserModel:
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required before using this feature",
+            )
+        return user
+
+    return _dep
+
+
+def require_any_active_permission(*permissions: Permission) -> Callable[..., UserModel]:
+    async def _dep(user: UserModel = Depends(require_any_permission(*permissions))) -> UserModel:
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required before using this feature",
+            )
+        return user
+
+    return _dep
+
+
+def require_profile_editable() -> Callable[..., UserModel]:
+    """Profile and avatar updates are not allowed until mandatory password change is done."""
+
+    async def _dep(user: UserModel = Depends(require_permission(Permission.USER_UPDATE_SELF))) -> UserModel:
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change required before updating your profile",
+            )
+        return user
+
+    return _dep

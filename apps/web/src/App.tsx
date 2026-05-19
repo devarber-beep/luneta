@@ -2,30 +2,21 @@ import { type CSSProperties, type FormEvent, type ReactElement, useEffect, useSt
 import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   changeMyPassword,
-  createScenario,
   deleteScenario,
-  deleteScenarioCoverAsset,
-  deleteScenarioInlineAsset,
-  getScenario,
-  getScenarioAssetReadUrl,
   listMyScenarios,
   listPublicScenarios,
   login,
   me,
   patchMyProfile,
-  patchScenario,
   publicScenario,
-  publishScenario,
-  rejectScenario,
-  reviewQueue,
-  reorderScenarioInlineAssets,
   signup,
-  submitReview,
-  uploadScenarioCover,
-  uploadScenarioInline,
   verifyEmail,
 } from "./api";
 import { clearSession, getRole, getToken, setRole, setToken } from "./session";
+import { ReviewQueuePage } from "./pages/ReviewQueuePage";
+import { ScenarioEditorPage } from "./pages/ScenarioEditorPage";
+import { AdminCatalogPage } from "./pages/AdminCatalogPage";
+import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage";
 
 const layoutStyle: CSSProperties = {
   maxWidth: "860px",
@@ -36,7 +27,7 @@ const layoutStyle: CSSProperties = {
 
 function HomePage() {
   const token = getToken();
-  const [published, setPublished] = useState<Array<{ id: string; slug: string; title: string; published_at: string }>>([]);
+  const [published, setPublished] = useState<Array<{ id: string; title: string; published_at: string; public_path: string }>>([]);
   const [catalogError, setCatalogError] = useState("");
 
   useEffect(() => {
@@ -48,19 +39,17 @@ function HomePage() {
   return (
     <main style={layoutStyle}>
       <h1>Luneta</h1>
-      <p>
-        Workflow: draft, save, submit for review. Investigators cannot edit while a scenario is in review;
-        coordinators can edit during review. Edits on a published scenario stay as draft until the next review cycle;
-        the public page keeps the last live version until a coordinator publishes again.
-      </p>
       <nav style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
-        <Link to="/signup">Signup</Link>
+        {!token ? <Link to="/signup">Signup</Link> : null}
         <Link to="/verify-email">Verify email</Link>
-        <Link to="/login">Login</Link>
-        <Link to="/my-scenarios">My scenarios</Link>
-        {getToken() ? <Link to="/my-profile">My profile</Link> : null}
-        <Link to="/scenarios/new">New draft</Link>
-        {getRole() === "coordinator" ? <Link to="/review">Review queue</Link> : null}
+        {!token ? <Link to="/login">Login</Link> : null}
+        {token ? <Link to="/my-scenarios">My scenarios</Link> : null}
+        {token ? <Link to="/my-profile">My profile</Link> : null}
+        {token ? <Link to="/scenarios/new">New scenario</Link> : null}
+        {getRole() === "reviewer" || getRole() === "admin" ? <Link to="/review">Review queue</Link> : null}
+        {getRole() === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
+        {getRole() === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
+
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
       <section style={{ marginTop: "2rem" }}>
@@ -70,7 +59,7 @@ function HomePage() {
         <ul style={{ paddingLeft: "1.25rem" }}>
           {published.map((s) => (
             <li key={s.id}>
-              <Link to={`/public/${s.slug}`}>{s.title}</Link>
+              <Link to={s.public_path}>{s.title}</Link>
             </li>
           ))}
         </ul>
@@ -80,10 +69,9 @@ function HomePage() {
 }
 
 function SignupPage() {
-  const [email, setEmail] = useState("author@luneta.dev");
-  const [password, setPassword] = useState("Password123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
-  const [role, setCurrentRole] = useState<"investigator" | "coordinator">("investigator");
   const [message, setMessage] = useState("");
 
   const onSubmit = async (event: FormEvent) => {
@@ -97,7 +85,6 @@ function SignupPage() {
       const response = await signup({
         email,
         password,
-        role,
         nickname: nick,
       });
       setMessage(`User created: ${response.user_id}. Check logs for the verification token.`);
@@ -113,11 +100,7 @@ function SignupPage() {
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" type="password" />
         <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="nickname" />
-        <select value={role} onChange={(e) => setCurrentRole(e.target.value as "investigator" | "coordinator")}>
-          <option value="investigator">investigator</option>
-          <option value="coordinator">coordinator</option>
-        </select>
-        <button type="submit">Create user</button>
+        <button type="submit">Create account</button>
       </form>
       <p>{message}</p>
       <Link to="/">Back</Link>
@@ -155,8 +138,8 @@ function VerifyEmailPage() {
 
 function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("author@luneta.dev");
-  const [password, setPassword] = useState("Password123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
   const onSubmit = async (event: FormEvent) => {
@@ -167,7 +150,7 @@ function LoginPage() {
       const profile = await me(auth.access_token);
       setRole(profile.role);
       setMessage(`Signed in as ${profile.role}`);
-      if (profile.role === "coordinator") {
+      if (profile.role === "reviewer" || profile.role === "admin") {
         navigate("/review");
       } else {
         navigate("/my-scenarios");
@@ -189,6 +172,13 @@ function LoginPage() {
       <Link to="/">Back</Link>
     </main>
   );
+}
+
+function RequireAdmin({ children }: { children: ReactElement }) {
+  if (getRole() !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+  return children;
 }
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -221,9 +211,9 @@ function MyProfilePage() {
     setNickname(profile.nickname);
     setFirstName(profile.first_name ?? "");
     setLastName(profile.last_name ?? "");
-    setReadOnlyEmail(profile.email);
+    setReadOnlyEmail(profile.email_normalized);
     setReadOnlyRole(profile.role);
-    setVerified(profile.is_email_verified);
+    setVerified(profile.email_verified_at != null);
     setVerifiedAt(profile.email_verified_at);
     setLastLoginAt(profile.last_login_at);
     setAvatarInfo(
@@ -445,10 +435,10 @@ function MyScenariosPage() {
                 </button>
               </>
             ) : null}
-            {(s.state === "published" || s.state === "in_review") && s.first_published_at ? (
+            {s.public_path ? (
               <>
                 {" "}
-                <Link to={`/public/${s.slug}`}>View public</Link>
+                <Link to={s.public_path}>View public</Link>
               </>
             ) : null}
           </li>
@@ -461,510 +451,10 @@ function MyScenariosPage() {
   );
 }
 
-function NewScenarioPage() {
-  const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [message, setMessage] = useState("");
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    const token = getToken();
-    if (!token) {
-      return;
-    }
-    const trimmedTitle = title.trim();
-    if (trimmedTitle.length < 3) {
-      setMessage("Title must have at least 3 characters.");
-      return;
-    }
-    if (!body.trim()) {
-      setMessage("Body cannot be empty.");
-      return;
-    }
-    try {
-      const scenario = await createScenario(token, { title: trimmedTitle, body_markdown: body });
-      setMessage(`Draft created: ${scenario.id}`);
-      navigate(`/scenarios/${scenario.id}/edit`);
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  return (
-    <main style={layoutStyle}>
-      <h2>New Draft</h2>
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: "0.75rem" }}>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="title" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={8} />
-        <button type="submit">Create draft</button>
-      </form>
-      <p>{message}</p>
-      <Link to="/">Back</Link>
-    </main>
-  );
-}
-
-function EditScenarioPage() {
-  const navigate = useNavigate();
-  const params = useParams();
-  const scenarioId = params.id ?? "";
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [state, setState] = useState("");
-  const [livePublicTitle, setLivePublicTitle] = useState<string | null>(null);
-  const [livePublicBody, setLivePublicBody] = useState<string | null>(null);
-  const [coverAsset, setCoverAsset] = useState<{ asset_id: string; alt_text?: string | null } | null>(null);
-  const [inlineAssets, setInlineAssets] = useState<Array<{ asset_id: string; order: number; alt_text?: string | null }>>([]);
-  const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
-  const [assetPreviewCache, setAssetPreviewCache] = useState<Record<string, { url: string; expiresAtMs: number }>>({});
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [inlineFile, setInlineFile] = useState<File | null>(null);
-  const [message, setMessage] = useState("");
-
-  const load = async () => {
-    const token = getToken();
-    if (!token || !scenarioId) {
-      return;
-    }
-    const scenario = await getScenario(token, scenarioId);
-    setTitle(scenario.title);
-    setBody(scenario.body_markdown);
-    setState(scenario.state);
-    setLivePublicTitle(scenario.live_public_title ?? null);
-    setLivePublicBody(scenario.live_public_body_markdown ?? null);
-    setCoverAsset(scenario.cover_image ? { asset_id: scenario.cover_image.asset_id, alt_text: scenario.cover_image.alt_text } : null);
-    setInlineAssets(
-      (scenario.inline_assets ?? [])
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((a) => ({ asset_id: a.asset_id, order: a.order, alt_text: a.alt_text })),
-    );
-    await loadAssetPreviews(
-      scenario.cover_image?.asset_id ?? null,
-      (scenario.inline_assets ?? []).map((a) => a.asset_id),
-    );
-  };
-
-  const loadAssetPreviews = async (coverAssetId: string | null, inlineAssetIds: string[]) => {
-    const token = getToken();
-    if (!token || !scenarioId) {
-      return;
-    }
-    const ids = [...(coverAssetId ? [coverAssetId] : []), ...inlineAssetIds];
-    if (!ids.length) {
-      setAssetPreviewUrls({});
-      return;
-    }
-    const now = Date.now();
-    const nextCache = { ...assetPreviewCache };
-    const previewMap: Record<string, string> = {};
-    const toFetch: string[] = [];
-
-    for (const assetId of ids) {
-      const hit = nextCache[assetId];
-      if (hit && hit.expiresAtMs > now + 5000) {
-        previewMap[assetId] = hit.url;
-      } else {
-        toFetch.push(assetId);
-      }
-    }
-
-    if (toFetch.length) {
-      const fetched = await Promise.all(
-        toFetch.map(async (assetId) => {
-          const res = await getScenarioAssetReadUrl(token, scenarioId, assetId);
-          return { assetId, signedUrl: res.signed_url, expiresInSeconds: res.expires_in_seconds };
-        }),
-      );
-      for (const row of fetched) {
-        const expiresAtMs = Date.now() + Math.max(1, row.expiresInSeconds - 10) * 1000;
-        nextCache[row.assetId] = { url: row.signedUrl, expiresAtMs };
-        previewMap[row.assetId] = row.signedUrl;
-      }
-      setAssetPreviewCache(nextCache);
-    }
-
-    setAssetPreviewUrls(previewMap);
-  };
-
-  useEffect(() => {
-    load().catch((error: Error) => setMessage(error.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioId]);
-
-  const onSave = async (event: FormEvent) => {
-    event.preventDefault();
-    const token = getToken();
-    if (!token || !scenarioId) {
-      return;
-    }
-    try {
-      const updated = await patchScenario(token, scenarioId, { title, body_markdown: body });
-      setState(updated.state);
-      setMessage(`Saved. Revision #${updated.current_revision_number}`);
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onSubmitReview = async () => {
-    const token = getToken();
-    if (!token || !scenarioId) {
-      return;
-    }
-    try {
-      const updated = await submitReview(token, scenarioId);
-      setState(updated.state);
-      setMessage("Submitted for review.");
-      await load();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onUploadCover = async () => {
-    const token = getToken();
-    if (!token || !scenarioId || !coverFile) return;
-    try {
-      const updated = await uploadScenarioCover(token, scenarioId, coverFile);
-      setCoverAsset(updated.cover_image ? { asset_id: updated.cover_image.asset_id, alt_text: updated.cover_image.alt_text } : null);
-      setMessage("Cover image uploaded.");
-      setCoverFile(null);
-      setAssetPreviewCache({});
-      await loadAssetPreviews(updated.cover_image?.asset_id ?? null, (updated.inline_assets ?? []).map((x) => x.asset_id));
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onUploadInline = async () => {
-    const token = getToken();
-    if (!token || !scenarioId || !inlineFile) return;
-    try {
-      const updated = await uploadScenarioInline(token, scenarioId, inlineFile, inlineAssets.length);
-      setInlineAssets(
-        (updated.inline_assets ?? [])
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((a) => ({ asset_id: a.asset_id, order: a.order, alt_text: a.alt_text })),
-      );
-      setMessage("Inline image uploaded.");
-      setInlineFile(null);
-      setAssetPreviewCache({});
-      await loadAssetPreviews(updated.cover_image?.asset_id ?? null, (updated.inline_assets ?? []).map((x) => x.asset_id));
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onDeleteInline = async (assetId: string) => {
-    const token = getToken();
-    if (!token || !scenarioId) return;
-    try {
-      const updated = await deleteScenarioInlineAsset(token, scenarioId, assetId);
-      setInlineAssets(
-        (updated.inline_assets ?? [])
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((a) => ({ asset_id: a.asset_id, order: a.order, alt_text: a.alt_text })),
-      );
-      setMessage("Inline image removed.");
-      setAssetPreviewCache({});
-      await loadAssetPreviews(updated.cover_image?.asset_id ?? null, (updated.inline_assets ?? []).map((x) => x.asset_id));
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const moveInline = async (assetId: string, direction: -1 | 1) => {
-    const token = getToken();
-    if (!token || !scenarioId) return;
-    const idx = inlineAssets.findIndex((x) => x.asset_id === assetId);
-    const to = idx + direction;
-    if (idx < 0 || to < 0 || to >= inlineAssets.length) return;
-    const next = inlineAssets.slice();
-    const tmp = next[idx];
-    next[idx] = next[to];
-    next[to] = tmp;
-    try {
-      const updated = await reorderScenarioInlineAssets(
-        token,
-        scenarioId,
-        next.map((x) => x.asset_id),
-      );
-      setInlineAssets(
-        (updated.inline_assets ?? [])
-          .slice()
-          .sort((a, b) => a.order - b.order)
-          .map((a) => ({ asset_id: a.asset_id, order: a.order, alt_text: a.alt_text })),
-      );
-      setMessage("Image order updated.");
-      setAssetPreviewCache({});
-      await loadAssetPreviews(updated.cover_image?.asset_id ?? null, (updated.inline_assets ?? []).map((x) => x.asset_id));
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onDeleteCover = async () => {
-    const token = getToken();
-    if (!token || !scenarioId) return;
-    try {
-      const updated = await deleteScenarioCoverAsset(token, scenarioId);
-      setCoverAsset(null);
-      setMessage("Cover image removed.");
-      setAssetPreviewCache({});
-      await loadAssetPreviews(null, (updated.inline_assets ?? []).map((x) => x.asset_id));
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const role = getRole();
-  const coordinatorInReview = role === "coordinator" && state === "in_review";
-  const locked = state === "in_review" && !coordinatorInReview;
-  const canSubmitReview = state === "draft" || state === "published";
-
-  const onDeleteThisDraft = async () => {
-    const token = getToken();
-    if (!token || !scenarioId || state !== "draft") {
-      return;
-    }
-    if (!window.confirm("Delete this draft? This cannot be undone.")) {
-      return;
-    }
-    try {
-      await deleteScenario(token, scenarioId);
-      navigate("/my-scenarios");
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  return (
-    <main style={layoutStyle}>
-      <h2>Draft Editor</h2>
-      <p>State: {state}</p>
-      {state === "published" ? (
-        <p style={{ color: "#444", fontSize: "0.95rem" }}>
-          You can keep editing this as draft content. The public page keeps showing the latest live version until you
-          submit for review and a coordinator publishes again.
-        </p>
-      ) : null}
-      {locked ? (
-        <p style={{ color: "#666" }}>
-          In review (investigator view): content cannot be edited until the coordinator publishes or rejects.
-        </p>
-      ) : null}
-      {coordinatorInReview ? (
-        <p style={{ color: "#444", fontSize: "0.95rem" }}>
-          You can edit this scenario while it is in review (coordinator).
-        </p>
-      ) : null}
-      {livePublicTitle != null && livePublicTitle !== "" ? (
-        <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#f5f5f5", borderRadius: "6px" }}>
-          <strong>Current live public version (reference)</strong>
-          <p style={{ margin: "0.35rem 0 0" }}>{livePublicTitle}</p>
-          {livePublicBody != null ? (
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem", fontSize: "0.9rem" }}>{livePublicBody}</pre>
-          ) : null}
-        </section>
-      ) : null}
-      <form onSubmit={onSave} style={{ display: "grid", gap: "0.75rem" }}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="title"
-          disabled={locked}
-        />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} disabled={locked} />
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button type="submit" disabled={locked}>
-            Save draft
-          </button>
-          {canSubmitReview ? (
-            <button type="button" onClick={() => onSubmitReview()} disabled={locked}>
-              Submit for review
-            </button>
-          ) : null}
-          {state === "draft" ? (
-            <button type="button" onClick={() => onDeleteThisDraft()} style={{ color: "crimson" }}>
-              Delete draft
-            </button>
-          ) : null}
-        </div>
-      </form>
-      <section style={{ marginTop: "1rem", padding: "0.75rem", border: "1px solid #ddd", borderRadius: "6px" }}>
-        <h3>Assets (MinIO)</h3>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-          <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} disabled={locked} />
-          <button type="button" onClick={() => onUploadCover()} disabled={locked || !coverFile}>
-            Upload cover image
-          </button>
-          {coverAsset ? (
-            <button type="button" onClick={() => onDeleteCover()} disabled={locked}>
-              Remove cover image
-            </button>
-          ) : null}
-        </div>
-        {coverAsset && assetPreviewUrls[coverAsset.asset_id] ? (
-          <div style={{ marginTop: "0.6rem" }}>
-            <img
-              src={assetPreviewUrls[coverAsset.asset_id]}
-              alt={coverAsset.alt_text ?? "cover"}
-              style={{ maxWidth: "240px", maxHeight: "140px", border: "1px solid #ddd", borderRadius: "4px" }}
-            />
-          </div>
-        ) : null}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.6rem" }}>
-          <input type="file" accept="image/*" onChange={(e) => setInlineFile(e.target.files?.[0] ?? null)} disabled={locked} />
-          <button type="button" onClick={() => onUploadInline()} disabled={locked || !inlineFile}>
-            Upload inline image
-          </button>
-        </div>
-        <ul style={{ paddingLeft: "1.25rem", marginTop: "0.75rem" }}>
-          {inlineAssets.map((asset, index) => (
-            <li key={asset.asset_id} style={{ marginBottom: "0.35rem" }}>
-              #{index + 1} {asset.alt_text ?? "no alt text"}{" "}
-              <button type="button" onClick={() => moveInline(asset.asset_id, -1)} disabled={index === 0 || locked}>
-                ↑
-              </button>{" "}
-              <button
-                type="button"
-                onClick={() => moveInline(asset.asset_id, 1)}
-                disabled={index === inlineAssets.length - 1 || locked}
-              >
-                ↓
-              </button>{" "}
-              <button type="button" onClick={() => onDeleteInline(asset.asset_id)} disabled={locked}>
-                Remove
-              </button>
-              {assetPreviewUrls[asset.asset_id] ? (
-                <div style={{ marginTop: "0.35rem" }}>
-                  <img
-                    src={assetPreviewUrls[asset.asset_id]}
-                    alt={asset.alt_text ?? `inline-${index + 1}`}
-                    style={{ maxWidth: "240px", maxHeight: "140px", border: "1px solid #ddd", borderRadius: "4px" }}
-                  />
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-      <p>{message}</p>
-      <Link to="/">Back</Link>
-    </main>
-  );
-}
-
-function ReviewPage() {
-  const [items, setItems] = useState<
-    Array<{
-      scenario_id: string;
-      slug: string;
-      title: string;
-      author_user_id: string;
-      state: string;
-      has_prior_approval: boolean;
-      submitted_at?: string | null;
-      live_public_slug?: string | null;
-      live_public_title?: string | null;
-      live_public_body_markdown?: string | null;
-    }>
-  >([]);
-  const [message, setMessage] = useState("");
-
-  const load = async () => {
-    const token = getToken();
-    if (!token) {
-      return;
-    }
-    const queue = await reviewQueue(token);
-    setItems(queue.items);
-  };
-
-  useEffect(() => {
-    load().catch((error: Error) => setMessage(error.message));
-  }, []);
-
-  const onReject = async (scenarioId: string) => {
-    const token = getToken();
-    if (!token) {
-      return;
-    }
-    if (!window.confirm("Send this scenario back to draft?")) {
-      return;
-    }
-    try {
-      await rejectScenario(token, scenarioId);
-      setMessage("Scenario returned to draft.");
-      await load();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  const onPublish = async (scenarioId: string) => {
-    const token = getToken();
-    if (!token) {
-      return;
-    }
-    try {
-      await publishScenario(token, scenarioId);
-      setMessage("Scenario published.");
-      await load();
-    } catch (error) {
-      setMessage((error as Error).message);
-    }
-  };
-
-  return (
-    <main style={layoutStyle}>
-      <h2>Review queue</h2>
-      <p>Current role: {getRole() ?? "no role"}</p>
-      {items.map((item) => (
-        <div key={item.scenario_id} style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}>
-          <strong>Draft candidate:</strong> {item.title} ({item.state})
-          <br />
-          <span style={{ fontSize: "0.85rem", color: "#555" }}>Owner user id: {item.author_user_id}</span>
-          <br />
-          {item.has_prior_approval && item.live_public_title ? (
-            <div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "#f9f9f9", borderRadius: "4px" }}>
-              <strong>Current live public version:</strong> {item.live_public_title}
-              {item.live_public_body_markdown ? (
-                <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", marginTop: "0.35rem" }}>
-                  {item.live_public_body_markdown}
-                </pre>
-              ) : null}
-            </div>
-          ) : null}
-          <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-            <Link to={`/scenarios/${item.scenario_id}/edit`}>Open scenario (draft)</Link>
-            <button type="button" onClick={() => onReject(item.scenario_id)}>
-              Reject (back to draft)
-            </button>
-            <button type="button" onClick={() => onPublish(item.scenario_id)}>
-              Publish
-            </button>
-            {item.has_prior_approval && item.live_public_slug ? (
-              <Link to={`/public/${item.live_public_slug}`}>View public (live)</Link>
-            ) : null}
-          </div>
-        </div>
-      ))}
-      {!items.length && <p>No pending items.</p>}
-      <p>{message}</p>
-      <Link to="/">Back</Link>
-    </main>
-  );
-}
-
 function PublicScenarioPage() {
   const { slug } = useParams();
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [description, setDescription] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverAlt, setCoverAlt] = useState<string>("cover image");
@@ -978,7 +468,7 @@ function PublicScenarioPage() {
     publicScenario(slug)
       .then((data) => {
         setTitle(data.title);
-        setBody(data.body_markdown);
+        setDescription(data.description);
         setPublishedAt(data.published_at);
         setCoverUrl(data.cover_image?.signed_url ?? null);
         setCoverAlt(data.cover_image?.alt_text ?? "cover image");
@@ -1012,7 +502,7 @@ function PublicScenarioPage() {
         </div>
       ) : null}
       <h3>{title}</h3>
-      <pre style={{ whiteSpace: "pre-wrap", marginBottom: inlineImages.length ? "1rem" : 0 }}>{body}</pre>
+      <pre style={{ whiteSpace: "pre-wrap", marginBottom: inlineImages.length ? "1rem" : 0 }}>{description}</pre>
       {inlineImages.length ? (
         <section style={{ display: "grid", gap: "0.75rem" }}>
           {inlineImages.map((img) => (
@@ -1074,7 +564,7 @@ export function App() {
           path="/scenarios/new"
           element={
             <RequireAuth>
-              <NewScenarioPage />
+              <ScenarioEditorPage isCreate />
             </RequireAuth>
           }
         />
@@ -1082,7 +572,7 @@ export function App() {
           path="/scenarios/:id/edit"
           element={
             <RequireAuth>
-              <EditScenarioPage />
+              <ScenarioEditorPage />
             </RequireAuth>
           }
         />
@@ -1090,7 +580,27 @@ export function App() {
           path="/review"
           element={
             <RequireAuth>
-              <ReviewPage />
+              <ReviewQueuePage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/catalogs"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <AdminCatalogPage />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/assignments"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <AdminAssignmentsPage />
+              </RequireAdmin>
             </RequireAuth>
           }
         />

@@ -48,7 +48,9 @@ class ScenarioModel(BaseModel):
     id: str | None = Field(default=None, alias="_id")
     slug: str
     title: str
-    body_markdown: str
+    description: str = ""
+    category_ids: list[str] = Field(default_factory=list)
+    ethical_risk_ids: list[str] = Field(default_factory=list)
     author_user_id: str
     collaborators: list[ScenarioCollaboratorModel] = Field(default_factory=list)
     state: ScenarioState = ScenarioState.DRAFT
@@ -58,6 +60,16 @@ class ScenarioModel(BaseModel):
     tags: list[str] = Field(default_factory=list)
     submitted_for_review_at: datetime | None = None
     submitted_for_review_by_user_id: str | None = None
+    review_started_at: datetime | None = None
+    review_feedback_note: str | None = None
+    review_feedback_at: datetime | None = None
+    review_feedback_by_user_id: str | None = None
+    not_suitable_reason: str | None = None
+    not_suitable_at: datetime | None = None
+    not_suitable_by_user_id: str | None = None
+    last_reviewed_at: datetime | None = None
+    last_reviewed_by_user_id: str | None = None
+    last_review_outcome: str | None = None
     approved_at: datetime | None = None
     first_approved_at: datetime | None = None
     approved_by_user_id: str | None = None
@@ -67,7 +79,7 @@ class ScenarioModel(BaseModel):
     public_revision_number: int | None = None
     last_state_changed_at: datetime
     public_title: str | None = None
-    public_body_markdown: str | None = None
+    public_description: str | None = None
     public_slug: str | None = None
     keywords_normalized: list[str] = Field(default_factory=list)
     cover_image: ScenarioAssetModel | None = None
@@ -91,9 +103,9 @@ class ScenarioModel(BaseModel):
         if (
             not self.public_slug
             or self.public_title is None
-            or self.public_body_markdown is None
+            or self.public_description is None
         ):
-            msg = "Published scenario must have public_slug, public_title and public_body_markdown"
+            msg = "Published scenario must have public_slug, public_title and public_description"
             raise ValueError(msg)
         return self
 

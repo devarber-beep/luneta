@@ -1,0 +1,12 @@
+---
+description: Do not reference functional requirements (RF) IDs in code comments or docstrings
+globs: apps/**/*.{py,ts,tsx}
+alwaysApply: true
+---
+
+# No RF references in application code
+
+- Do **not** put functional-requirements IDs or section references (e.g. `RF-1`, `RF-3.6.2`, “requisitos funcionales”) in Python/TypeScript **comments**, **module docstrings**, or **inline documentation** under `apps/`.
+- Product requirements live in `docs/requisitos-funcionales-luneta.md`; code should describe **behavior** in plain language, not traceability IDs.
+- **Tests** may describe behavior in plain English in module docstrings; still avoid `RF-x` tags.
+- Planning in chat or markdown docs outside `apps/` may reference RFs when useful for the user.

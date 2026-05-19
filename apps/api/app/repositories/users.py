@@ -7,6 +7,7 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.domain.enums import UserAccountStatus, UserRole
 from app.models.user import UserModel
 
 
@@ -15,7 +16,6 @@ class UsersRepository:
         self._collection = db["users"]
 
     async def ensure_indexes(self) -> None:
-        await self._collection.create_index("email", unique=True)
         await self._collection.create_index("email_normalized", unique=True)
         await self._collection.create_index("nickname", unique=True)
         await self._collection.create_index("nickname_normalized", unique=True)
@@ -25,27 +25,64 @@ class UsersRepository:
         *,
         email: str,
         password_hash: str,
-        role: str,
+        role: UserRole,
         nickname: str,
         first_name: str | None = None,
         last_name: str | None = None,
+        must_change_password: bool = False,
     ) -> UserModel:
         now = datetime.now(UTC)
         email_normalized = email.strip().lower()
         nickname_normalized = nickname.strip().lower()
         doc = {
-            "email": email,
             "email_normalized": email_normalized,
             "password_hash": password_hash,
             "password_updated_at": now,
-            "role": role,
-            "is_email_verified": False,
+            "role": role.value,
+            "account_status": UserAccountStatus.ACTIVE.value,
             "email_verified_at": None,
             "nickname": nickname,
             "nickname_normalized": nickname_normalized,
             "first_name": first_name,
             "last_name": last_name,
+            "organization": None,
+            "biography": None,
             "avatar": None,
+            "must_change_password": must_change_password,
+            "last_login_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = await self._collection.insert_one(doc)
+        doc["_id"] = str(result.inserted_id)
+        return UserModel.model_validate(doc)
+
+    async def create_admin_account(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        nickname: str,
+    ) -> UserModel:
+        """Bootstrap first admin (verified, active, no mandatory password change)."""
+        now = datetime.now(UTC)
+        email_normalized = email.strip().lower()
+        nickname_normalized = nickname.strip().lower()
+        doc = {
+            "email_normalized": email_normalized,
+            "password_hash": password_hash,
+            "password_updated_at": now,
+            "role": UserRole.ADMIN.value,
+            "account_status": UserAccountStatus.ACTIVE.value,
+            "email_verified_at": now,
+            "nickname": nickname.strip(),
+            "nickname_normalized": nickname_normalized,
+            "first_name": None,
+            "last_name": None,
+            "organization": None,
+            "biography": None,
+            "avatar": None,
+            "must_change_password": False,
             "last_login_at": None,
             "created_at": now,
             "updated_at": now,
@@ -63,6 +100,18 @@ class UsersRepository:
         normalized = nickname.strip().lower()
         doc = await self._collection.find_one({"nickname_normalized": normalized})
         return self._to_model(doc)
+
+    async def list_by_roles(self, roles: list[UserRole]) -> list[UserModel]:
+        if not roles:
+            return []
+        role_values = [r.value for r in roles]
+        cursor = self._collection.find({"role": {"$in": role_values}}).sort("nickname_normalized", 1)
+        out: list[UserModel] = []
+        async for doc in cursor:
+            model = self._to_model(doc)
+            if model is not None:
+                out.append(model)
+        return out
 
     async def get_by_id(self, user_id: str) -> UserModel | None:
         if not ObjectId.is_valid(user_id):
@@ -90,15 +139,24 @@ class UsersRepository:
         return {uid: u.nickname for uid, u in users.items()}
 
     async def list_verified_emails_by_role(self, role: str) -> list[str]:
+        return await self.list_verified_emails_by_roles([role])
+
+    async def list_verified_emails_by_roles(self, roles: list[str]) -> list[str]:
+        if not roles:
+            return []
         cursor = self._collection.find(
-            {"role": role, "is_email_verified": True},
-            {"email": 1, "_id": 0},
+            {
+                "role": {"$in": roles},
+                "email_verified_at": {"$ne": None},
+                "account_status": UserAccountStatus.ACTIVE.value,
+            },
+            {"email_normalized": 1, "_id": 0},
         )
         out: list[str] = []
         async for doc in cursor:
-            email = doc.get("email")
-            if isinstance(email, str) and email:
-                out.append(email)
+            addr = doc.get("email_normalized")
+            if isinstance(addr, str) and addr:
+                out.append(addr)
         return out
 
     async def touch_last_login(self, user_id: str) -> None:
@@ -114,34 +172,30 @@ class UsersRepository:
             return False
         result = await self._collection.update_one(
             {"_id": ObjectId(user_id)},
-            {"$set": {"is_email_verified": True, "email_verified_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}},
+            {"$set": {"email_verified_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}},
         )
         return result.modified_count == 1
 
-    async def update_profile(
-        self,
-        user_id: str,
-        *,
-        nickname: str,
-        first_name: str | None,
-        last_name: str | None,
-    ) -> UserModel | None:
+    async def apply_profile_updates(self, user_id: str, updates: dict[str, Any]) -> UserModel | None:
+        if not ObjectId.is_valid(user_id) or not updates:
+            return None
+        updates = {**updates, "updated_at": datetime.now(UTC)}
+        result = await self._collection.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+        if result.matched_count == 0:
+            return None
+        doc = await self._collection.find_one({"_id": ObjectId(user_id)})
+        return self._to_model(doc)
+
+    async def set_avatar(self, user_id: str, *, avatar: dict[str, Any] | None) -> UserModel | None:
         if not ObjectId.is_valid(user_id):
             return None
-        nick = nickname.strip()
         now = datetime.now(UTC)
-        await self._collection.update_one(
+        result = await self._collection.update_one(
             {"_id": ObjectId(user_id)},
-            {
-                "$set": {
-                    "nickname": nick,
-                    "nickname_normalized": nick.lower(),
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "updated_at": now,
-                }
-            },
+            {"$set": {"avatar": avatar, "updated_at": now}},
         )
+        if result.matched_count == 0:
+            return None
         doc = await self._collection.find_one({"_id": ObjectId(user_id)})
         return self._to_model(doc)
 
@@ -151,7 +205,40 @@ class UsersRepository:
         now = datetime.now(UTC)
         result = await self._collection.update_one(
             {"_id": ObjectId(user_id)},
-            {"$set": {"password_hash": password_hash, "password_updated_at": now, "updated_at": now}},
+            {
+                "$set": {
+                    "password_hash": password_hash,
+                    "password_updated_at": now,
+                    "must_change_password": False,
+                    "updated_at": now,
+                }
+            },
+        )
+        if result.matched_count == 0:
+            return None
+        doc = await self._collection.find_one({"_id": ObjectId(user_id)})
+        return self._to_model(doc)
+
+    async def set_role(self, user_id: str, *, role: UserRole) -> UserModel | None:
+        if not ObjectId.is_valid(user_id):
+            return None
+        now = datetime.now(UTC)
+        result = await self._collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"role": role.value, "updated_at": now}},
+        )
+        if result.matched_count == 0:
+            return None
+        doc = await self._collection.find_one({"_id": ObjectId(user_id)})
+        return self._to_model(doc)
+
+    async def set_account_status(self, user_id: str, *, account_status: UserAccountStatus) -> UserModel | None:
+        if not ObjectId.is_valid(user_id):
+            return None
+        now = datetime.now(UTC)
+        result = await self._collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {"account_status": account_status.value, "updated_at": now}},
         )
         if result.matched_count == 0:
             return None

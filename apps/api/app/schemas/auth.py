@@ -1,13 +1,14 @@
-"""Auth API schemas for vertical slice."""
+"""Request and response bodies for authentication and profile endpoints."""
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+from app.domain.enums import UserAccountStatus, UserRole
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    role: str = Field(pattern="^(investigator|coordinator)$")
     nickname: str = Field(min_length=2, max_length=40)
 
 
@@ -37,13 +38,22 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+    must_change_password: bool = False
     token_type: str = "bearer"
 
 
 class ProfilePatchRequest(BaseModel):
-    nickname: str = Field(min_length=2, max_length=40)
+    nickname: str | None = Field(default=None, min_length=2, max_length=40)
     first_name: str | None = Field(default=None, max_length=60)
     last_name: str | None = Field(default=None, max_length=60)
+    organization: str | None = Field(default=None, max_length=200)
+    biography: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> "ProfilePatchRequest":
+        if not self.model_dump(exclude_unset=True):
+            raise ValueError("At least one field must be provided")
+        return self
 
 
 class ChangePasswordRequest(BaseModel):
@@ -61,12 +71,16 @@ class MeResponse(BaseModel):
         updated_at: datetime
 
     user_id: str
-    email: EmailStr
-    role: str
-    is_email_verified: bool
+    email_normalized: EmailStr
+    role: UserRole
+    account_status: UserAccountStatus
     email_verified_at: datetime | None = None
+    must_change_password: bool = False
     nickname: str
     first_name: str | None = None
     last_name: str | None = None
+    organization: str | None = None
+    biography: str | None = None
     avatar: AvatarResponse | None = None
+    avatar_url: str | None = None
     last_login_at: datetime | None = None

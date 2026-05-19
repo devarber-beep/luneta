@@ -23,7 +23,7 @@ class ReviewEventsRepository:
         scenario_id: str,
         event_type: ReviewEventType,
         actor_user_id: str,
-        actor_role: UserRole | None = None,
+        actor_role: UserRole,
         from_state: ScenarioState | None = None,
         to_state: ScenarioState | None = None,
     ) -> ReviewEventModel:
@@ -31,10 +31,9 @@ class ReviewEventsRepository:
             "scenario_id": scenario_id,
             "event_type": event_type.value,
             "actor_user_id": actor_user_id,
+            "actor_role": actor_role.value,
             "created_at": datetime.now(UTC),
         }
-        if actor_role is not None:
-            doc["actor_role"] = actor_role.value
         if from_state is not None:
             doc["from_state"] = from_state.value
         if to_state is not None:

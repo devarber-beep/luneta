@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, health, orgs, public, scenarios, workflow
+from app.routes import admin_catalogs, admin_users, auth, catalog, health, orgs, public, scenarios, workflow
 
 
 def create_app() -> FastAPI:
@@ -21,6 +21,9 @@ def create_app() -> FastAPI:
     # Organizations (first real MongoDB access)
     app.include_router(orgs.router, prefix="/orgs", tags=["orgs"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
+    app.include_router(admin_users.router, prefix="/admin", tags=["admin"])
+    app.include_router(admin_catalogs.router, prefix="/admin", tags=["admin"])
     app.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"])
     app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
     app.include_router(public.router, prefix="/public", tags=["public"])
