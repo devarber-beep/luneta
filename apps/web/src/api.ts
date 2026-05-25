@@ -602,3 +602,116 @@ export async function applyAcceptedSuggestionText(
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export type EvaluationAspects = {
+  children_age: "0-4" | "5-9" | "10-14" | "15_or_more" | "";
+  duration_frequency:
+    | "daily"
+    | "once_a_week"
+    | "several_times_a_day"
+    | "several_times_a_week"
+    | "once_a_month"
+    | "";
+  execution_place: "yes" | "no" | "";
+  special_circumstances: "yes" | "no" | "";
+  consent: "yes" | "no" | "";
+};
+
+export type EvaluationItem = {
+  id: string;
+  scenario_id: string;
+  evaluator_user_id: string;
+  evaluator_nickname?: string | null;
+  risk_score: number;
+  benefit_score: number;
+  detected_ethical_risk_ids: string[];
+  detected_ethical_risk_labels: string[];
+  comment: string;
+  aspects: EvaluationAspects;
+  visibility: string;
+  submitted_at: string;
+};
+
+export async function getMyScenarioEvaluation(
+  token: string,
+  scenarioId: string,
+): Promise<{ evaluation: EvaluationItem | null; can_submit: boolean }> {
+  return request(`/scenarios/${scenarioId}/evaluations/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function submitScenarioEvaluation(
+  token: string,
+  scenarioId: string,
+  payload: {
+    risk_score: number;
+    benefit_score: number;
+    detected_ethical_risk_ids: string[];
+    comment: string;
+    aspects: {
+      children_age: Exclude<EvaluationAspects["children_age"], "">;
+      duration_frequency: Exclude<EvaluationAspects["duration_frequency"], "">;
+      execution_place: Exclude<EvaluationAspects["execution_place"], "">;
+      special_circumstances: Exclude<EvaluationAspects["special_circumstances"], "">;
+      consent: Exclude<EvaluationAspects["consent"], "">;
+    };
+  },
+): Promise<EvaluationItem> {
+  return request(`/scenarios/${scenarioId}/evaluations`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export type EvaluationSummary = {
+  scenario_id: string;
+  evaluation_count: number;
+  average_risk_score: number | null;
+  average_benefit_score: number | null;
+  detected_ethical_risk_labels: string[];
+  comments?: string[];
+};
+
+export async function getScenarioEvaluationSummary(
+  token: string,
+  scenarioId: string,
+): Promise<EvaluationSummary> {
+  return request(`/scenarios/${scenarioId}/evaluations/summary`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listScenarioEvaluations(
+  token: string,
+  scenarioId: string,
+): Promise<{ items: EvaluationItem[] }> {
+  return request(`/scenarios/${scenarioId}/evaluations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function fetchActiveEthicalRisks(token: string): Promise<{ items: Array<{ id: string; label: string }> }> {
+  return request("/catalog/ethical-risks", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function moderateScenarioEvaluation(
+  token: string,
+  evaluationId: string,
+  action: "hide" | "delete",
+): Promise<void> {
+  const response = await fetch(`${API_URL}/scenarios/evaluations/${evaluationId}/moderate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action }),
+  });
+  if (!response.ok) {
+    throw new Error(await getFetchErrorMessage(response));
+  }
+}

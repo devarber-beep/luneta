@@ -22,6 +22,7 @@ import {
 } from "../api";
 import { fetchActiveCategories, fetchActiveEthicalRisks } from "../adminApi";
 import { DescriptionWithSuggestions } from "../components/DescriptionWithSuggestions";
+import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsights";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "860px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -652,6 +653,17 @@ export function ScenarioEditorPage({
             </label>
           ))}
         </section>
+
+        {scenarioId && getToken() && state === "published" ? (
+          <ScenarioEvaluationInsights
+            scenarioId={scenarioId}
+            token={getToken() ?? ""}
+            showSummary
+            ownerView={isOwner && !isAdmin}
+            showDetail={isAdmin}
+            showModeration={isAdmin}
+          />
+        ) : null}
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Images</h3>

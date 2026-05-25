@@ -146,6 +146,11 @@ def can_read_review_feedback_status(
     )
 
 
+def can_see_suggestion_author_identity(*, user: UserModel) -> bool:
+    """Suggestion authorship is visible to administrators only."""
+    return UserRole(user.role) == UserRole.ADMIN
+
+
 def can_resolve_suggestion(*, user: UserModel, scenario: ScenarioModel) -> bool:
     if scenario.deleted_at is not None:
         return False

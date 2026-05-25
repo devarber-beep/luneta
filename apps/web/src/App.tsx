@@ -17,10 +17,13 @@ import {
 } from "./api";
 import { clearSession, getRole, getToken, setRole, setToken } from "./session";
 import { DescriptionWithSuggestions } from "./components/DescriptionWithSuggestions";
+import { ScenarioEvaluationPanel } from "./components/ScenarioEvaluationPanel";
+import { ScenarioEvaluationInsights } from "./components/ScenarioEvaluationInsights";
 import { ReviewQueuePage } from "./pages/ReviewQueuePage";
 import { ScenarioEditorPage } from "./pages/ScenarioEditorPage";
 import { AdminCatalogPage } from "./pages/AdminCatalogPage";
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage";
+import { AdminEvaluationsPage } from "./pages/AdminEvaluationsPage";
 
 const layoutStyle: CSSProperties = {
   maxWidth: "860px",
@@ -53,6 +56,7 @@ function HomePage() {
         {getRole() === "reviewer" || getRole() === "admin" ? <Link to="/review">Review queue</Link> : null}
         {getRole() === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
         {getRole() === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
+        {getRole() === "admin" ? <Link to="/admin/evaluations">Moderate evaluations</Link> : null}
 
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
@@ -630,6 +634,24 @@ function PublicScenarioPage() {
           ))}
         </section>
       ) : null}
+      {scenarioId && getToken() ? (
+        <>
+          <ScenarioEvaluationInsights
+            scenarioId={scenarioId}
+            token={getToken() ?? ""}
+            showSummary
+            ownerView={Boolean(myUserId && authorUserId && myUserId === authorUserId) && getRole() !== "admin"}
+            showDetail={getRole() === "admin"}
+            showModeration={getRole() === "admin"}
+          />
+          <ScenarioEvaluationPanel
+            scenarioId={scenarioId}
+            token={getToken() ?? ""}
+            authorUserId={authorUserId}
+            myUserId={myUserId}
+          />
+        </>
+      ) : null}
       {message ? <p style={{ marginTop: "1rem", color: "crimson" }}>{message}</p> : null}
       <Link to="/">Back</Link>
     </main>
@@ -723,6 +745,16 @@ export function App() {
             <RequireAuth>
               <RequireAdmin>
                 <AdminAssignmentsPage />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/evaluations"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <AdminEvaluationsPage />
               </RequireAdmin>
             </RequireAuth>
           }

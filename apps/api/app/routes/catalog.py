@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
-from app.deps.authz import require_active_user_with_permission
+from app.deps.authz import require_active_user_with_permission, require_any_active_permission
 from app.domain.authz_permissions import Permission
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
@@ -35,7 +35,12 @@ async def list_active_scenario_classification(
 @router.get("/ethical-risks", response_model=ActiveEthicalRiskListResponse)
 async def list_active_ethical_risks(
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_CREATE_DRAFT)),
+    _: UserModel = Depends(
+        require_any_active_permission(
+            Permission.SCENARIO_CREATE_DRAFT,
+            Permission.SCENARIO_EVALUATE_PUBLISHED,
+        )
+    ),
 ) -> ActiveEthicalRiskListResponse:
     repo = EthicalRisksRepository(db)
     await repo.ensure_indexes()

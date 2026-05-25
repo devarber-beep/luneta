@@ -51,6 +51,11 @@ class SuggestionStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class EvaluationVisibility(StrEnum):
+    VISIBLE = "visible"
+    HIDDEN = "hidden"
+
+
 class ReviewEventType(StrEnum):
     CREATE_DRAFT = "create_draft"
     DRAFT_SAVED = "draft_saved"
@@ -82,6 +87,7 @@ class AuditActionType(StrEnum):
     USER_ACCOUNT_STATUS_CHANGED = "user_account_status_changed"
     REVIEWER_ASSIGNMENT_CREATED = "reviewer_assignment_created"
     REVIEWER_ASSIGNMENT_REMOVED = "reviewer_assignment_removed"
+    EVALUATION_SUBMITTED = "evaluation_submitted"
     EVALUATION_MODERATED = "evaluation_moderated"
     SUGGESTION_CREATED = "suggestion_created"
     SUGGESTION_ACCEPTED = "suggestion_accepted"

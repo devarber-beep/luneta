@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
+from app.core.suggestion_access import can_see_suggestion_author_identity
 from app.deps.authz import require_active_user_with_permission
 from app.domain.authz_permissions import Permission
 from app.models.user import UserModel
@@ -44,11 +45,12 @@ def _service(db: AsyncIOMotorDatabase) -> SuggestionService:
     )
 
 
-def _to_response(suggestion) -> SuggestionResponse:
+def _to_response(suggestion, *, current_user: UserModel) -> SuggestionResponse:
+    show_author = can_see_suggestion_author_identity(user=current_user)
     return SuggestionResponse(
         id=suggestion.id or "",
         scenario_id=suggestion.scenario_id,
-        author_user_id=suggestion.author_user_id,
+        author_user_id=suggestion.author_user_id if show_author else "",
         author_role=suggestion.author_role,
         scope=suggestion.scope,
         kind=suggestion.kind,
@@ -94,7 +96,7 @@ async def list_suggestions(
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_SUGGESTION_READ)),
 ) -> SuggestionListResponse:
     items = await _service(db).list_suggestions(scenario_id=scenario_id, current_user=current_user)
-    return SuggestionListResponse(items=[_to_response(s) for s in items])
+    return SuggestionListResponse(items=[_to_response(s, current_user=current_user) for s in items])
 
 
 @router.post("/{scenario_id}/suggestions", response_model=SuggestionResponse, status_code=201)
@@ -112,7 +114,7 @@ async def create_suggestion(
         paragraph_index=payload.paragraph_index,
         body=payload.body,
     )
-    return _to_response(created)
+    return _to_response(created, current_user=current_user)
 
 
 @router.post("/{scenario_id}/suggestions/{suggestion_id}/accept", response_model=AcceptSuggestionResponse)
@@ -128,7 +130,7 @@ async def accept_suggestion(
         current_user=current_user,
     )
     return AcceptSuggestionResponse(
-        suggestion=_to_response(suggestion),
+        suggestion=_to_response(suggestion, current_user=current_user),
         scenario=scenarios_routes._to_response(scenario),
     )
 
@@ -145,7 +147,7 @@ async def reject_suggestion(
         suggestion_id=suggestion_id,
         current_user=current_user,
     )
-    return _to_response(rejected)
+    return _to_response(rejected, current_user=current_user)
 
 
 @router.post(
@@ -164,6 +166,6 @@ async def apply_suggestion_text(
         current_user=current_user,
     )
     return AcceptSuggestionResponse(
-        suggestion=_to_response(suggestion),
+        suggestion=_to_response(suggestion, current_user=current_user),
         scenario=scenarios_routes._to_response(scenario),
     )

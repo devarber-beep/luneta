@@ -674,3 +674,68 @@ async def test_investigator_paragraph_comment_on_published(api_client, fake_db) 
     assert sug.status_code == 201
 
 
+@pytest.mark.asyncio
+async def test_suggestion_author_visible_only_to_admin(api_client, fake_db) -> None:
+    owner_h = await _signup_and_promote(
+        api_client, fake_db, email="suganonown@luneta.dev", role="investigator", token="sug-anon-own"
+    )
+    rev_h = await _signup_and_promote(
+        api_client, fake_db, email="suganonrev@luneta.dev", role="reviewer", token="sug-anon-rev"
+    )
+    admin_h = await _signup_and_promote(
+        api_client, fake_db, email="suganonadm@luneta.dev", role="admin", token="sug-anon-adm"
+    )
+    owner_doc = await fake_db["users"].find_one({"email_normalized": "suganonown@luneta.dev"})
+    rev_doc = await fake_db["users"].find_one({"email_normalized": "suganonrev@luneta.dev"})
+    rev_id = str(rev_doc["_id"])
+    now = datetime.now(UTC)
+    await fake_db["reviewer_assignments"].insert_one(
+        {
+            "reviewer_user_id": rev_id,
+            "investigator_user_id": str(owner_doc["_id"]),
+            "created_at": now,
+            "created_by_user_id": rev_id,
+        }
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Anon suggest", "description": "Line one.\n\nLine two."},
+        headers=owner_h,
+    )
+    sid = create.json()["id"]
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "sug-anon-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "sug-anon-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=rev_h)
+    await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=rev_h,
+        json={"scope": "paragraph", "kind": "comment", "paragraph_index": 0, "body": "Anonymous to owner"},
+    )
+    owner_list = await api_client.get(f"/scenarios/{sid}/suggestions", headers=owner_h)
+    assert owner_list.status_code == 200
+    assert owner_list.json()["items"][0]["author_user_id"] == ""
+    assert owner_list.json()["items"][0]["author_role"] == "reviewer"
+
+    rev_list = await api_client.get(f"/scenarios/{sid}/suggestions", headers=rev_h)
+    assert rev_list.status_code == 200
+    assert rev_list.json()["items"][0]["author_user_id"] == ""
+
+    admin_list = await api_client.get(f"/scenarios/{sid}/suggestions", headers=admin_h)
+    assert admin_list.status_code == 200
+    assert admin_list.json()["items"][0]["author_user_id"] == rev_id
+
+

@@ -71,7 +71,8 @@ export function AdminAssignmentsPage() {
     <main style={layoutStyle}>
       <h2>Admin — reviewer assignments</h2>
       <p>
-        <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/">Home</Link>
+        <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/evaluations">Moderate evaluations</Link> ·{" "}
+        <Link to="/">Home</Link>
       </p>
       <label style={{ display: "grid", gap: "0.25rem", marginBottom: "1rem" }}>
         <span>Reviewer</span>

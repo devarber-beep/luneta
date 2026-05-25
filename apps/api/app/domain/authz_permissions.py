@@ -7,6 +7,7 @@ from enum import StrEnum
 class Permission(StrEnum):
     SCENARIO_READ_PUBLIC = "scenario_read_public"
     SCENARIO_EVALUATE_PUBLISHED = "scenario_evaluate_published"
+    EVALUATION_MODERATE = "evaluation_moderate"
     SCENARIO_CREATE_DRAFT = "scenario_create_draft"
     SCENARIO_READ_OWN = "scenario_read_own"
     SCENARIO_UPDATE_OWN = "scenario_update_own"

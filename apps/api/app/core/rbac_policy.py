@@ -47,6 +47,7 @@ _REVIEWER_PERMISSIONS: frozenset[Permission] = _INVESTIGATOR_PERMISSIONS | froze
 
 _ADMIN_ONLY_PERMISSIONS: frozenset[Permission] = frozenset(
     {
+        Permission.EVALUATION_MODERATE,
         Permission.USER_ADMIN_CREATE_INVESTIGATOR,
         Permission.USER_ADMIN_SET_USER_ROLE,
         Permission.USER_ADMIN_SET_ACCOUNT_STATUS,

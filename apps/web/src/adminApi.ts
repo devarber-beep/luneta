@@ -117,3 +117,16 @@ export async function fetchActiveCategories(token: string): Promise<{ items: Cat
 export async function fetchActiveEthicalRisks(token: string): Promise<{ items: CatalogEntry[] }> {
   return request("/catalog/ethical-risks", { headers: authHeaders(token) });
 }
+
+export type AdminEvaluationModerationTarget = {
+  scenario_id: string;
+  title: string;
+  published_at: string;
+  evaluation_count: number;
+};
+
+export async function listAdminEvaluationModerationTargets(
+  token: string,
+): Promise<{ items: AdminEvaluationModerationTarget[] }> {
+  return request("/admin/evaluations/moderation-targets", { headers: authHeaders(token) });
+}

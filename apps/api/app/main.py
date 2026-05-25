@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import (
     admin_catalogs,
+    admin_evaluations,
     admin_users,
     auth,
     catalog,
@@ -11,6 +12,7 @@ from app.routes import (
     orgs,
     public,
     scenarios,
+    evaluations,
     suggestions,
     workflow,
 )
@@ -35,8 +37,10 @@ def create_app() -> FastAPI:
     app.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
     app.include_router(admin_users.router, prefix="/admin", tags=["admin"])
     app.include_router(admin_catalogs.router, prefix="/admin", tags=["admin"])
+    app.include_router(admin_evaluations.router, prefix="/admin", tags=["admin"])
     app.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"])
     app.include_router(suggestions.router, prefix="/scenarios", tags=["suggestions"])
+    app.include_router(evaluations.router, prefix="/scenarios", tags=["evaluations"])
     app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
     app.include_router(public.router, prefix="/public", tags=["public"])
 

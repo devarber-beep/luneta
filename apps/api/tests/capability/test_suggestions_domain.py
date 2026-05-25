@@ -4,7 +4,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.core.description_paragraphs import replace_paragraph, split_paragraphs
-from app.core.suggestion_access import can_create_suggestion, can_list_suggestions, can_resolve_suggestion
+from app.core.suggestion_access import (
+    can_create_suggestion,
+    can_list_suggestions,
+    can_resolve_suggestion,
+    can_see_suggestion_author_identity,
+)
 from app.domain.enums import CollaboratorRole, ScenarioState, UserAccountStatus, UserRole
 from app.models.scenario import ScenarioCollaboratorModel, ScenarioModel
 from app.models.user import UserModel
@@ -173,3 +178,9 @@ def test_only_owner_resolves() -> None:
     scenario = _scenario(state=ScenarioState.IN_REVIEW)
     assert can_resolve_suggestion(user=_user(user_id="owner1", role=UserRole.INVESTIGATOR), scenario=scenario)
     assert not can_resolve_suggestion(user=_user(user_id="inv2", role=UserRole.INVESTIGATOR), scenario=scenario)
+
+
+def test_suggestion_author_identity_admin_only() -> None:
+    assert can_see_suggestion_author_identity(user=_user(user_id="a1", role=UserRole.ADMIN))
+    assert not can_see_suggestion_author_identity(user=_user(user_id="o1", role=UserRole.INVESTIGATOR))
+    assert not can_see_suggestion_author_identity(user=_user(user_id="r1", role=UserRole.REVIEWER))

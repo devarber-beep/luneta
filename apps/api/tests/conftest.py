@@ -98,6 +98,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
             db.review_events.delete_many({"scenario_id": {"$in": scenario_id_strs}})
             db.scenario_revisions.delete_many({"scenario_id": {"$in": scenario_id_strs}})
             db.suggestions.delete_many({"scenario_id": {"$in": scenario_id_strs}})
+            db.scenario_evaluations.delete_many({"scenario_id": {"$in": scenario_id_strs}})
         db.scenarios.delete_many({"author_user_id": {"$in": user_id_strs}})
     db.users.delete_many({"email_normalized": {"$in": normalized}})
     for email in _INTEGRATION_TEST_EMAILS:
@@ -167,6 +168,23 @@ class FakeCursor:
         if self._idx >= len(self._docs):
             raise StopAsyncIteration
         item = self._docs[self._idx]
+        self._idx += 1
+        return item
+
+
+class FakeAggregateCursor:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+        self._idx = 0
+
+    def __aiter__(self) -> "FakeAggregateCursor":
+        self._idx = 0
+        return self
+
+    async def __anext__(self) -> dict[str, Any]:
+        if self._idx >= len(self._rows):
+            raise StopAsyncIteration
+        item = self._rows[self._idx]
         self._idx += 1
         return item
 
@@ -244,6 +262,24 @@ class FakeCollection:
             else:
                 matched = [{k: doc.get(k) for k in keys if k in doc} for doc in matched]
         return FakeCursor(matched)
+
+    def aggregate(self, pipeline: list[dict[str, Any]]) -> FakeAggregateCursor:
+        docs = list(self._docs)
+        rows: list[dict[str, Any]] = []
+        for stage in pipeline:
+            if "$group" not in stage:
+                continue
+            group = stage["$group"]
+            group_id = group.get("_id")
+            if not isinstance(group_id, str) or not group_id.startswith("$"):
+                continue
+            field = group_id[1:]
+            counts: dict[Any, int] = {}
+            for doc in docs:
+                key = doc.get(field)
+                counts[key] = counts.get(key, 0) + 1
+            rows = [{"_id": key, "count": value} for key, value in counts.items()]
+        return FakeAggregateCursor(rows)
 
 
 def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:

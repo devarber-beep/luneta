@@ -36,7 +36,7 @@ Persona con **cuenta verificada** que participa en la comunidad: aporta **valora
 - **Crear** escenarios (**RF-3**).
 - **Editar** escenarios donde sea **propietario**.
 - **Enviar a revisión** cuando sea **propietario** (**RF-3.5**, **RF-5**).
-- **Consultar** las evaluaciones éticas de los escenarios de los que es **propietario** (**RF-8.5**).
+- **Consultar** el **resumen agregado** de evaluaciones en sus escenarios **publicados** (**RF-8.5.1**) y, además, los **comentarios libres** cuando existan (**RF-8.5.2**), **sin** identidad de los evaluadores.
 - **Realizar sugerencias** en otros escenarios **publicados** (**RF-4**).
 
 ### Revisor
@@ -192,6 +192,7 @@ El sistema deberá permitir **sugerencias de cambio** sobre escenarios, como **r
 - **RF-4.1.2:** **Escenario ya publicado:** un **investigador** puede proponer sugerencias de cambios sobre un escenario existente para incorporarse como **colaborador**. Esto podría pasar si se está creando un escenario y se ha visto que ya existe uno muy similar, o si se están consultando los escenarios y se desea mejorar alguno de ellos.
 - **RF-4.1.3:** Las sugerencias **no** serán visibles en la parte **pública** del sistema.
 - **RF-4.1.4:** El estado de las sugerencias será accesible solo al **propietario**, a los **colaboradores**, al **sugerente** y a los **revisores** asignados al **autor** del escenario (cartera). El **admin** tiene **alcance global**. Los **revisores** que ya hayan realizado una **revisión formal** de ese escenario también podrán consultarlas.
+- **RF-4.1.5:** La **autoría** de cada sugerencia (identidad del **sugerente**) solo será visible para el **administrador**. El resto de roles autorizados verán el contenido y metadatos de la sugerencia (tipo, estado, rol del autor en el sistema al crearla, etc.) **sin** identificar al usuario que la envió. El **registro de actividad** conserva la trazabilidad para el **administrador** (**RF-10**).
 
 ### RF-4.2 Tipos de sugerencia
 
@@ -383,8 +384,8 @@ El sistema deberá permitir la **evaluación ética** de escenarios **publicados
 ### RF-8.5 Visibilidad de las evaluaciones
 
 - **RF-8.5.1:** El sistema mostrará para los **investigadores** la **media global** de la puntuación de **riesgo** y de **beneficio** del escenario y las **etiquetas de riesgo**.
-- **RF-8.5.2:** El **administrador** y el **propietario** del escenario podrán consultar el **detalle** de cada evaluación.
-- **RF-8.5.3:** El **administrador** y el **propietario** podrán ver la **identidad** del usuario evaluador.
+- **RF-8.5.2:** El **administrador** podrá consultar el **detalle** de cada evaluación (puntuaciones, aspectos, riesgos detectados y comentario). El **propietario** verá el **resumen agregado** como el resto de usuarios (**RF-8.5.1**) y, si hay **comentarios libres** no vacíos, también esos textos; en ningún caso verá la **identidad** del evaluador ni el detalle individual de cada evaluación.
+- **RF-8.5.3:** Solo el **administrador** podrá ver la **identidad** del usuario evaluador.
 
 ### RF-8.6 Moderación y control
 
