@@ -13,6 +13,7 @@ from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
 from app.repositories.scenarios import ScenariosRepository
+from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.users import UsersRepository
 from app.schemas.workflow import (
     MarkNotSuitableBody,
@@ -34,6 +35,7 @@ def _service(db: AsyncIOMotorDatabase) -> WorkflowService:
         review_events_repo=ReviewEventsRepository(db),
         users_repo=UsersRepository(db),
         assignments_repo=assignments,
+        suggestions_repo=SuggestionsRepository(db),
         mailer=MailerService(),
     )
 

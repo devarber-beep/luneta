@@ -18,7 +18,7 @@ from app.core.scenario_access import (
     can_submit_review,
     can_update_scenario,
 )
-from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserRole
+from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserAccountStatus, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
@@ -370,16 +370,27 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
         )
-        reviewer_emails = await self._users_repo.list_verified_emails_by_roles(
-            [UserRole.REVIEWER.value, UserRole.ADMIN.value]
+        await self._notify_reviewers_for_submitted_scenario(scenario=updated)
+        return updated
+
+    async def _notify_reviewers_for_submitted_scenario(self, *, scenario: ScenarioModel) -> None:
+        """Email verified reviewers assigned to the scenario owner."""
+        addresses: set[str] = set()
+        reviewer_ids = await self._assignments_repo.list_reviewer_ids_for_investigator(
+            scenario.author_user_id
         )
-        for address in reviewer_emails:
+        for reviewer in (await self._users_repo.get_by_ids(reviewer_ids)).values():
+            if (
+                reviewer.email_verified_at is not None
+                and reviewer.account_status == UserAccountStatus.ACTIVE
+            ):
+                addresses.add(str(reviewer.email_normalized))
+        for address in addresses:
             await self._mailer.send_scenario_submitted_for_review(
                 to_email=address,
-                scenario_title=updated.title,
-                scenario_id=updated.id or "",
+                scenario_title=scenario.title,
+                scenario_id=scenario.id or "",
             )
-        return updated
 
     async def start_applying_changes(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
@@ -409,7 +420,9 @@ class ScenarioService:
         scenario = await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
         return scenario.collaborators, scenario
 
-    async def add_editor(self, *, scenario_id: str, editor_user_id: str, current_user: UserModel) -> ScenarioModel:
+    async def add_collaborator(
+        self, *, scenario_id: str, collaborator_user_id: str, current_user: UserModel
+    ) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -419,29 +432,29 @@ class ScenarioService:
         if not can_manage_collaborators(collaborator_role=actor_collaborator_role):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage collaborators")
 
-        if editor_user_id == actor_user_id:
+        if collaborator_user_id == actor_user_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner is already collaborator")
 
-        editor_user = await self._users_repo.get_by_id(editor_user_id)
-        if editor_user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Editor user not found")
-        if editor_user.role not in (UserRole.INVESTIGATOR, UserRole.REVIEWER, UserRole.ADMIN):
+        collaborator_user = await self._users_repo.get_by_id(collaborator_user_id)
+        if collaborator_user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collaborator user not found")
+        if collaborator_user.role not in (UserRole.INVESTIGATOR, UserRole.REVIEWER, UserRole.ADMIN):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only investigator, reviewer, or admin users can be editors",
+                detail="Only investigator, reviewer, or admin users can be collaborators",
             )
 
         collaborators = [c.model_dump(mode="json") for c in scenario.collaborators]
         for collaborator in collaborators:
-            if collaborator["user_id"] == editor_user_id:
-                if collaborator["role"] == CollaboratorRole.EDITOR.value:
+            if collaborator["user_id"] == collaborator_user_id:
+                if collaborator["role"] == CollaboratorRole.COLLABORATOR.value:
                     return scenario
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already has collaborator role")
 
         collaborators.append(
             {
-                "user_id": editor_user_id,
-                "role": CollaboratorRole.EDITOR.value,
+                "user_id": collaborator_user_id,
+                "role": CollaboratorRole.COLLABORATOR.value,
                 "added_at": datetime.now(UTC),
                 "added_by": actor_user_id,
             }
@@ -460,7 +473,9 @@ class ScenarioService:
         )
         return updated
 
-    async def remove_editor(self, *, scenario_id: str, editor_user_id: str, current_user: UserModel) -> ScenarioModel:
+    async def remove_collaborator(
+        self, *, scenario_id: str, collaborator_user_id: str, current_user: UserModel
+    ) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -473,10 +488,13 @@ class ScenarioService:
         filtered = [
             collaborator
             for collaborator in scenario.collaborators
-            if not (collaborator.user_id == editor_user_id and collaborator.role == CollaboratorRole.EDITOR)
+            if not (
+                collaborator.user_id == collaborator_user_id
+                and collaborator.role == CollaboratorRole.COLLABORATOR
+            )
         ]
         if len(filtered) == len(scenario.collaborators):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Editor collaborator not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collaborator not found")
 
         updated = await self._scenarios_repo.replace_collaborators(
             scenario_id=scenario_id,

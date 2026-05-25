@@ -297,6 +297,23 @@ class ScenariosRepository:
         )
         return await self.get_by_id(scenario_id)
 
+    async def open_working_copy_from_published(self, *, scenario_id: str) -> ScenarioModel | None:
+        """Move a published scenario into draft so the owner can edit a working copy."""
+        if not ObjectId.is_valid(scenario_id):
+            return None
+        now = datetime.now(UTC)
+        await self._collection.update_one(
+            {"_id": ObjectId(scenario_id), "state": ScenarioState.PUBLISHED.value},
+            {
+                "$set": {
+                    "state": ScenarioState.DRAFT.value,
+                    "last_state_changed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        return await self.get_by_id(scenario_id)
+
     async def start_applying_changes(self, *, scenario_id: str) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None

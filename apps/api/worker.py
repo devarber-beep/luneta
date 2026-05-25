@@ -1,4 +1,3 @@
-"""Taskiq worker entrypoint. Run with: taskiq worker worker:broker (from apps/api)."""
 from taskiq_redis import ListQueueBroker
 
 from app.settings import settings

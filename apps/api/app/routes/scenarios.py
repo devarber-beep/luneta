@@ -4,14 +4,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.permissions import has_republication_pending
+from app.core.permissions import get_collaborator_role, has_republication_pending
+from app.domain.enums import CollaboratorRole
 from app.db import get_db
 from app.deps.authz import require_active_user_with_permission, require_any_active_permission
 from app.domain.authz_permissions import Permission
 from app.domain.enums import ScenarioState
 from app.models.user import UserModel
+from app.repositories.audit_events import AuditEventsRepository
 from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.review_events import ReviewEventsRepository
+from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
 from app.repositories.scenario_classification import ScenarioClassificationRepository
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
@@ -25,12 +28,15 @@ from app.schemas.scenarios import (
     ScenarioCollaboratorResponse,
     ScenarioPatchRequest,
     ScenarioResponse,
+    ScenarioParticipationRole,
     ScenarioSummaryResponse,
     ScenarioAssetReadUrlResponse,
     SubmitReviewResponse,
 )
+from app.services.audit_service import AuditService
 from app.services.mailer_service import MailerService
 from app.services.scenario_service import ScenarioService
+from app.services.suggestion_service import SuggestionService
 from app.storage.minio_storage import MinioScenarioStorage
 
 router = APIRouter()
@@ -47,6 +53,25 @@ def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
         ethical_repo=EthicalRisksRepository(db),
         mailer=MailerService(),
     )
+
+
+def _suggestion_service(db: AsyncIOMotorDatabase) -> SuggestionService:
+    return SuggestionService(
+        scenarios_repo=ScenariosRepository(db),
+        suggestions_repo=SuggestionsRepository(db),
+        users_repo=UsersRepository(db),
+        assignments_repo=ReviewerAssignmentsRepository(db),
+        review_events_repo=ReviewEventsRepository(db),
+        revisions_repo=ScenarioRevisionsRepository(db),
+        audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
+        mailer=MailerService(),
+    )
+
+
+def _my_participation_role(*, scenario, user_id: str) -> ScenarioParticipationRole:
+    if get_collaborator_role(scenario=scenario, user_id=user_id) == CollaboratorRole.COLLABORATOR:
+        return ScenarioParticipationRole.COLLABORATOR
+    return ScenarioParticipationRole.OWNER
 
 
 def _to_response(scenario) -> ScenarioResponse:
@@ -131,6 +156,7 @@ async def list_my_scenarios(
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
     scenarios = await _service(db).list_my_scenarios(current_user=current_user)
+    uid = current_user.id or ""
     return [
         ScenarioSummaryResponse(
             id=s.id or "",
@@ -139,6 +165,7 @@ async def list_my_scenarios(
             updated_at=s.updated_at,
             first_published_at=s.first_published_at,
             public_path=f"/public/{s.public_slug}" if s.public_slug else None,
+            my_participation_role=_my_participation_role(scenario=s, user_id=uid),
         )
         for s in scenarios
     ]
@@ -149,14 +176,30 @@ async def get_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_active_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
+        require_any_active_permission(
+            Permission.SCENARIO_READ_OWN,
+            Permission.SCENARIO_READ_REVIEW_QUEUE,
+            Permission.SCENARIO_READ_PUBLIC,
+        )
     ),
 ) -> ScenarioResponse:
     scenario = await _service(db).get_scenario_if_readable(
         scenario_id=scenario_id,
         current_user=current_user,
     )
-    return _to_response(scenario)
+    can_suggest = await _suggestion_service(db).user_can_create_suggestion(
+        scenario_id=scenario_id,
+        current_user=current_user,
+    )
+    return _to_response(scenario).model_copy(
+        update={
+            "can_create_suggestion": can_suggest,
+            "my_participation_role": _my_participation_role(
+                scenario=scenario,
+                user_id=current_user.id or "",
+            ),
+        }
+    )
 
 
 @router.patch("/{scenario_id}", response_model=ScenarioResponse)
@@ -385,9 +428,9 @@ async def add_collaborator(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
-    scenario = await _service(db).add_editor(
+    scenario = await _service(db).add_collaborator(
         scenario_id=scenario_id,
-        editor_user_id=payload.user_id,
+        collaborator_user_id=payload.user_id,
         current_user=current_user,
     )
     return _to_response(scenario)
@@ -400,9 +443,9 @@ async def remove_collaborator(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
 ) -> ScenarioResponse:
-    scenario = await _service(db).remove_editor(
+    scenario = await _service(db).remove_collaborator(
         scenario_id=scenario_id,
-        editor_user_id=user_id,
+        collaborator_user_id=user_id,
         current_user=current_user,
     )
     return _to_response(scenario)

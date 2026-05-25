@@ -19,6 +19,8 @@ class Permission(StrEnum):
     SCENARIO_MARK_NOT_SUITABLE = "scenario_mark_not_suitable"
     SCENARIO_REOPEN_NOT_SUITABLE = "scenario_reopen_not_suitable"
     SCENARIO_PUBLISH = "scenario_publish"
+    SCENARIO_SUGGESTION_CREATE = "scenario_suggestion_create"
+    SCENARIO_SUGGESTION_READ = "scenario_suggestion_read"
     USER_READ_SELF = "user_read_self"
     USER_UPDATE_SELF = "user_update_self"
     USER_CHANGE_OWN_PASSWORD = "user_change_own_password"

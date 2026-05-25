@@ -60,7 +60,7 @@ def test_invalid_transition_from_published_to_draft() -> None:
     assert not is_valid_transition(ScenarioState.PUBLISHED, ScenarioState.DRAFT)
 
 
-def test_owner_or_editor_can_edit_only_draft_or_applying() -> None:
+def test_owner_or_collaborator_can_edit_only_draft_or_applying() -> None:
     assert can_edit_draft(
         collaborator_role=CollaboratorRole.OWNER,
         state=ScenarioState.DRAFT,
@@ -69,7 +69,7 @@ def test_owner_or_editor_can_edit_only_draft_or_applying() -> None:
         collaborator_role=CollaboratorRole.OWNER,
         state=ScenarioState.APPLYING_CHANGES,
     )
-    assert can_edit_draft(collaborator_role=CollaboratorRole.EDITOR, state=ScenarioState.DRAFT)
+    assert not can_edit_draft(collaborator_role=CollaboratorRole.COLLABORATOR, state=ScenarioState.DRAFT)
     assert not can_edit_draft(collaborator_role=None, state=ScenarioState.DRAFT)
     assert not can_edit_draft(
         collaborator_role=CollaboratorRole.OWNER,
@@ -79,7 +79,7 @@ def test_owner_or_editor_can_edit_only_draft_or_applying() -> None:
 
 def test_only_owner_can_edit_published_content() -> None:
     assert can_edit_published_content(collaborator_role=CollaboratorRole.OWNER)
-    assert not can_edit_published_content(collaborator_role=CollaboratorRole.EDITOR)
+    assert not can_edit_published_content(collaborator_role=CollaboratorRole.COLLABORATOR)
     assert not can_edit_published_content(collaborator_role=None)
 
 
@@ -91,7 +91,7 @@ def test_submit_approve_publish_permissions() -> None:
         scenario=draft,
     )
     assert not can_submit_for_review(
-        collaborator_role=CollaboratorRole.EDITOR,
+        collaborator_role=CollaboratorRole.COLLABORATOR,
         state=ScenarioState.DRAFT,
         scenario=draft,
     )
@@ -194,4 +194,4 @@ def test_reviewer_read_in_portfolio_states() -> None:
 
 def test_manage_collaborators_owner_only() -> None:
     assert can_manage_collaborators(collaborator_role=CollaboratorRole.OWNER)
-    assert not can_manage_collaborators(collaborator_role=CollaboratorRole.EDITOR)
+    assert not can_manage_collaborators(collaborator_role=CollaboratorRole.COLLABORATOR)

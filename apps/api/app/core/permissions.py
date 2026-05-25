@@ -5,7 +5,7 @@ from app.models.scenario import ScenarioModel
 
 ALLOWED_WORKFLOW_TRANSITIONS: dict[ScenarioState, set[ScenarioState]] = {
     ScenarioState.DRAFT: {ScenarioState.QUEUED},
-    ScenarioState.PUBLISHED: {ScenarioState.QUEUED},
+    ScenarioState.PUBLISHED: {ScenarioState.QUEUED, ScenarioState.CHANGES_REQUIRED, ScenarioState.DRAFT},
     ScenarioState.APPLYING_CHANGES: {ScenarioState.QUEUED},
     ScenarioState.QUEUED: {ScenarioState.IN_REVIEW},
     ScenarioState.IN_REVIEW: {
@@ -64,7 +64,7 @@ def can_start_applying_changes(*, collaborator_role: CollaboratorRole | None, st
 
 
 def can_edit_draft(*, collaborator_role: CollaboratorRole | None, state: ScenarioState) -> bool:
-    return collaborator_role in {CollaboratorRole.OWNER, CollaboratorRole.EDITOR} and state in {
+    return collaborator_role == CollaboratorRole.OWNER and state in {
         ScenarioState.DRAFT,
         ScenarioState.APPLYING_CHANGES,
     }

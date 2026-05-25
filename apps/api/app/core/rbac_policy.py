@@ -25,6 +25,8 @@ _INVESTIGATOR_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.SCENARIO_UPDATE_OWN,
         Permission.SCENARIO_DELETE_OWN,
         Permission.SCENARIO_SUBMIT_REVIEW,
+        Permission.SCENARIO_SUGGESTION_CREATE,
+        Permission.SCENARIO_SUGGESTION_READ,
         Permission.USER_READ_SELF,
         Permission.USER_UPDATE_SELF,
         Permission.USER_CHANGE_OWN_PASSWORD,

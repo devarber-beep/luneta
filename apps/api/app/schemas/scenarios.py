@@ -1,10 +1,16 @@
 """Scenario API schemas for vertical slice."""
 from __future__ import annotations
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 from app.domain.enums import CollaboratorRole, ScenarioState
+
+
+class ScenarioParticipationRole(StrEnum):
+    OWNER = "owner"
+    COLLABORATOR = "collaborator"
 
 
 class ScenarioSummaryResponse(BaseModel):
@@ -14,6 +20,7 @@ class ScenarioSummaryResponse(BaseModel):
     updated_at: datetime
     first_published_at: datetime | None = None
     public_path: str | None = None
+    my_participation_role: ScenarioParticipationRole
 
 
 class ScenarioCreateRequest(BaseModel):
@@ -92,6 +99,8 @@ class ScenarioResponse(BaseModel):
     updated_at: datetime
     live_public_title: str | None = None
     live_public_description: str | None = None
+    can_create_suggestion: bool = False
+    my_participation_role: ScenarioParticipationRole | None = None
 
 
 class SubmitReviewResponse(BaseModel):

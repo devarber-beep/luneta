@@ -17,3 +17,5 @@ class ScenarioRevisionModel(BaseModel):
     state_snapshot: ScenarioState
     created_by_user_id: str
     created_at: datetime
+    accepted_suggestion_id: str | None = None
+    change_summary: str | None = None

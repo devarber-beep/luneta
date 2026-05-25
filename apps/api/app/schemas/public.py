@@ -5,7 +5,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-
 class PublicScenarioListItem(BaseModel):
     id: str
     title: str
@@ -21,10 +20,26 @@ class PublicScenarioAsset(BaseModel):
     signed_url: str
 
 
+class PublicScenarioParticipant(BaseModel):
+    user_id: str
+    nickname: str
+
+
+class PublicCatalogLabel(BaseModel):
+    id: str
+    label: str
+
+
 class PublicScenarioResponse(BaseModel):
     id: str
+    author_user_id: str
+    author_nickname: str
     title: str
     description: str
+    summary: str | None = None
     published_at: datetime
+    categories: list[PublicCatalogLabel] = Field(default_factory=list)
+    ethical_risks: list[PublicCatalogLabel] = Field(default_factory=list)
     cover_image: PublicScenarioAsset | None = None
     inline_assets: list[PublicScenarioAsset] = Field(default_factory=list)
+    collaborators: list[PublicScenarioParticipant] = Field(default_factory=list)

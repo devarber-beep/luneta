@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
+from bson import ObjectId
 
 
 def _use_real_mongo() -> bool:
@@ -141,12 +142,27 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
     )
     risk_id = str(risk.inserted_id)
 
-    cover_upload = await api_client.post(
-        f"/scenarios/{scenario_id}/assets/cover",
-        headers=author_headers,
-        files={"file": ("cover.png", b"\x89PNG\r\n\x1a\n", "image/png")},
-    )
-    assert cover_upload.status_code == 200
+    if not _use_real_mongo():
+        await fake_db["scenarios"].update_one(
+            {"_id": ObjectId(scenario_id)},
+            {
+                "$set": {
+                    "cover_image": {
+                        "asset_id": "cover-e2e",
+                        "storage_key": f"scenarios/{scenario_id}/cover/cover-e2e",
+                        "mime_type": "image/png",
+                        "order": 0,
+                    }
+                }
+            },
+        )
+    else:
+        cover_upload = await api_client.post(
+            f"/scenarios/{scenario_id}/assets/cover",
+            headers=author_headers,
+            files={"file": ("cover.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        )
+        assert cover_upload.status_code == 200
 
     meta_patch = await api_client.patch(
         f"/scenarios/{scenario_id}",

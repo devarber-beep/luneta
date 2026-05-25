@@ -28,6 +28,8 @@ class ScenarioRevisionsRepository:
         description: str,
         state_snapshot: ScenarioState,
         created_by_user_id: str,
+        accepted_suggestion_id: str | None = None,
+        change_summary: str | None = None,
     ) -> ScenarioRevisionModel:
         doc = {
             "scenario_id": scenario_id,
@@ -37,6 +39,8 @@ class ScenarioRevisionsRepository:
             "state_snapshot": state_snapshot.value,
             "created_by_user_id": created_by_user_id,
             "created_at": datetime.now(UTC),
+            "accepted_suggestion_id": accepted_suggestion_id,
+            "change_summary": change_summary,
         }
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)

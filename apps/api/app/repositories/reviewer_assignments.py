@@ -63,6 +63,15 @@ class ReviewerAssignmentsRepository:
                 ids.append(inv)
         return ids
 
+    async def list_reviewer_ids_for_investigator(self, investigator_user_id: str) -> list[str]:
+        cursor = self._collection.find({"investigator_user_id": investigator_user_id}, {"reviewer_user_id": 1})
+        ids: list[str] = []
+        async for doc in cursor:
+            rev = doc.get("reviewer_user_id")
+            if isinstance(rev, str):
+                ids.append(rev)
+        return ids
+
     async def is_assigned(self, *, reviewer_user_id: str, investigator_user_id: str) -> bool:
         doc = await self._collection.find_one(
             {

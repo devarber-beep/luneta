@@ -177,6 +177,9 @@ class _FakeUsersRepo:
     async def get_by_id(self, user_id: str) -> UserModel | None:
         return self.users.get(user_id)
 
+    async def get_by_ids(self, user_ids: list[str]) -> dict[str, UserModel]:
+        return {uid: u for uid, u in self.users.items() if uid in user_ids}
+
     async def list_verified_emails_by_role(self, role: str) -> list[str]:
         return await self.list_verified_emails_by_roles([role])
 
@@ -229,6 +232,13 @@ class _FakeAssignmentsRepo:
 
     async def list_investigator_ids_for_reviewer(self, reviewer_user_id: str) -> list[str]:
         return list(self._mapping.get(reviewer_user_id, []))
+
+    async def list_reviewer_ids_for_investigator(self, investigator_user_id: str) -> list[str]:
+        return [
+            reviewer_id
+            for reviewer_id, investigator_ids in self._mapping.items()
+            if investigator_user_id in investigator_ids
+        ]
 
 
 class _FakeClassificationRepo:

@@ -97,6 +97,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         if scenario_id_strs:
             db.review_events.delete_many({"scenario_id": {"$in": scenario_id_strs}})
             db.scenario_revisions.delete_many({"scenario_id": {"$in": scenario_id_strs}})
+            db.suggestions.delete_many({"scenario_id": {"$in": scenario_id_strs}})
         db.scenarios.delete_many({"author_user_id": {"$in": user_id_strs}})
     db.users.delete_many({"email_normalized": {"$in": normalized}})
     for email in _INTEGRATION_TEST_EMAILS:

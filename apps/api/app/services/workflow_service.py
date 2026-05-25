@@ -19,6 +19,7 @@ from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
 from app.repositories.scenarios import ScenariosRepository
+from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.users import UsersRepository
 from app.schemas.workflow import ReviewQueueItem, ReviewedScenarioItem
 from app.services.mailer_service import MailerService, NoopMailer
@@ -33,12 +34,14 @@ class WorkflowService:
         review_events_repo: ReviewEventsRepository,
         users_repo: UsersRepository,
         assignments_repo: ReviewerAssignmentsRepository,
+        suggestions_repo: SuggestionsRepository | None = None,
         mailer: MailerService | NoopMailer | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._review_events_repo = review_events_repo
         self._users_repo = users_repo
         self._assignments_repo = assignments_repo
+        self._suggestions_repo = suggestions_repo
         self._mailer = mailer if mailer is not None else MailerService()
 
     async def review_queue(
@@ -237,6 +240,15 @@ class WorkflowService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot publish this scenario")
         if not is_valid_transition(scenario.state, ScenarioState.PUBLISHED):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        if self._suggestions_repo is not None:
+            pending = await self._suggestions_repo.count_pending_reviewer_suggestions(
+                scenario_id=scenario_id
+            )
+            if pending > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Resolve pending reviewer suggestions before publishing",
+                )
         updated = await self._scenarios_repo.set_state(
             scenario_id=scenario_id,
             state=ScenarioState.PUBLISHED,

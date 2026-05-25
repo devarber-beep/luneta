@@ -16,6 +16,23 @@ class ReviewEventsRepository:
 
     async def ensure_indexes(self) -> None:
         await self._collection.create_index([("scenario_id", 1), ("created_at", -1)])
+        await self._collection.create_index([("scenario_id", 1), ("actor_user_id", 1), ("event_type", 1)])
+
+    async def actor_has_reviewed_scenario(self, *, scenario_id: str, actor_user_id: str) -> bool:
+        """True if this user completed a substantive review action on the scenario."""
+        substantive = [
+            ReviewEventType.PUBLISHED.value,
+            ReviewEventType.CHANGES_REQUESTED.value,
+            ReviewEventType.MARKED_NOT_SUITABLE.value,
+        ]
+        doc = await self._collection.find_one(
+            {
+                "scenario_id": scenario_id,
+                "actor_user_id": actor_user_id,
+                "event_type": {"$in": substantive},
+            }
+        )
+        return doc is not None
 
     async def create(
         self,

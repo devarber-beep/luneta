@@ -32,7 +32,23 @@ class ReviewOutcome(StrEnum):
 
 class CollaboratorRole(StrEnum):
     OWNER = "owner"
-    EDITOR = "editor"
+    COLLABORATOR = "collaborator"
+
+
+class SuggestionScope(StrEnum):
+    SCENARIO = "scenario"
+    PARAGRAPH = "paragraph"
+
+
+class SuggestionKind(StrEnum):
+    COMMENT = "comment"
+    ALTERNATIVE_TEXT = "alternative_text"
+
+
+class SuggestionStatus(StrEnum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class ReviewEventType(StrEnum):
@@ -48,6 +64,7 @@ class ReviewEventType(StrEnum):
     PUBLISHED = "published"
     COLLABORATOR_ADDED = "collaborator_added"
     COLLABORATOR_REMOVED = "collaborator_removed"
+    SUGGESTION_ACCEPTED = "suggestion_accepted"
 
 
 class AuditSubjectType(StrEnum):
@@ -66,3 +83,6 @@ class AuditActionType(StrEnum):
     REVIEWER_ASSIGNMENT_CREATED = "reviewer_assignment_created"
     REVIEWER_ASSIGNMENT_REMOVED = "reviewer_assignment_removed"
     EVALUATION_MODERATED = "evaluation_moderated"
+    SUGGESTION_CREATED = "suggestion_created"
+    SUGGESTION_ACCEPTED = "suggestion_accepted"
+    SUGGESTION_REJECTED = "suggestion_rejected"

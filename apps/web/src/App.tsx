@@ -3,16 +3,20 @@ import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams 
 import {
   changeMyPassword,
   deleteScenario,
+  getScenario,
   listMyScenarios,
   listPublicScenarios,
   login,
   me,
   patchMyProfile,
+  listScenarioSuggestions,
   publicScenario,
   signup,
+  type SuggestionItem,
   verifyEmail,
 } from "./api";
 import { clearSession, getRole, getToken, setRole, setToken } from "./session";
+import { DescriptionWithSuggestions } from "./components/DescriptionWithSuggestions";
 import { ReviewQueuePage } from "./pages/ReviewQueuePage";
 import { ScenarioEditorPage } from "./pages/ScenarioEditorPage";
 import { AdminCatalogPage } from "./pages/AdminCatalogPage";
@@ -275,7 +279,6 @@ function MyProfilePage() {
   return (
     <main style={layoutStyle}>
       <h2>My profile</h2>
-      <p>Update your display name and password. Email cannot be changed here.</p>
 
       <section style={{ marginBottom: "1.5rem", padding: "0.75rem", background: "#f8f8f8", borderRadius: "6px" }}>
         <h3 style={{ marginTop: 0 }}>Account</h3>
@@ -295,9 +298,6 @@ function MyProfilePage() {
         </p>
         <p style={{ margin: "0.25rem 0" }}>
           <strong>Avatar (storage):</strong> {avatarInfo ?? "None"}
-        </p>
-        <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem", color: "#555" }}>
-          Profile image upload is not wired in this UI yet; only metadata from the API is shown.
         </p>
       </section>
 
@@ -374,7 +374,14 @@ function MyProfilePage() {
 
 function MyScenariosPage() {
   const [items, setItems] = useState<
-    Array<{ id: string; slug: string; title: string; state: string; first_published_at?: string | null }>
+    Array<{
+      id: string;
+      title: string;
+      state: string;
+      first_published_at?: string | null;
+      public_path?: string | null;
+      my_participation_role: "owner" | "collaborator";
+    }>
   >([]);
   const [message, setMessage] = useState("");
 
@@ -415,7 +422,6 @@ function MyScenariosPage() {
   return (
     <main style={layoutStyle}>
       <h2>My scenarios</h2>
-      <p>Investigator or collaborator (owner/editor). Draft and published scenarios open by id.</p>
       <p>
         <Link to="/my-profile">My profile</Link>
       </p>
@@ -426,8 +432,15 @@ function MyScenariosPage() {
         {items.map((s) => (
           <li key={s.id} style={{ marginBottom: "0.5rem" }}>
             <strong>{s.title}</strong> — {s.state}{" "}
-            <Link to={`/scenarios/${s.id}/edit`}>Edit / workflow</Link>
-            {s.state === "draft" ? (
+            <span style={{ color: "#666", fontSize: "0.9rem" }}>
+              ({s.my_participation_role === "owner" ? "Owner" : "Collaborator"})
+            </span>{" "}
+            {s.my_participation_role === "owner" ? (
+              <Link to={`/scenarios/${s.id}/edit`}>Edit / workflow</Link>
+            ) : (
+              <Link to={`/scenarios/${s.id}/view`}>View</Link>
+            )}
+            {s.my_participation_role === "owner" && s.state === "draft" ? (
               <>
                 {" "}
                 <button type="button" onClick={() => onDeleteDraft(s.id, s.title)}>
@@ -453,22 +466,62 @@ function MyScenariosPage() {
 
 function PublicScenarioPage() {
   const { slug } = useParams();
+  const [scenarioId, setScenarioId] = useState("");
+  const [authorUserId, setAuthorUserId] = useState("");
+  const [authorNickname, setAuthorNickname] = useState("");
+  const [collaborators, setCollaborators] = useState<Array<{ user_id: string; nickname: string }>>([]);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [summary, setSummary] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
+  const [ethicalRisks, setEthicalRisks] = useState<Array<{ id: string; label: string }>>([]);
+  const [publicCanSuggest, setPublicCanSuggest] = useState(false);
   const [publishedAt, setPublishedAt] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverAlt, setCoverAlt] = useState<string>("cover image");
   const [inlineImages, setInlineImages] = useState<Array<{ url: string; alt: string }>>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [canViewSuggestions, setCanViewSuggestions] = useState(false);
   const [message, setMessage] = useState("");
+
+  const loadSuggestions = async (sid: string) => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const list = await listScenarioSuggestions(token, sid);
+      setSuggestions(list.items);
+      setCanViewSuggestions(true);
+    } catch {
+      setSuggestions([]);
+      setCanViewSuggestions(false);
+    }
+  };
+
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      me(token)
+        .then((profile) => setMyUserId(profile.user_id))
+        .catch(() => setMyUserId(null));
+    }
+  }, []);
 
   useEffect(() => {
     if (!slug) {
       return;
     }
     publicScenario(slug)
-      .then((data) => {
+      .then(async (data) => {
+        setScenarioId(data.id);
+        setAuthorUserId(data.author_user_id);
+        setAuthorNickname(data.author_nickname);
+        setCollaborators(data.collaborators ?? []);
         setTitle(data.title);
         setDescription(data.description);
+        setSummary(data.summary ?? null);
+        setCategories(data.categories ?? []);
+        setEthicalRisks(data.ethical_risks ?? []);
         setPublishedAt(data.published_at);
         setCoverUrl(data.cover_image?.signed_url ?? null);
         setCoverAlt(data.cover_image?.alt_text ?? "cover image");
@@ -478,6 +531,16 @@ function PublicScenarioPage() {
             .sort((a, b) => a.order - b.order)
             .map((x) => ({ url: x.signed_url, alt: x.alt_text ?? "scenario image" })),
         );
+        const token = getToken();
+        if (token && data.id) {
+          try {
+            const detail = await getScenario(token, data.id);
+            setPublicCanSuggest(Boolean(detail.can_create_suggestion));
+          } catch {
+            setPublicCanSuggest(false);
+          }
+          await loadSuggestions(data.id);
+        }
       })
       .catch((error: Error) => setMessage(error.message));
   }, [slug]);
@@ -486,6 +549,36 @@ function PublicScenarioPage() {
     <main style={layoutStyle}>
       <h2>Public View</h2>
       {publishedAt ? <p style={{ color: "#666" }}>Published: {new Date(publishedAt).toLocaleString()}</p> : null}
+      <section style={{ marginBottom: "1rem", fontSize: "0.95rem", color: "#444" }}>
+        <p style={{ margin: "0.25rem 0" }}>
+          <strong>Owner:</strong> {authorNickname || authorUserId}
+        </p>
+        {collaborators.length > 0 ? (
+          <div style={{ marginTop: "0.35rem" }}>
+            <strong>Collaborators:</strong>
+            <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+              {collaborators.map((c) => (
+                <li key={c.user_id}>{c.nickname}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {summary ? (
+          <p style={{ margin: "0.75rem 0 0" }}>
+            <strong>Summary:</strong> {summary}
+          </p>
+        ) : null}
+        {categories.length > 0 ? (
+          <p style={{ margin: "0.5rem 0 0" }}>
+            <strong>Categories:</strong> {categories.map((c) => c.label).join(", ")}
+          </p>
+        ) : null}
+        {ethicalRisks.length > 0 ? (
+          <p style={{ margin: "0.5rem 0 0" }}>
+            <strong>Ethical risks:</strong> {ethicalRisks.map((r) => r.label).join(", ")}
+          </p>
+        ) : null}
+      </section>
       {coverUrl ? (
         <div style={{ margin: "0.75rem 0 1rem" }}>
           <img
@@ -502,9 +595,31 @@ function PublicScenarioPage() {
         </div>
       ) : null}
       <h3>{title}</h3>
-      <pre style={{ whiteSpace: "pre-wrap", marginBottom: inlineImages.length ? "1rem" : 0 }}>{description}</pre>
+      <div style={{ marginBottom: inlineImages.length ? "1rem" : 0 }}>
+        {scenarioId &&
+        getToken() &&
+        myUserId &&
+        authorUserId &&
+        myUserId !== authorUserId &&
+        (publicCanSuggest || canViewSuggestions) ? (
+          <DescriptionWithSuggestions
+            scenarioId={scenarioId}
+            description={description}
+            suggestions={suggestions}
+            canSuggest={publicCanSuggest}
+            canViewSuggestions={canViewSuggestions}
+            canResolve={false}
+            onSuggestionSubmitted={async () => {
+              setMessage("Suggestion submitted.");
+              await loadSuggestions(scenarioId);
+            }}
+          />
+        ) : (
+          <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{description}</pre>
+        )}
+      </div>
       {inlineImages.length ? (
-        <section style={{ display: "grid", gap: "0.75rem" }}>
+        <section style={{ display: "grid", gap: "0.75rem", marginBottom: "1rem" }}>
           {inlineImages.map((img) => (
             <img
               key={img.url}
@@ -573,6 +688,14 @@ export function App() {
           element={
             <RequireAuth>
               <ScenarioEditorPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/scenarios/:id/view"
+          element={
+            <RequireAuth>
+              <ScenarioEditorPage viewOnly />
             </RequireAuth>
           }
         />

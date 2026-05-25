@@ -78,6 +78,24 @@ class NoopMailer:
     ) -> None:
         return None
 
+    async def send_suggestion_created_to_owner(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        scenario_id: str,
+    ) -> None:
+        return None
+
+    async def send_suggestion_resolved_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        outcome: str,
+    ) -> None:
+        return None
+
 
 class MailerService:
     def __init__(self) -> None:
@@ -214,5 +232,36 @@ class MailerService:
             f"Your temporary password (you must change it after first successful sign-in): {temporary_password}\n\n"
             f"Verify your email before signing in:\n{link}\n\n"
             "If you did not expect this message, contact your administrator.\n"
+        )
+        await self._send(to_email=to_email, subject=subject, body=body)
+
+    async def send_suggestion_created_to_owner(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        scenario_id: str,
+    ) -> None:
+        base = self._s.web_url.rstrip("/")
+        edit_url = f"{base}/scenarios/{scenario_id}/edit"
+        subject = f"New change suggestion: {scenario_title}"
+        body = (
+            f"Someone submitted a change suggestion on your scenario.\n\n"
+            f"Title: {scenario_title}\n"
+            f"Review suggestions: {edit_url}\n"
+        )
+        await self._send(to_email=to_email, subject=subject, body=body)
+
+    async def send_suggestion_resolved_to_author(
+        self,
+        *,
+        to_email: str,
+        scenario_title: str,
+        outcome: str,
+    ) -> None:
+        subject = f"Your suggestion was {outcome}: {scenario_title}"
+        body = (
+            f"The scenario owner {outcome} your change suggestion.\n\n"
+            f"Scenario: {scenario_title}\n"
         )
         await self._send(to_email=to_email, subject=subject, body=body)

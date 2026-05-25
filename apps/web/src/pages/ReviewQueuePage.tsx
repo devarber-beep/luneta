@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   markNotSuitableScenario,
   publishScenario,
@@ -26,6 +26,7 @@ type QueueItem = {
 };
 
 export function ReviewQueuePage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<"pending" | "reviewed">("pending");
   const [pending, setPending] = useState<QueueItem[]>([]);
   const [reviewed, setReviewed] = useState<
@@ -103,15 +104,21 @@ export function ReviewQueuePage() {
                 </div>
               ) : null}
               <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <Link to={`/scenarios/${item.scenario_id}/edit`}>Open</Link>
                 {item.state === "queued" ? (
                   <button
                     type="button"
-                    onClick={() => run(() => startReviewScenario(token, item.scenario_id), "Review started.")}
+                    onClick={() =>
+                      run(async () => {
+                        await startReviewScenario(token, item.scenario_id);
+                        navigate(`/scenarios/${item.scenario_id}/edit`);
+                      }, "Review started.")
+                    }
                   >
                     Start review
                   </button>
-                ) : null}
+                ) : (
+                  <Link to={`/scenarios/${item.scenario_id}/edit`}>Open for review</Link>
+                )}
                 {item.state === "in_review" ? (
                   <>
                     <button

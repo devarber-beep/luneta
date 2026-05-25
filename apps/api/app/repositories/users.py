@@ -57,14 +57,15 @@ class UsersRepository:
         doc["_id"] = str(result.inserted_id)
         return UserModel.model_validate(doc)
 
-    async def create_admin_account(
+    async def create_bootstrap_account(
         self,
         *,
         email: str,
         password_hash: str,
         nickname: str,
+        role: UserRole,
     ) -> UserModel:
-        """Bootstrap first admin (verified, active, no mandatory password change)."""
+        """Bootstrap dev/local user: verified, active, no mandatory password change."""
         now = datetime.now(UTC)
         email_normalized = email.strip().lower()
         nickname_normalized = nickname.strip().lower()
@@ -72,7 +73,7 @@ class UsersRepository:
             "email_normalized": email_normalized,
             "password_hash": password_hash,
             "password_updated_at": now,
-            "role": UserRole.ADMIN.value,
+            "role": role.value,
             "account_status": UserAccountStatus.ACTIVE.value,
             "email_verified_at": now,
             "nickname": nickname.strip(),
@@ -90,6 +91,21 @@ class UsersRepository:
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return UserModel.model_validate(doc)
+
+    async def create_admin_account(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        nickname: str,
+    ) -> UserModel:
+        """Bootstrap first admin (verified, active, no mandatory password change)."""
+        return await self.create_bootstrap_account(
+            email=email,
+            password_hash=password_hash,
+            nickname=nickname,
+            role=UserRole.ADMIN,
+        )
 
     async def get_by_email(self, email: str) -> UserModel | None:
         normalized = email.strip().lower()

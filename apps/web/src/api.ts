@@ -89,6 +89,8 @@ export type ScenarioResponse = {
   updated_at: string;
   live_public_title?: string | null;
   live_public_description?: string | null;
+  can_create_suggestion?: boolean;
+  my_participation_role?: "owner" | "collaborator" | null;
   cover_image?: ScenarioAsset | null;
   inline_assets?: ScenarioAsset[];
 };
@@ -388,13 +390,24 @@ export async function listPublicScenarios(): Promise<PublicScenarioListItem[]> {
   return request("/public/scenarios");
 }
 
+export type PublicScenarioParticipant = {
+  user_id: string;
+  nickname: string;
+};
+
 export async function publicScenario(slug: string): Promise<{
   id: string;
+  author_user_id: string;
+  author_nickname: string;
   title: string;
   description: string;
   published_at: string;
   cover_image?: ScenarioAssetWithUrl | null;
   inline_assets?: ScenarioAssetWithUrl[];
+  collaborators: PublicScenarioParticipant[];
+  summary?: string | null;
+  categories?: Array<{ id: string; label: string }>;
+  ethical_risks?: Array<{ id: string; label: string }>;
 }> {
   return request(`/public/scenarios/${slug}`);
 }
@@ -414,6 +427,7 @@ export type ScenarioSummary = {
   updated_at: string;
   first_published_at?: string | null;
   public_path?: string | null;
+  my_participation_role: "owner" | "collaborator";
 };
 
 export async function listMyScenarios(token: string): Promise<ScenarioSummary[]> {
@@ -500,3 +514,91 @@ export async function getScenarioAssetReadUrl(
   });
 }
 
+export type SuggestionItem = {
+  id: string;
+  scenario_id: string;
+  author_user_id: string;
+  author_role: string;
+  scope: "scenario" | "paragraph";
+  kind: "comment" | "alternative_text";
+  paragraph_index: number | null;
+  body: string;
+  status: "pending" | "accepted" | "rejected";
+  scenario_state_at_creation: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string | null;
+  resolved_by_user_id?: string | null;
+  applied_at?: string | null;
+};
+
+export async function getScenarioReviewFeedbackStatus(
+  token: string,
+  scenarioId: string,
+): Promise<{ has_submitted_feedback: boolean }> {
+  return request(`/scenarios/${scenarioId}/suggestions/review-feedback`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listScenarioSuggestions(token: string, scenarioId: string): Promise<{ items: SuggestionItem[] }> {
+  return request(`/scenarios/${scenarioId}/suggestions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function listScenarioParagraphs(token: string, scenarioId: string): Promise<{ paragraphs: string[] }> {
+  return request(`/scenarios/${scenarioId}/suggestions/paragraphs`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function createScenarioSuggestion(
+  token: string,
+  scenarioId: string,
+  payload: {
+    scope: "scenario" | "paragraph";
+    kind: "comment" | "alternative_text";
+    paragraph_index?: number | null;
+    body: string;
+  },
+): Promise<SuggestionItem> {
+  return request(`/scenarios/${scenarioId}/suggestions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function acceptScenarioSuggestion(
+  token: string,
+  scenarioId: string,
+  suggestionId: string,
+): Promise<{ suggestion: SuggestionItem; scenario: ScenarioResponse }> {
+  return request(`/scenarios/${scenarioId}/suggestions/${suggestionId}/accept`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function rejectScenarioSuggestion(
+  token: string,
+  scenarioId: string,
+  suggestionId: string,
+): Promise<SuggestionItem> {
+  return request(`/scenarios/${scenarioId}/suggestions/${suggestionId}/reject`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function applyAcceptedSuggestionText(
+  token: string,
+  scenarioId: string,
+  suggestionId: string,
+): Promise<{ suggestion: SuggestionItem; scenario: ScenarioResponse }> {
+  return request(`/scenarios/${scenarioId}/suggestions/${suggestionId}/apply-text`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

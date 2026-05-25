@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createScenario,
@@ -7,14 +7,21 @@ import {
   deleteScenarioInlineAsset,
   getScenario,
   getScenarioAssetReadUrl,
+  getScenarioReviewFeedbackStatus,
+  listScenarioSuggestions,
+  me,
   patchScenario,
   reorderScenarioInlineAssets,
-  startApplyingChanges,
   submitReview,
   uploadScenarioCover,
   uploadScenarioInline,
+  publishScenario,
+  requestChangesScenario,
+  markNotSuitableScenario,
+  type SuggestionItem,
 } from "../api";
 import { fetchActiveCategories, fetchActiveEthicalRisks } from "../adminApi";
+import { DescriptionWithSuggestions } from "../components/DescriptionWithSuggestions";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "860px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -26,7 +33,32 @@ const sectionStyle = {
   background: "#fafafa",
 };
 
-export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean }) {
+const primaryReviewBtnStyle: CSSProperties = {
+  background: "#1a73e8",
+  color: "#fff",
+  border: "none",
+  borderRadius: "6px",
+  padding: "0.45rem 0.9rem",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const secondaryReviewBtnStyle: CSSProperties = {
+  background: "#fff",
+  color: "#5f6368",
+  border: "1px solid #dadce0",
+  borderRadius: "6px",
+  padding: "0.45rem 0.9rem",
+  cursor: "pointer",
+};
+
+export function ScenarioEditorPage({
+  isCreate = false,
+  viewOnly = false,
+}: {
+  isCreate?: boolean;
+  viewOnly?: boolean;
+}) {
   const navigate = useNavigate();
   const params = useParams();
   const routeId = isCreate ? "" : (params.id ?? "");
@@ -40,24 +72,52 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
   const [ethicalOptions, setEthicalOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [state, setState] = useState(isCreate ? "draft" : "");
   const [reviewFeedbackNote, setReviewFeedbackNote] = useState<string | null>(null);
-  const [livePublicTitle, setLivePublicTitle] = useState<string | null>(null);
-  const [livePublicDescription, setLivePublicDescription] = useState<string | null>(null);
   const [coverAsset, setCoverAsset] = useState<{ asset_id: string; alt_text?: string | null } | null>(null);
   const [inlineAssets, setInlineAssets] = useState<Array<{ asset_id: string; order: number; alt_text?: string | null }>>([]);
   const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
   const [assetPreviewCache, setAssetPreviewCache] = useState<Record<string, { url: string; expiresAtMs: number }>>({});
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [inlineFile, setInlineFile] = useState<File | null>(null);
+  const [authorUserId, setAuthorUserId] = useState("");
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [reviewerHasFeedback, setReviewerHasFeedback] = useState(false);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const reviewerInReview = (getRole() === "reviewer" || getRole() === "admin") && state === "in_review";
-  const locked =
-    state === "not_suitable" ||
-    state === "changes_required" ||
-    ((state === "queued" || state === "in_review") && !reviewerInReview);
-  const canSubmitReview = state === "draft" || state === "published" || state === "applying_changes";
+  const role = getRole();
+  const isOwner = Boolean(myUserId && authorUserId && myUserId === authorUserId);
+  const isAdmin = role === "admin";
+  const [canViewSuggestions, setCanViewSuggestions] = useState(false);
+  const [apiCanSuggest, setApiCanSuggest] = useState(false);
+  const [myParticipationRole, setMyParticipationRole] = useState<"owner" | "collaborator" | null>(null);
 
+  const isCollaborator = viewOnly || myParticipationRole === "collaborator";
+
+  const reviewerInReview =
+    (role === "reviewer" || role === "admin") && state === "in_review" && !isOwner;
+  const locked =
+    isCollaborator ||
+    state === "not_suitable" ||
+    (isOwner && state === "changes_required") ||
+    ((state === "queued" || state === "in_review") && !reviewerInReview);
+  const ownerCanEditDescription = isOwner && !locked && !isCollaborator;
+  const canApplySuggestionText =
+    ownerCanEditDescription && (state === "applying_changes" || state === "draft");
+  const canSuggest =
+    !isOwner &&
+    (apiCanSuggest ||
+      (role === "investigator" && state === "published") ||
+      ((role === "reviewer" || role === "admin") &&
+        (state === "in_review" || state === "queued")));
+  const effectiveCanSuggest = canSuggest;
+  const useParagraphSuggestionUi = Boolean(
+    scenarioId && !isCreate && !ownerCanEditDescription && (effectiveCanSuggest || canViewSuggestions),
+  );
+  const canSubmitReview =
+    !isCollaborator &&
+    isOwner &&
+    (state === "draft" || state === "published" || state === "applying_changes");
   const loadAssetPreviews = async (sid: string, coverAssetId: string | null, inlineAssetIds: string[]) => {
     const token = getToken();
     if (!token || !sid) {
@@ -107,9 +167,10 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
     setCategoryIds(scenario.category_ids ?? []);
     setEthicalRiskIds(scenario.ethical_risk_ids ?? []);
     setReviewFeedbackNote(scenario.review_feedback_note ?? null);
+    setAuthorUserId(scenario.author_user_id);
     setState(scenario.state);
-    setLivePublicTitle(scenario.live_public_title ?? null);
-    setLivePublicDescription(scenario.live_public_description ?? null);
+    setApiCanSuggest(scenario.can_create_suggestion ?? false);
+    setMyParticipationRole(scenario.my_participation_role ?? null);
     setCoverAsset(
       scenario.cover_image
         ? { asset_id: scenario.cover_image.asset_id, alt_text: scenario.cover_image.alt_text }
@@ -127,9 +188,70 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
     );
   };
 
+  const loadReviewFeedback = async (sid: string) => {
+    const token = getToken();
+    if (!token || !reviewerInReview) {
+      setReviewerHasFeedback(false);
+      return;
+    }
+    try {
+      const status = await getScenarioReviewFeedbackStatus(token, sid);
+      setReviewerHasFeedback(status.has_submitted_feedback);
+    } catch {
+      setReviewerHasFeedback(false);
+    }
+  };
+
+  const loadSuggestions = async (sid: string) => {
+    const token = getToken();
+    if (!token) {
+      setSuggestions([]);
+      setCanViewSuggestions(false);
+      return;
+    }
+    if (!isOwner && !isAdmin && !canSuggest && !isCollaborator) {
+      setSuggestions([]);
+      setCanViewSuggestions(false);
+      return;
+    }
+    try {
+      const list = await listScenarioSuggestions(token, sid);
+      setSuggestions(list.items);
+      setCanViewSuggestions(true);
+    } catch {
+      setSuggestions([]);
+      setCanViewSuggestions(isOwner || isAdmin || isCollaborator);
+    }
+  };
+
+  useEffect(() => {
+    setCanViewSuggestions(isOwner || isAdmin || isCollaborator);
+  }, [isOwner, isAdmin, isCollaborator]);
+
+  useEffect(() => {
+    if (scenarioId && !isCreate && (isOwner || isAdmin || canSuggest || isCollaborator)) {
+      loadSuggestions(scenarioId).catch(() => undefined);
+    } else {
+      setSuggestions([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId, isOwner, isAdmin, canSuggest, isCollaborator, state]);
+
+  useEffect(() => {
+    if (scenarioId && reviewerInReview) {
+      loadReviewFeedback(scenarioId).catch(() => undefined);
+    } else {
+      setReviewerHasFeedback(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenarioId, reviewerInReview, state]);
+
   useEffect(() => {
     const token = getToken();
     if (!token) return;
+    me(token)
+      .then((profile) => setMyUserId(profile.user_id))
+      .catch(() => setMyUserId(null));
     fetchActiveCategories(token)
       .then((c) => setCatalogCategories(c.items))
       .catch((e: Error) => setMessage(e.message));
@@ -210,20 +332,6 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
       setMessage((error as Error).message);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const onStartApplying = async () => {
-    const token = getToken();
-    const id = scenarioId || (await persistDraft());
-    if (!token || !id) return;
-    try {
-      const updated = await startApplyingChanges(token, id);
-      setState(updated.state);
-      setReviewFeedbackNote(null);
-      setMessage("You can now edit and resubmit.");
-    } catch (error) {
-      setMessage((error as Error).message);
     }
   };
 
@@ -326,52 +434,112 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
 
   return (
     <main style={layoutStyle}>
-      <h2>{isCreate ? "New scenario" : "Edit scenario"}</h2>
+      <h2>{isCreate ? "New scenario" : isCollaborator ? "View scenario" : "Edit scenario"}</h2>
       {!isCreate ? <p>State: {state}</p> : null}
 
-      {state === "published" ? (
-        <p style={{ color: "#444", fontSize: "0.95rem" }}>
-          You can edit the working copy here. The public page shows the last published version until a reviewer
-          publishes your changes again.
-        </p>
-      ) : null}
-
-      {state === "changes_required" ? (
+      {isOwner && state === "changes_required" && reviewFeedbackNote ? (
         <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#fff8e6", borderRadius: "6px" }}>
-          <strong>Reviewer requested changes</strong>
-          {reviewFeedbackNote ? (
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem", fontSize: "0.9rem" }}>{reviewFeedbackNote}</pre>
-          ) : null}
-          <p style={{ marginTop: "0.5rem", fontSize: "0.9rem" }}>
-            Click &quot;Start applying changes&quot; to unlock editing, then save and submit again.
-          </p>
+          <strong>Reviewer feedback</strong>
+          <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem", fontSize: "0.9rem" }}>{reviewFeedbackNote}</pre>
         </section>
-      ) : null}
-
-      {state === "not_suitable" ? (
-        <p style={{ color: "#a00" }}>This scenario is not suitable for publication. Contact an admin to reopen it.</p>
-      ) : null}
-
-      {locked ? (
-        <p style={{ color: "#666" }}>
-          Content is locked while the scenario waits for review (unless you are the reviewer in active review).
-        </p>
       ) : null}
 
       {reviewerInReview ? (
-        <p style={{ color: "#444", fontSize: "0.95rem" }}>Reviewer: you may edit this scenario while it is in review.</p>
-      ) : null}
-
-      {livePublicTitle ? (
-        <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#f5f5f5", borderRadius: "6px" }}>
-          <strong>Current live public version</strong>
-          <p style={{ margin: "0.35rem 0 0" }}>{livePublicTitle}</p>
-          {livePublicDescription ? (
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem", fontSize: "0.9rem" }}>{livePublicDescription}</pre>
-          ) : null}
+        <section
+          style={{
+            marginBottom: "1rem",
+            padding: "1rem 1.1rem",
+            background: "linear-gradient(180deg, #f0f6ff 0%, #e8f0fe 100%)",
+            borderRadius: "10px",
+            border: "1px solid #b8d4f5",
+            boxShadow: "0 1px 2px rgba(26, 115, 232, 0.08)",
+          }}
+        >
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            {reviewerHasFeedback ? (
+              <button
+                type="button"
+                style={primaryReviewBtnStyle}
+                onClick={() => {
+                  const token = getToken();
+                  if (!token || !scenarioId) return;
+                  requestChangesScenario(
+                    token,
+                    scenarioId,
+                    "Please address the reviewer's suggestions on this scenario.",
+                  )
+                    .then(async () => {
+                      setMessage("Sent to changes required. The author can see your suggestions.");
+                      await load(scenarioId);
+                    })
+                    .catch((e: Error) => setMessage(e.message));
+                }}
+              >
+                Send to changes required
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  style={primaryReviewBtnStyle}
+                  onClick={async () => {
+                    const token = getToken();
+                    if (!token || !scenarioId) return;
+                    try {
+                      await publishScenario(token, scenarioId);
+                      setMessage("Published.");
+                      await load(scenarioId);
+                    } catch (e) {
+                      setMessage((e as Error).message);
+                    }
+                  }}
+                >
+                  Publish
+                </button>
+                <button
+                  type="button"
+                  style={secondaryReviewBtnStyle}
+                  onClick={() => {
+                    const token = getToken();
+                    if (!token || !scenarioId) return;
+                    const reason = window.prompt("Reason (optional):");
+                    markNotSuitableScenario(token, scenarioId, reason ?? undefined)
+                      .then(async () => {
+                        setMessage("Marked not suitable.");
+                        await load(scenarioId);
+                      })
+                      .catch((e: Error) => setMessage(e.message));
+                  }}
+                >
+                  Mark not suitable
+                </button>
+              </>
+            )}
+            <Link to="/review" style={{ marginLeft: "0.25rem", fontSize: "0.9rem" }}>
+              Back to queue
+            </Link>
+          </div>
         </section>
       ) : null}
 
+      {isCollaborator && useParagraphSuggestionUi ? (
+        <section style={sectionStyle}>
+          <h3 style={{ marginTop: 0 }}>{title}</h3>
+          <DescriptionWithSuggestions
+            scenarioId={scenarioId}
+            description={description}
+            suggestions={suggestions}
+            canSuggest={false}
+            canViewSuggestions={canViewSuggestions}
+            canResolve={false}
+            onSuggestionSubmitted={async () => {
+              if (scenarioId) await loadSuggestions(scenarioId);
+            }}
+          />
+        </section>
+      ) : null}
+
+      {!isCollaborator ? (
       <form onSubmit={onSave} style={{ display: "grid", gap: "1rem" }}>
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Basics</h3>
@@ -379,21 +547,76 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
             <span>Title</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={locked} required minLength={3} />
           </label>
-          <label style={{ display: "grid", gap: "0.25rem", marginTop: "0.75rem" }}>
+          <div style={{ display: "grid", gap: "0.25rem", marginTop: "0.75rem" }}>
             <span>Description</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={5}
-              disabled={locked}
-              required
-            />
-          </label>
+            {ownerCanEditDescription ? (
+              <DescriptionWithSuggestions
+                scenarioId={scenarioId}
+                description={description}
+                suggestions={suggestions}
+                canSuggest={false}
+                canViewSuggestions={canViewSuggestions}
+                canResolve={isOwner}
+                canEditDescription
+                onDescriptionChange={setDescription}
+                canApplyAcceptedText={canApplySuggestionText}
+                onScenarioUpdated={async () => {
+                  if (!scenarioId) return;
+                  const token = getToken();
+                  if (!token) return;
+                  const scenario = await getScenario(token, scenarioId);
+                  setDescription(scenario.description ?? "");
+                  setState(scenario.state);
+                  setApiCanSuggest(scenario.can_create_suggestion ?? false);
+                  setMyParticipationRole(scenario.my_participation_role ?? null);
+                  await load(scenarioId);
+                  await loadSuggestions(scenarioId);
+                }}
+              />
+            ) : useParagraphSuggestionUi ? (
+              <DescriptionWithSuggestions
+                scenarioId={scenarioId}
+                description={description}
+                suggestions={suggestions}
+                canSuggest={effectiveCanSuggest}
+                canViewSuggestions={canViewSuggestions}
+                canResolve={isOwner}
+                onSuggestionSubmitted={async () => {
+                  if (reviewerInReview) {
+                    setReviewerHasFeedback(true);
+                  }
+                  if (scenarioId) {
+                    await load(scenarioId);
+                    await loadSuggestions(scenarioId);
+                  }
+                }}
+                onScenarioUpdated={async () => {
+                  if (!scenarioId) return;
+                  const token = getToken();
+                  if (!token) return;
+                  const scenario = await getScenario(token, scenarioId);
+                  setDescription(scenario.description ?? "");
+                  setState(scenario.state);
+                  setApiCanSuggest(scenario.can_create_suggestion ?? false);
+                  setMyParticipationRole(scenario.my_participation_role ?? null);
+                  await load(scenarioId);
+                  await loadSuggestions(scenarioId);
+                }}
+              />
+            ) : (
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={5}
+                disabled={locked}
+                required
+              />
+            )}
+          </div>
         </section>
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Categories</h3>
-          <p style={{ fontSize: "0.9rem", color: "#555", marginTop: 0 }}>Select at least one before submitting for review.</p>
           {catalogCategories.map((c) => (
             <label key={c.id} style={{ display: "block", marginBottom: "0.25rem" }}>
               <input
@@ -413,7 +636,6 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Ethical risks</h3>
-          <p style={{ fontSize: "0.9rem", color: "#555", marginTop: 0 }}>Select at least one before submitting for review.</p>
           {ethicalOptions.map((r) => (
             <label key={r.id} style={{ display: "block", marginBottom: "0.25rem" }}>
               <input
@@ -433,9 +655,6 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Images</h3>
-          <p style={{ fontSize: "0.9rem", color: "#555", marginTop: 0 }}>
-            Choose files here; they upload when you save (cover is required before submit).
-          </p>
           <div style={{ marginTop: "0.75rem" }}>
             <label style={{ display: "block", marginBottom: "0.5rem" }}>
               Cover image
@@ -447,7 +666,7 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
                 onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
               />
             </label>
-            {coverFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>Selected: {coverFile.name} (uploads on save)</p> : null}
+            {coverFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>{coverFile.name}</p> : null}
             {scenarioId && coverAsset ? (
               <button type="button" onClick={() => onDeleteCover()} disabled={locked} style={{ marginRight: "0.5rem" }}>
                 Remove cover
@@ -472,7 +691,7 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
                 onChange={(e) => setInlineFile(e.target.files?.[0] ?? null)}
               />
             </label>
-            {inlineFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>Selected: {inlineFile.name} (uploads on save)</p> : null}
+            {inlineFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>{inlineFile.name}</p> : null}
             {scenarioId && inlineAssets.length > 0 ? (
               <ul style={{ paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
                 {inlineAssets.map((asset, index) => (
@@ -511,11 +730,6 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
           <button type="submit" disabled={locked || saving}>
             {saving ? "Saving…" : "Save"}
           </button>
-          {state === "changes_required" ? (
-            <button type="button" onClick={() => onStartApplying()}>
-              Start applying changes
-            </button>
-          ) : null}
           {canSubmitReview ? (
             <button type="button" disabled={locked || saving} onClick={() => onSubmitReview()}>
               Submit for review
@@ -528,6 +742,7 @@ export function ScenarioEditorPage({ isCreate = false }: { isCreate?: boolean })
           ) : null}
         </div>
       </form>
+      ) : null}
 
       {message ? <p style={{ marginTop: "1rem" }}>{message}</p> : null}
       <p style={{ marginTop: "1rem" }}>
