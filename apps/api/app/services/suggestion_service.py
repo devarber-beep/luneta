@@ -545,6 +545,15 @@ class SuggestionService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Alternative text applies to paragraphs only",
             )
+        if (
+            scenario.state == ScenarioState.PUBLISHED
+            and scope == SuggestionScope.PARAGRAPH
+            and kind == SuggestionKind.COMMENT
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Paragraph suggestions on published scenarios must be alternative text",
+            )
 
     async def _require_scenario(self, scenario_id: str) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)

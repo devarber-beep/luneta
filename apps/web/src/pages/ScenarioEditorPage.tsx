@@ -1,6 +1,7 @@
 import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  ContentPolicyError,
   createScenario,
   deleteScenario,
   deleteScenarioCoverAsset,
@@ -18,6 +19,8 @@ import {
   publishScenario,
   requestChangesScenario,
   markNotSuitableScenario,
+  type SensitiveFindingLocation,
+  type SimilarScenarioMatch,
   type SuggestionItem,
 } from "../api";
 import { fetchActiveCategories, fetchActiveEthicalRisks } from "../adminApi";
@@ -85,6 +88,9 @@ export function ScenarioEditorPage({
   const [reviewerHasFeedback, setReviewerHasFeedback] = useState(false);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [blockingError, setBlockingError] = useState(false);
+  const [sensitiveFindings, setSensitiveFindings] = useState<SensitiveFindingLocation[]>([]);
+  const [similarMatches, setSimilarMatches] = useState<SimilarScenarioMatch[]>([]);
 
   const role = getRole();
   const isOwner = Boolean(myUserId && authorUserId && myUserId === authorUserId);
@@ -293,6 +299,9 @@ export function ScenarioEditorPage({
     const token = getToken();
     if (!token) return;
     setSaving(true);
+    setBlockingError(false);
+    setSensitiveFindings([]);
+    setSimilarMatches([]);
     try {
       const id = await persistDraft();
       if (!id) return;
@@ -328,9 +337,18 @@ export function ScenarioEditorPage({
         updated.cover_image?.asset_id ?? null,
         (updated.inline_assets ?? []).map((a) => a.asset_id),
       );
+      setBlockingError(false);
       setMessage(`Saved. Revision #${updated.current_revision_number}`);
     } catch (error) {
-      setMessage((error as Error).message);
+      if (error instanceof ContentPolicyError) {
+        setBlockingError(true);
+        setMessage(error.message);
+        setSensitiveFindings(error.findings ?? []);
+        setSimilarMatches(error.similarCandidates ?? []);
+      } else {
+        setBlockingError(false);
+        setMessage((error as Error).message);
+      }
     } finally {
       setSaving(false);
     }
@@ -340,6 +358,9 @@ export function ScenarioEditorPage({
     const token = getToken();
     if (!token) return;
     setSaving(true);
+    setBlockingError(false);
+    setSensitiveFindings([]);
+    setSimilarMatches([]);
     try {
       const id = await persistDraft();
       if (!id) return;
@@ -358,7 +379,15 @@ export function ScenarioEditorPage({
       setMessage("Submitted for review.");
       await load(id);
     } catch (error) {
-      setMessage((error as Error).message);
+      if (error instanceof ContentPolicyError) {
+        setBlockingError(true);
+        setMessage(error.message);
+        setSensitiveFindings(error.findings ?? []);
+        setSimilarMatches(error.similarCandidates ?? []);
+      } else {
+        setBlockingError(false);
+        setMessage((error as Error).message);
+      }
     } finally {
       setSaving(false);
     }
@@ -537,6 +566,66 @@ export function ScenarioEditorPage({
               if (scenarioId) await loadSuggestions(scenarioId);
             }}
           />
+        </section>
+      ) : null}
+
+      {blockingError && message ? (
+        <section
+          role="alert"
+          style={{
+            marginBottom: "1rem",
+            padding: "0.85rem 1rem",
+            background: "#fdecea",
+            border: "1px solid #f5c2c0",
+            borderRadius: "8px",
+            color: "#b3261e",
+            lineHeight: 1.45,
+            fontSize: "0.95rem",
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: "0.35rem" }}>
+            {sensitiveFindings.length
+              ? "Sensitive or identifiable data detected"
+              : "Very similar published scenario detected"}
+          </strong>
+          <p style={{ margin: "0 0 0.5rem", whiteSpace: "pre-wrap" }}>{message}</p>
+          {sensitiveFindings.length ? (
+            <div style={{ marginTop: "0.65rem" }}>
+              <strong style={{ fontSize: "0.88rem" }}>Where it was found</strong>
+              <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
+                {sensitiveFindings.map((f, idx) => (
+                  <li key={`${f.field}-${f.finding_type}-${idx}`} style={{ marginBottom: "0.35rem" }}>
+                    <span style={{ fontWeight: 600 }}>{f.field_label}</span> — {f.label}
+                    <div style={{ fontFamily: "monospace", fontSize: "0.82rem", marginTop: "0.15rem" }}>
+                      {f.excerpt}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {similarMatches.length ? (
+            <div style={{ marginTop: "0.65rem" }}>
+              <strong style={{ fontSize: "0.88rem" }}>Similar published scenario(s)</strong>
+              <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
+                {similarMatches.map((c) => (
+                  <li key={c.scenario_id} style={{ marginBottom: "0.35rem" }}>
+                    {c.public_path ? (
+                      <Link to={c.public_path} target="_blank" rel="noopener noreferrer">
+                        {c.title}
+                      </Link>
+                    ) : (
+                      c.title
+                    )}
+                    <span style={{ color: "#666", marginLeft: "0.35rem" }}>(score {c.score})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <span style={{ display: "block", marginTop: "0.65rem", fontSize: "0.88rem" }}>
+            Your changes were not saved. Update the text below, then save or submit again.
+          </span>
         </section>
       ) : null}
 
@@ -756,7 +845,21 @@ export function ScenarioEditorPage({
       </form>
       ) : null}
 
-      {message ? <p style={{ marginTop: "1rem" }}>{message}</p> : null}
+      {message && !blockingError ? (
+        <p
+          style={{
+            marginTop: "1rem",
+            padding: "0.5rem 0.65rem",
+            borderRadius: "6px",
+            background: message.toLowerCase().includes("saved") || message.includes("Submitted")
+              ? "#e8f5e9"
+              : "#f5f5f5",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {message}
+        </p>
+      ) : null}
       <p style={{ marginTop: "1rem" }}>
         <Link to="/my-scenarios">My scenarios</Link> · <Link to="/">Home</Link>
       </p>

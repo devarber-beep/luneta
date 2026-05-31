@@ -33,6 +33,8 @@ type Props = {
   onDescriptionChange?: (value: string) => void;
   /** Only suggestion actions (use below an editable description field). */
   notesOnly?: boolean;
+  /** On published scenarios, paragraph suggestions are alternative text only. */
+  publishedParagraphAltTextOnly?: boolean;
   onSuggestionSubmitted?: () => void;
   onScenarioUpdated?: () => void;
 };
@@ -49,6 +51,7 @@ export function DescriptionWithSuggestions({
   descriptionDisabled = false,
   onDescriptionChange,
   notesOnly = false,
+  publishedParagraphAltTextOnly = false,
   onSuggestionSubmitted,
   onScenarioUpdated,
 }: Props) {
@@ -64,10 +67,12 @@ export function DescriptionWithSuggestions({
   const byParagraph = (index: number) =>
     suggestions.filter((s) => s.scope === "paragraph" && s.paragraph_index === index);
 
+  const defaultParagraphKind = publishedParagraphAltTextOnly ? "alternative_text" : "comment";
+
   const closeComposer = () => {
     setActiveParagraph(null);
     setDraftBody("");
-    setDraftKind("comment");
+    setDraftKind(defaultParagraphKind);
   };
 
   useEffect(() => {
@@ -84,7 +89,12 @@ export function DescriptionWithSuggestions({
     setBusy(true);
     try {
       const scope = activeParagraph === "scenario" ? "scenario" : "paragraph";
-      const kind = scope === "scenario" ? "comment" : draftKind;
+      const kind =
+        scope === "scenario"
+          ? "comment"
+          : publishedParagraphAltTextOnly
+            ? "alternative_text"
+            : draftKind;
       await createScenarioSuggestion(token, scenarioId, {
         scope,
         kind,
@@ -274,7 +284,7 @@ export function DescriptionWithSuggestions({
                   }}
                   onClick={() => {
                     setActiveParagraph(index);
-                    setDraftKind("comment");
+                    setDraftKind(defaultParagraphKind);
                     setDraftBody("");
                   }}
                 >
@@ -311,7 +321,7 @@ export function DescriptionWithSuggestions({
           }
           body={draftBody}
           kind={draftKind}
-          allowKindChoice={activeParagraph !== "scenario"}
+          allowKindChoice={activeParagraph !== "scenario" && !publishedParagraphAltTextOnly}
           busy={busy}
           onBody={setDraftBody}
           onKind={setDraftKind}

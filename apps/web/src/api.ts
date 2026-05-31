@@ -32,14 +32,85 @@ function formatFastApiDetail(detail: unknown): string {
       })
       .join("; ");
   }
-  if (typeof detail === "object" && "message" in detail) {
-    return String((detail as { message: unknown }).message);
+  if (typeof detail === "object" && detail !== null && "message" in detail) {
+    const row = detail as {
+      message?: unknown;
+      code?: unknown;
+      similar_titles?: unknown;
+      candidates?: Array<{ title?: string }>;
+    };
+    let msg = typeof row.message === "string" ? row.message : "Request failed";
+    if (row.code === "sensitive_data_detected" && typeof row.message === "string") {
+      return row.message;
+    }
+    const titles =
+      Array.isArray(row.similar_titles) && row.similar_titles.length
+        ? row.similar_titles.filter((t): t is string => typeof t === "string")
+        : Array.isArray(row.candidates)
+          ? row.candidates
+              .map((c) => c.title)
+              .filter((t): t is string => typeof t === "string")
+          : [];
+    if (titles.length) {
+      msg += `\n\nSimilar published scenario(s):\n${titles.map((t) => `• ${t}`).join("\n")}`;
+    }
+    return msg;
   }
   try {
     return JSON.stringify(detail);
   } catch {
     return "Request failed";
   }
+}
+
+export type SensitiveFindingLocation = {
+  finding_type: string;
+  field: string;
+  field_label: string;
+  label: string;
+  excerpt: string;
+};
+
+export type SimilarScenarioMatch = {
+  scenario_id: string;
+  title: string;
+  score: number;
+  public_path: string | null;
+};
+
+export type ContentPolicyDetail = {
+  code: string;
+  message: string;
+  findings?: SensitiveFindingLocation[];
+  candidates?: SimilarScenarioMatch[];
+};
+
+export class ContentPolicyError extends Error {
+  readonly code: string;
+  readonly findings?: SensitiveFindingLocation[];
+  readonly similarCandidates?: SimilarScenarioMatch[];
+
+  constructor(detail: ContentPolicyDetail) {
+    super(detail.message);
+    this.name = "ContentPolicyError";
+    this.code = detail.code;
+    this.findings = detail.findings;
+    this.similarCandidates = detail.candidates;
+  }
+}
+
+function parseContentPolicyDetail(detail: unknown): ContentPolicyDetail | null {
+  if (typeof detail !== "object" || detail === null || !("code" in detail) || !("message" in detail)) {
+    return null;
+  }
+  const row = detail as ContentPolicyDetail;
+  if (typeof row.code !== "string" || typeof row.message !== "string") {
+    return null;
+  }
+  if (row.code !== "sensitive_data_detected" && row.code !== "similar_scenarios_detected") {
+    return null;
+  }
+  return row;
 }
 
 /** Readable message from a failed fetch (FastAPI JSON or plain text). */
@@ -52,12 +123,37 @@ export async function getFetchErrorMessage(response: Response): Promise<string> 
   try {
     const parsed = JSON.parse(text) as { detail?: unknown };
     if (parsed.detail !== undefined) {
+      const policy = parseContentPolicyDetail(parsed.detail);
+      if (policy) {
+        return policy.message;
+      }
       return formatFastApiDetail(parsed.detail);
     }
   } catch {
     // not JSON
   }
   return text.length > 800 ? `${text.slice(0, 800)}…` : text;
+}
+
+export async function readApiError(response: Response): Promise<Error> {
+  const text = await response.text();
+  const status = response.status;
+  if (!text.trim()) {
+    return new Error(`Request failed (${status})`);
+  }
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (parsed.detail !== undefined) {
+      const policy = parseContentPolicyDetail(parsed.detail);
+      if (policy) {
+        return new ContentPolicyError(policy);
+      }
+      return new Error(formatFastApiDetail(parsed.detail));
+    }
+  } catch {
+    // not JSON
+  }
+  return new Error(text.length > 800 ? `${text.slice(0, 800)}…` : text);
 }
 
 export type SignupPayload = {
@@ -115,7 +211,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     },
   });
   if (!response.ok) {
-    throw new Error(await getFetchErrorMessage(response));
+    throw await readApiError(response);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -277,6 +373,23 @@ export async function submitReview(token: string, id: string): Promise<{ state: 
   });
 }
 
+export type SimilarityCandidate = {
+  scenario_id: string;
+  title: string;
+  score: number;
+};
+
+export async function checkScenarioSimilarity(
+  token: string,
+  payload: { title: string; description: string; exclude_scenario_id?: string },
+): Promise<{ provider: string; candidates: SimilarityCandidate[] }> {
+  return request("/scenarios/similarity-check", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteScenario(token: string, id: string): Promise<void> {
   const response = await fetch(`${API_URL}/scenarios/${id}`, {
     method: "DELETE",
@@ -384,10 +497,73 @@ export type PublicScenarioListItem = {
   title: string;
   published_at: string;
   public_path: string;
+  author_user_id: string;
+  author_nickname: string;
 };
 
+export type PublicScenarioSearchResult = {
+  items: PublicScenarioListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type SearchPublicScenariosParams = {
+  q?: string;
+  author_user_id?: string;
+  published_from?: string;
+  published_to?: string;
+  category_id?: string[];
+  ethical_risk_id?: string[];
+  page?: number;
+  page_size?: number;
+};
+
+export type PublicCatalogEntry = { id: string; label: string };
+
+export async function fetchPublicSearchCategories(): Promise<{ items: PublicCatalogEntry[] }> {
+  return request("/public/catalog/categories");
+}
+
+export async function fetchPublicSearchEthicalRisks(): Promise<{ items: PublicCatalogEntry[] }> {
+  return request("/public/catalog/ethical-risks");
+}
+
+export async function searchPublicScenarios(
+  params: SearchPublicScenariosParams = {},
+): Promise<PublicScenarioSearchResult> {
+  const search = new URLSearchParams();
+  if (params.q?.trim()) {
+    search.set("q", params.q.trim());
+  }
+  if (params.author_user_id) {
+    search.set("author_user_id", params.author_user_id);
+  }
+  if (params.published_from) {
+    search.set("published_from", params.published_from);
+  }
+  if (params.published_to) {
+    search.set("published_to", params.published_to);
+  }
+  for (const id of params.category_id ?? []) {
+    search.append("category_id", id);
+  }
+  for (const id of params.ethical_risk_id ?? []) {
+    search.append("ethical_risk_id", id);
+  }
+  if (params.page != null) {
+    search.set("page", String(params.page));
+  }
+  if (params.page_size != null) {
+    search.set("page_size", String(params.page_size));
+  }
+  const qs = search.toString();
+  return request(`/public/scenarios${qs ? `?${qs}` : ""}`);
+}
+
 export async function listPublicScenarios(): Promise<PublicScenarioListItem[]> {
-  return request("/public/scenarios");
+  const result = await searchPublicScenarios({ page_size: 100 });
+  return result.items;
 }
 
 export type PublicScenarioParticipant = {

@@ -7,6 +7,7 @@ Run pytest from ``apps/api`` so ``.env`` loads if present.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -160,6 +161,14 @@ class FakeCursor:
             self._docs = sorted(self._docs, key=lambda doc, f=key: doc.get(f), reverse=reverse)
         return self
 
+    def skip(self, count: int) -> "FakeCursor":
+        self._docs = self._docs[count:]
+        return self
+
+    def limit(self, count: int) -> "FakeCursor":
+        self._docs = self._docs[:count]
+        return self
+
     def __aiter__(self) -> "FakeCursor":
         self._idx = 0
         return self
@@ -253,6 +262,9 @@ class FakeCollection:
             modified += 1
         return _UpdateResult(modified_count=modified, matched_count=modified)
 
+    async def count_documents(self, query: dict[str, Any]) -> int:
+        return sum(1 for doc in self._docs if _matches(doc, query))
+
     def find(self, query: dict[str, Any], projection: dict[str, Any] | None = None) -> FakeCursor:
         matched = [dict(doc) for doc in self._docs if _matches(doc, query)]
         if projection:
@@ -300,7 +312,27 @@ def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
         if isinstance(expected, dict):
             if "$in" in expected:
                 allowed = expected["$in"]
-                if value not in allowed:
+                if isinstance(value, list):
+                    if not any(item in allowed for item in value):
+                        return False
+                elif value not in allowed:
+                    return False
+                continue
+            if "$regex" in expected:
+                if not isinstance(value, str):
+                    return False
+                flags = re.I if "i" in str(expected.get("$options", "")) else 0
+                if re.search(str(expected["$regex"]), value, flags) is None:
+                    return False
+                continue
+            if "$gte" in expected:
+                threshold = expected["$gte"]
+                if value is None or value < threshold:
+                    return False
+                continue
+            if "$lte" in expected:
+                threshold = expected["$lte"]
+                if value is None or value > threshold:
                     return False
                 continue
             if "$ne" in expected and value == expected["$ne"]:

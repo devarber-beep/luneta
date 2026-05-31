@@ -1,6 +1,7 @@
 """Users repository."""
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -116,6 +117,26 @@ class UsersRepository:
         normalized = nickname.strip().lower()
         doc = await self._collection.find_one({"nickname_normalized": normalized})
         return self._to_model(doc)
+
+    async def list_ids_matching_nickname(self, q: str) -> list[str]:
+        """User ids whose nickname matches the search text (case-insensitive substring)."""
+        trimmed = q.strip()
+        if not trimmed:
+            return []
+        pattern = re.escape(trimmed)
+        query = {
+            "$or": [
+                {"nickname": {"$regex": pattern, "$options": "i"}},
+                {"nickname_normalized": {"$regex": pattern, "$options": "i"}},
+            ]
+        }
+        ids: list[str] = []
+        cursor = self._collection.find(query)
+        async for doc in cursor:
+            oid = doc.get("_id")
+            if oid is not None:
+                ids.append(str(oid))
+        return ids
 
     async def list_by_roles(self, roles: list[UserRole]) -> list[UserModel]:
         if not roles:

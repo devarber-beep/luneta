@@ -1,11 +1,16 @@
 """Application settings from environment."""
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Monorepo root `.env` (Luneta/), not `apps/api/.env`.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
     # Monorepo root `.env` may define keys for web, AI, etc.; ignore unknowns so API tests
     # work when pytest is run from repo root (`python -m pytest`) as well as from `apps/api`.
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_REPO_ROOT / ".env", extra="ignore")
 
     app_name: str = "Luneta API"
     api_url: str = "http://localhost:8000"
@@ -33,5 +38,8 @@ class Settings(BaseSettings):
 
     auth_token_secret: str = "change-me-in-env"
     auth_token_ttl_seconds: int = 3600
+
+    openai_api_key: str | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
 
 settings = Settings()

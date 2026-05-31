@@ -19,8 +19,15 @@ def _queue_row_for_scenario(items: list[dict], scenario_id: str) -> dict:
     return matches[0]
 
 
-def _public_catalog_row_for(rows: list[dict], *, scenario_id: str) -> dict:
-    matches = [r for r in rows if r.get("id") == scenario_id]
+def _public_catalog_items(payload: dict | list) -> list[dict]:
+    if isinstance(payload, dict):
+        return payload["items"]
+    return payload
+
+
+def _public_catalog_row_for(rows: list[dict] | dict, *, scenario_id: str) -> dict:
+    items = _public_catalog_items(rows) if isinstance(rows, dict) else rows
+    matches = [r for r in items if r.get("id") == scenario_id]
     assert len(matches) == 1, matches
     return matches[0]
 
@@ -242,7 +249,7 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
     assert catalog_after_first_publish.status_code == 200
     rows0 = catalog_after_first_publish.json()
     if not _use_real_mongo():
-        assert len(rows0) == 1
+        assert rows0["total"] == 1
     row_pub0 = _public_catalog_row_for(rows0, scenario_id=scenario_id)
     stable_public_slug = _slug_from_public_path(row_pub0["public_path"])
     assert row_pub0["title"] == "Escenario E2E"
@@ -285,7 +292,7 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
 
     catalog = await api_client.get("/public/scenarios")
     assert catalog.status_code == 200
-    cat_rows = catalog.json()
+    cat_rows = _public_catalog_items(catalog.json())
     ids = [row["id"] for row in cat_rows]
     assert scenario_id in ids
     assert _public_catalog_row_for(cat_rows, scenario_id=scenario_id)["title"] == "Escenario E2E"

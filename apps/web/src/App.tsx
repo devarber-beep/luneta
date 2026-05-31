@@ -5,7 +5,6 @@ import {
   deleteScenario,
   getScenario,
   listMyScenarios,
-  listPublicScenarios,
   login,
   me,
   patchMyProfile,
@@ -24,6 +23,9 @@ import { ScenarioEditorPage } from "./pages/ScenarioEditorPage";
 import { AdminCatalogPage } from "./pages/AdminCatalogPage";
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage";
 import { AdminEvaluationsPage } from "./pages/AdminEvaluationsPage";
+import { PublishedScenariosSection } from "./components/PublishedScenariosSection";
+import { ScenarioSearchField } from "./components/ScenarioSearchField";
+import { matchesScenarioSearch } from "./components/scenarioSearch";
 
 const layoutStyle: CSSProperties = {
   maxWidth: "860px",
@@ -34,15 +36,6 @@ const layoutStyle: CSSProperties = {
 
 function HomePage() {
   const token = getToken();
-  const [published, setPublished] = useState<Array<{ id: string; title: string; published_at: string; public_path: string }>>([]);
-  const [catalogError, setCatalogError] = useState("");
-
-  useEffect(() => {
-    listPublicScenarios()
-      .then(setPublished)
-      .catch((e: Error) => setCatalogError(e.message));
-  }, []);
-
   return (
     <main style={layoutStyle}>
       <h1>Luneta</h1>
@@ -60,18 +53,7 @@ function HomePage() {
 
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
-      <section style={{ marginTop: "2rem" }}>
-        <h2>Published</h2>
-        {catalogError ? <p style={{ color: "crimson" }}>{catalogError}</p> : null}
-        {!published.length && !catalogError ? <p>No published scenarios yet.</p> : null}
-        <ul style={{ paddingLeft: "1.25rem" }}>
-          {published.map((s) => (
-            <li key={s.id}>
-              <Link to={s.public_path}>{s.title}</Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <PublishedScenariosSection />
     </main>
   );
 }
@@ -387,6 +369,8 @@ function MyScenariosPage() {
       my_participation_role: "owner" | "collaborator";
     }>
   >([]);
+  const [searchQ, setSearchQ] = useState("");
+  const [appliedSearchQ, setAppliedSearchQ] = useState("");
   const [message, setMessage] = useState("");
 
   const load = async () => {
@@ -423,17 +407,27 @@ function MyScenariosPage() {
     load().catch((e: Error) => setMessage(e.message));
   }, []);
 
+  const visibleItems = items.filter((s) =>
+    matchesScenarioSearch(appliedSearchQ, [s.title, s.state, s.my_participation_role]),
+  );
+
   return (
     <main style={layoutStyle}>
       <h2>My scenarios</h2>
       <p>
         <Link to="/my-profile">My profile</Link>
       </p>
+      <ScenarioSearchField
+        value={searchQ}
+        onChange={setSearchQ}
+        onSubmit={() => setAppliedSearchQ(searchQ.trim())}
+        placeholder="Search my scenarios by title or state"
+      />
       <button type="button" onClick={() => load().catch((e: Error) => setMessage(e.message))}>
         Refresh
       </button>
       <ul style={{ marginTop: "1rem", paddingLeft: "1.25rem" }}>
-        {items.map((s) => (
+        {visibleItems.map((s) => (
           <li key={s.id} style={{ marginBottom: "0.5rem" }}>
             <strong>{s.title}</strong> — {s.state}{" "}
             <span style={{ color: "#666", fontSize: "0.9rem" }}>
@@ -462,6 +456,7 @@ function MyScenariosPage() {
         ))}
       </ul>
       {!items.length && <p>No scenarios are associated with your account.</p>}
+      {items.length > 0 && !visibleItems.length ? <p>No scenarios match your search.</p> : null}
       {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
       <Link to="/">Back</Link>
     </main>
@@ -613,6 +608,7 @@ function PublicScenarioPage() {
             canSuggest={publicCanSuggest}
             canViewSuggestions={canViewSuggestions}
             canResolve={false}
+            publishedParagraphAltTextOnly
             onSuggestionSubmitted={async () => {
               setMessage("Suggestion submitted.");
               await loadSuggestions(scenarioId);

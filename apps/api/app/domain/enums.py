@@ -92,3 +92,5 @@ class AuditActionType(StrEnum):
     SUGGESTION_CREATED = "suggestion_created"
     SUGGESTION_ACCEPTED = "suggestion_accepted"
     SUGGESTION_REJECTED = "suggestion_rejected"
+    SENSITIVE_DATA_CHECK_RUN = "sensitive_data_check_run"
+    SCENARIO_SIMILARITY_CHECK_RUN = "scenario_similarity_check_run"

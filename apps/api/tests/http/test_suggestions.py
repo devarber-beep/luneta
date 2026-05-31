@@ -666,12 +666,23 @@ async def test_investigator_paragraph_comment_on_published(api_client, fake_db) 
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
     await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=admin_h)
     await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=admin_h)
-    sug = await api_client.post(
+    blocked = await api_client.post(
         f"/scenarios/{sid}/suggestions",
         headers=peer_h,
         json={"scope": "paragraph", "kind": "comment", "paragraph_index": 0, "body": "Consider rephrasing"},
     )
-    assert sug.status_code == 201
+    assert blocked.status_code == 400
+    allowed = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=peer_h,
+        json={
+            "scope": "paragraph",
+            "kind": "alternative_text",
+            "paragraph_index": 0,
+            "body": "Revised opening line.",
+        },
+    )
+    assert allowed.status_code == 201
 
 
 @pytest.mark.asyncio

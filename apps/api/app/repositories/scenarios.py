@@ -30,6 +30,7 @@ class ScenariosRepository:
         await self._collection.create_index("author_user_id")
         await self._collection.create_index("collaborators.user_id")
         await self._collection.create_index("state")
+        await self._collection.create_index([("published_at", -1)])
 
     async def create(
         self,
@@ -497,23 +498,83 @@ class ScenariosRepository:
                 items.append(model)
         return items
 
+    @staticmethod
+    def _published_visibility_filter() -> dict[str, Any]:
+        return {
+            "published_at": {"$ne": None},
+            "deleted_at": None,
+            "state": {"$ne": ScenarioState.NOT_SUITABLE.value},
+            "public_slug": {"$type": "string"},
+            "public_title": {"$type": "string"},
+            "public_description": {"$type": "string"},
+        }
+
     async def list_publicly_visible(self) -> list[ScenarioModel]:
+        items, _total = await self.search_publicly_visible(page=1, page_size=10_000)
+        return items
+
+    async def search_publicly_visible(
+        self,
+        *,
+        q: str | None = None,
+        q_matching_author_user_ids: list[str] | None = None,
+        author_user_id: str | None = None,
+        published_from: datetime | None = None,
+        published_to: datetime | None = None,
+        category_ids: list[str] | None = None,
+        ethical_risk_ids: list[str] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[ScenarioModel], int]:
+        clauses: list[dict[str, Any]] = [self._published_visibility_filter()]
+        trimmed_q = (q or "").strip()
+        if trimmed_q:
+            pattern = re.escape(trimmed_q)
+            text_or: list[dict[str, Any]] = [
+                {"public_title": {"$regex": pattern, "$options": "i"}},
+                {"public_description": {"$regex": pattern, "$options": "i"}},
+                {"summary": {"$regex": pattern, "$options": "i"}},
+            ]
+            tokens = self._search_tokens(trimmed_q)
+            if tokens:
+                text_or.append({"keywords_normalized": {"$in": tokens}})
+            if q_matching_author_user_ids:
+                text_or.append({"author_user_id": {"$in": list(q_matching_author_user_ids)}})
+            clauses.append({"$or": text_or})
+        if author_user_id:
+            clauses.append({"author_user_id": author_user_id})
+        if published_from is not None:
+            clauses.append({"published_at": {"$gte": published_from}})
+        if published_to is not None:
+            clauses.append({"published_at": {"$lte": published_to}})
+        if category_ids:
+            clauses.append({"category_ids": {"$in": list(category_ids)}})
+        if ethical_risk_ids:
+            clauses.append({"ethical_risk_ids": {"$in": list(ethical_risk_ids)}})
+        query: dict[str, Any] = {"$and": clauses} if len(clauses) > 1 else clauses[0]
+        total = await self._collection.count_documents(query)
+        skip = max(page - 1, 0) * page_size
         items: list[ScenarioModel] = []
-        cursor = self._collection.find(
-            {
-                "published_at": {"$ne": None},
-                "deleted_at": None,
-                "state": {"$ne": ScenarioState.NOT_SUITABLE.value},
-                "public_slug": {"$type": "string"},
-                "public_title": {"$type": "string"},
-                "public_description": {"$type": "string"},
-            }
-        ).sort("updated_at", -1)
+        cursor = (
+            self._collection.find(query)
+            .sort("published_at", -1)
+            .skip(skip)
+            .limit(page_size)
+        )
         async for doc in cursor:
             model = self._to_model(doc)
             if model is not None:
                 items.append(model)
-        return items
+        return items, int(total)
+
+    @staticmethod
+    def _search_tokens(q: str) -> list[str]:
+        tokens: list[str] = []
+        for token in re.split(r"\W+", q.lower()):
+            tok = token.strip()
+            if len(tok) >= 2:
+                tokens.append(tok)
+        return list(dict.fromkeys(tokens))
 
     async def list_for_participating_user(self, *, user_id: str) -> list[ScenarioModel]:
         """Scenarios where the user is author or listed as collaborator."""

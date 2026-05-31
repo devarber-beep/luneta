@@ -1,7 +1,9 @@
 """Public routes for published scenarios."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
@@ -12,10 +14,12 @@ from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.public import (
     PublicCatalogLabel,
+    PublicCatalogListResponse,
     PublicScenarioAsset,
     PublicScenarioListItem,
     PublicScenarioParticipant,
     PublicScenarioResponse,
+    PublicScenarioSearchResponse,
 )
 from app.storage.minio_storage import MinioScenarioStorage
 
@@ -59,19 +63,84 @@ async def _catalog_labels_for_scenario(*, scenario, db: AsyncIOMotorDatabase) ->
     return categories, ethical_risks
 
 
-@router.get("/scenarios", response_model=list[PublicScenarioListItem])
-async def list_public_scenarios(db: AsyncIOMotorDatabase = Depends(get_db)) -> list[PublicScenarioListItem]:
-    repo = ScenariosRepository(db)
-    scenarios = await repo.list_publicly_visible()
-    return [
-        PublicScenarioListItem(
-            id=s.id or "",
-            title=s.public_title or s.title,
-            published_at=s.published_at or s.updated_at,
-            public_path=f"/public/{s.public_slug}",
+async def _list_items_for_scenarios(
+    *,
+    scenarios,
+    users_repo: UsersRepository,
+) -> list[PublicScenarioListItem]:
+    items: list[PublicScenarioListItem] = []
+    for scenario in scenarios:
+        author = await users_repo.get_by_id(scenario.author_user_id)
+        author_nickname = author.nickname if author is not None else scenario.author_user_id
+        items.append(
+            PublicScenarioListItem(
+                id=scenario.id or "",
+                title=scenario.public_title or scenario.title,
+                published_at=scenario.published_at or scenario.updated_at,
+                public_path=f"/public/{scenario.public_slug}",
+                author_user_id=scenario.author_user_id,
+                author_nickname=author_nickname,
+            )
         )
-        for s in scenarios
-    ]
+    return items
+
+
+@router.get("/catalog/categories", response_model=PublicCatalogListResponse)
+async def list_public_search_categories(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PublicCatalogListResponse:
+    repo = ScenarioClassificationRepository(db)
+    await repo.ensure_indexes()
+    entries = await repo.list_active()
+    return PublicCatalogListResponse(
+        items=[PublicCatalogLabel(id=e.id or "", label=e.label) for e in entries]
+    )
+
+
+@router.get("/catalog/ethical-risks", response_model=PublicCatalogListResponse)
+async def list_public_search_ethical_risks(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PublicCatalogListResponse:
+    repo = EthicalRisksRepository(db)
+    await repo.ensure_indexes()
+    risks = await repo.list_active()
+    return PublicCatalogListResponse(
+        items=[PublicCatalogLabel(id=r.id or "", label=r.label) for r in risks]
+    )
+
+
+@router.get("/scenarios", response_model=PublicScenarioSearchResponse)
+async def search_public_scenarios(
+    q: str | None = Query(default=None, max_length=200),
+    author_user_id: str | None = Query(default=None),
+    published_from: datetime | None = Query(default=None),
+    published_to: datetime | None = Query(default=None),
+    category_id: list[str] = Query(default=[]),
+    ethical_risk_id: list[str] = Query(default=[]),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PublicScenarioSearchResponse:
+    users_repo = UsersRepository(db)
+    trimmed_q = (q or "").strip()
+    author_ids_from_nickname: list[str] = []
+    if trimmed_q:
+        author_ids_from_nickname = await users_repo.list_ids_matching_nickname(trimmed_q)
+
+    repo = ScenariosRepository(db)
+    scenarios, total = await repo.search_publicly_visible(
+        q=q,
+        q_matching_author_user_ids=author_ids_from_nickname or None,
+        author_user_id=author_user_id,
+        published_from=published_from,
+        published_to=published_to,
+        category_ids=category_id or None,
+        ethical_risk_ids=ethical_risk_id or None,
+        page=page,
+        page_size=page_size,
+    )
+    items = await _list_items_for_scenarios(scenarios=scenarios, users_repo=users_repo)
+    return PublicScenarioSearchResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/scenarios/{slug}", response_model=PublicScenarioResponse)

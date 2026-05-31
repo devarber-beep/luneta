@@ -132,3 +132,21 @@ class ScenarioAssetReadUrlResponse(BaseModel):
     asset_id: str
     signed_url: str
     expires_in_seconds: int
+
+
+class SimilarityCheckRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=2000)
+    exclude_scenario_id: str | None = None
+
+
+class SimilarityCandidateResponse(BaseModel):
+    scenario_id: str
+    title: str
+    score: float
+    public_path: str | None = None
+
+
+class SimilarityCheckResponse(BaseModel):
+    provider: str
+    candidates: list[SimilarityCandidateResponse]

@@ -305,7 +305,7 @@ El sistema deberá gestionar el flujo completo de revisión de escenarios.
 - **RF-7.1.3:** El sistema permitirá **filtrar** por **propiedades** del escenario.
 - **RF-7.1.4:** El orden por defecto de resultados será de **más reciente** a **más antiguo**.
 - **RF-7.1.5:** El sistema aplicará **paginación** en resultados de búsqueda.
-- **RF-7.1.6:** Todo usuario **autenticado** podrá listar escenarios **publicados** de otros investigadores.
+- **RF-7.1.6:** Todo usuario **autenticado** podrá listar escenarios **publicados** de otros investigadores (mismo catálogo de búsqueda pública que usuarios anónimos).
 
 ### RF-7.2 Lectura pública de escenarios publicados
 

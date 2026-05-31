@@ -10,6 +10,15 @@ class PublicScenarioListItem(BaseModel):
     title: str
     published_at: datetime
     public_path: str
+    author_user_id: str
+    author_nickname: str
+
+
+class PublicScenarioSearchResponse(BaseModel):
+    items: list[PublicScenarioListItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class PublicScenarioAsset(BaseModel):
@@ -28,6 +37,10 @@ class PublicScenarioParticipant(BaseModel):
 class PublicCatalogLabel(BaseModel):
     id: str
     label: str
+
+
+class PublicCatalogListResponse(BaseModel):
+    items: list[PublicCatalogLabel]
 
 
 class PublicScenarioResponse(BaseModel):

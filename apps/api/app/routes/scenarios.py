@@ -31,15 +31,23 @@ from app.schemas.scenarios import (
     ScenarioParticipationRole,
     ScenarioSummaryResponse,
     ScenarioAssetReadUrlResponse,
+    SimilarityCheckRequest,
+    SimilarityCheckResponse,
+    SimilarityCandidateResponse,
     SubmitReviewResponse,
 )
 from app.services.audit_service import AuditService
 from app.services.mailer_service import MailerService
 from app.services.scenario_service import ScenarioService
+from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.suggestion_service import SuggestionService
 from app.storage.minio_storage import MinioScenarioStorage
 
 router = APIRouter()
+
+
+def _audit(db: AsyncIOMotorDatabase) -> AuditService:
+    return AuditService(audit_repo=AuditEventsRepository(db))
 
 
 def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
@@ -51,7 +59,16 @@ def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
         assignments_repo=ReviewerAssignmentsRepository(db),
         classification_repo=ScenarioClassificationRepository(db),
         ethical_repo=EthicalRisksRepository(db),
+        audit_service=_audit(db),
+        similarity_service=_similarity_service(db),
         mailer=MailerService(),
+    )
+
+
+def _similarity_service(db: AsyncIOMotorDatabase) -> ScenarioSimilarityService:
+    return ScenarioSimilarityService(
+        scenarios_repo=ScenariosRepository(db),
+        audit_service=_audit(db),
     )
 
 
@@ -169,6 +186,34 @@ async def list_my_scenarios(
         )
         for s in scenarios
     ]
+
+
+@router.post("/similarity-check", response_model=SimilarityCheckResponse)
+async def check_scenario_similarity(
+    body: SimilarityCheckRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: UserModel = Depends(
+        require_any_active_permission(Permission.SCENARIO_CREATE_DRAFT, Permission.SCENARIO_UPDATE_OWN)
+    ),
+) -> SimilarityCheckResponse:
+    result = await _similarity_service(db).check(
+        title=body.title,
+        description=body.description,
+        actor=current_user,
+        exclude_scenario_id=body.exclude_scenario_id,
+    )
+    return SimilarityCheckResponse(
+        provider=result.provider,
+        candidates=[
+            SimilarityCandidateResponse(
+                scenario_id=c.scenario_id,
+                title=c.title,
+                score=c.score,
+                public_path=c.public_path,
+            )
+            for c in result.candidates
+        ],
+    )
 
 
 @router.get("/{scenario_id}", response_model=ScenarioResponse)

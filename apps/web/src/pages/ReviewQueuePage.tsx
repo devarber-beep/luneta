@@ -9,6 +9,8 @@ import {
   reopenScenario,
   startReviewScenario,
 } from "../api";
+import { ScenarioSearchField } from "../components/ScenarioSearchField";
+import { matchesScenarioSearch } from "../components/scenarioSearch";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "900px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -40,6 +42,8 @@ export function ReviewQueuePage() {
     }>
   >([]);
   const [message, setMessage] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [appliedSearchQ, setAppliedSearchQ] = useState("");
 
   const load = async () => {
     const token = getToken();
@@ -66,10 +70,29 @@ export function ReviewQueuePage() {
   const token = getToken() ?? "";
   const isAdmin = getRole() === "admin";
 
+  const filteredPending = pending.filter((item) =>
+    matchesScenarioSearch(appliedSearchQ, [
+      item.title,
+      item.state,
+      item.author_user_id,
+      item.live_public_title,
+      item.live_public_description,
+    ]),
+  );
+  const filteredReviewed = reviewed.filter((item) =>
+    matchesScenarioSearch(appliedSearchQ, [item.title, item.state, item.last_review_outcome]),
+  );
+
   return (
     <main style={layoutStyle}>
       <h2>Review</h2>
       <p>Role: {getRole() ?? "—"}</p>
+      <ScenarioSearchField
+        value={searchQ}
+        onChange={setSearchQ}
+        onSubmit={() => setAppliedSearchQ(searchQ.trim())}
+        placeholder="Search queue by title, state, or owner id"
+      />
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
         <button type="button" onClick={() => setTab("pending")} disabled={tab === "pending"}>
           Pending queue
@@ -80,7 +103,7 @@ export function ReviewQueuePage() {
       </div>
       {tab === "pending" ? (
         <>
-          {pending.map((item) => (
+          {filteredPending.map((item) => (
             <div
               key={item.scenario_id}
               style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}
@@ -156,10 +179,11 @@ export function ReviewQueuePage() {
             </div>
           ))}
           {!pending.length ? <p>No pending items.</p> : null}
+          {pending.length > 0 && !filteredPending.length ? <p>No pending items match your search.</p> : null}
         </>
       ) : (
         <>
-          {reviewed.map((item) => (
+          {filteredReviewed.map((item) => (
             <div
               key={item.scenario_id}
               style={{ border: "1px solid #ddd", padding: "0.75rem", marginBottom: "0.75rem" }}
@@ -181,6 +205,9 @@ export function ReviewQueuePage() {
             </div>
           ))}
           {!reviewed.length ? <p>No reviewed items yet.</p> : null}
+          {reviewed.length > 0 && !filteredReviewed.length ? (
+            <p>No reviewed items match your search.</p>
+          ) : null}
         </>
       )}
       {message ? <p>{message}</p> : null}

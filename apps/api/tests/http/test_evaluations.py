@@ -176,6 +176,7 @@ async def test_registered_submits_evaluation_owner_sees_summary(api_client, fake
 
     public_list = await api_client.get("/public/scenarios")
     assert public_list.status_code == 200
+    assert "items" in public_list.json()
 
     admin_h2 = await _signup_and_promote(
         api_client, fake_db, email="evadm2@luneta.dev", role="admin", token="ev-adm2-tok"

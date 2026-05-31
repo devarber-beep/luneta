@@ -28,8 +28,11 @@ from app.repositories.scenario_classification import ScenarioClassificationRepos
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
+from app.services.audit_service import AuditService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 from app.services.mailer_service import MailerService, NoopMailer
+from app.services.content_policy import enforce_content_policies
+from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.scenario_submit_validation import ensure_ready_for_submit
 from app.storage.minio_storage import MinioScenarioStorage
 
@@ -45,6 +48,8 @@ class ScenarioService:
         assignments_repo: ReviewerAssignmentsRepository,
         classification_repo: ScenarioClassificationRepository,
         ethical_repo: EthicalRisksRepository,
+        audit_service: AuditService | None = None,
+        similarity_service: ScenarioSimilarityService | None = None,
         mailer: MailerService | NoopMailer | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
@@ -54,6 +59,8 @@ class ScenarioService:
         self._assignments_repo = assignments_repo
         self._classification_repo = classification_repo
         self._ethical_repo = ethical_repo
+        self._audit = audit_service
+        self._similarity = similarity_service
         self._mailer = mailer if mailer is not None else MailerService()
 
     async def _portfolio_for(self, user: UserModel) -> frozenset[str]:
@@ -148,6 +155,18 @@ class ScenarioService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Description cannot be empty",
+            )
+
+        if self._similarity is not None:
+            await enforce_content_policies(
+                scenario=scenario,
+                current_user=current_user,
+                audit=self._audit,
+                similarity=self._similarity,
+                action="save",
+                title=title,
+                description=description,
+                summary=summary,
             )
 
         updated = await self._scenarios_repo.update_draft_content(
@@ -354,6 +373,15 @@ class ScenarioService:
             classification_repo=self._classification_repo,
             ethical_repo=self._ethical_repo,
         )
+
+        if self._similarity is not None:
+            await enforce_content_policies(
+                scenario=scenario,
+                current_user=current_user,
+                audit=self._audit,
+                similarity=self._similarity,
+                action="submit_review",
+            )
 
         updated = await self._scenarios_repo.submit_to_queue(
             scenario_id=scenario_id,
