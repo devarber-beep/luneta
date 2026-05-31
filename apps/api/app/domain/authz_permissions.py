@@ -34,3 +34,4 @@ class Permission(StrEnum):
     USER_ADMIN_MANAGE_SCENARIO_CLASSIFICATION = "user_admin_manage_scenario_classification"
     USER_ADMIN_MANAGE_ETHICAL_RISK_CATALOG = "user_admin_manage_ethical_risk_catalog"
     AUDIT_EVENT_CREATE = "audit_event_create"
+    AUDIT_EVENT_READ = "audit_event_read"

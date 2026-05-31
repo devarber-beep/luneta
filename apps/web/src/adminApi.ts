@@ -130,3 +130,62 @@ export async function listAdminEvaluationModerationTargets(
 ): Promise<{ items: AdminEvaluationModerationTarget[] }> {
   return request("/admin/evaluations/moderation-targets", { headers: authHeaders(token) });
 }
+
+export type AuditCatalogOption = { value: string; label: string };
+
+export type AdminAuditEvent = {
+  id: string;
+  actor_user_id: string;
+  actor_nickname: string | null;
+  actor_email_normalized: string | null;
+  actor_role: string;
+  action_type: string;
+  subject_type: string;
+  subject_id: string;
+  previous: Record<string, unknown> | null;
+  current: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type AdminAuditListParams = {
+  actor_user_id?: string;
+  action_type?: string;
+  subject_type?: string;
+  subject_id?: string;
+  created_from?: string;
+  created_to?: string;
+  page?: number;
+  page_size?: number;
+};
+
+function auditQuery(params: AdminAuditListParams): string {
+  const search = new URLSearchParams();
+  if (params.actor_user_id) search.set("actor_user_id", params.actor_user_id);
+  if (params.action_type) search.set("action_type", params.action_type);
+  if (params.subject_type) search.set("subject_type", params.subject_type);
+  if (params.subject_id) search.set("subject_id", params.subject_id);
+  if (params.created_from) search.set("created_from", params.created_from);
+  if (params.created_to) search.set("created_to", params.created_to);
+  if (params.page) search.set("page", String(params.page));
+  if (params.page_size) search.set("page_size", String(params.page_size));
+  const q = search.toString();
+  return q ? `?${q}` : "";
+}
+
+export async function fetchAuditCatalog(token: string): Promise<{
+  action_types: AuditCatalogOption[];
+  subject_types: AuditCatalogOption[];
+}> {
+  return request("/admin/audit-events/catalog", { headers: authHeaders(token) });
+}
+
+export async function listAdminAuditEvents(
+  token: string,
+  params: AdminAuditListParams = {},
+): Promise<{ items: AdminAuditEvent[]; total: number; page: number; page_size: number }> {
+  return request(`/admin/audit-events${auditQuery(params)}`, { headers: authHeaders(token) });
+}
+
+export async function getAdminAuditEvent(token: string, eventId: string): Promise<AdminAuditEvent> {
+  return request(`/admin/audit-events/${eventId}`, { headers: authHeaders(token) });
+}

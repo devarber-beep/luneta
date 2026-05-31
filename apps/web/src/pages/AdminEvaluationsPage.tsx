@@ -44,7 +44,7 @@ export function AdminEvaluationsPage() {
       <h2>Admin — evaluation moderation</h2>
       <p>
         <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/assignments">Assignments</Link> ·{" "}
-        <Link to="/">Home</Link>
+        <Link to="/admin/audit">Activity log</Link> · <Link to="/">Home</Link>
       </p>
       {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
       {loading ? <p style={{ color: "#666" }}>Loading published scenarios…</p> : null}

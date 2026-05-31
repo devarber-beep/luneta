@@ -72,6 +72,7 @@ export function AdminAssignmentsPage() {
       <h2>Admin — reviewer assignments</h2>
       <p>
         <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/evaluations">Moderate evaluations</Link> ·{" "}
+        <Link to="/admin/audit">Activity log</Link> ·{" "}
         <Link to="/">Home</Link>
       </p>
       <label style={{ display: "grid", gap: "0.25rem", marginBottom: "1rem" }}>

@@ -10,6 +10,7 @@ from app.db import get_db
 from app.deps.authz import require_active_user_with_permission
 from app.domain.authz_permissions import Permission
 from app.models.user import UserModel
+from app.repositories.audit_events import AuditEventsRepository
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
 from app.repositories.scenarios import ScenariosRepository
@@ -22,6 +23,7 @@ from app.schemas.workflow import (
     ReviewQueueResponse,
     WorkflowActionResponse,
 )
+from app.services.audit_service import AuditService
 from app.services.mailer_service import MailerService
 from app.services.workflow_service import WorkflowService
 
@@ -37,6 +39,7 @@ def _service(db: AsyncIOMotorDatabase) -> WorkflowService:
         assignments_repo=assignments,
         suggestions_repo=SuggestionsRepository(db),
         mailer=MailerService(),
+        audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
     )
 
 

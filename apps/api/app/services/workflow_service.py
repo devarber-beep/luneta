@@ -14,7 +14,7 @@ from app.core.scenario_access import (
     can_start_review_scenario,
 )
 from app.core.reviewer_portfolio import reviewer_has_investigator_in_portfolio
-from app.domain.enums import ReviewEventType, ScenarioState, UserRole
+from app.domain.enums import AuditActionType, ReviewEventType, ScenarioState, UserRole
 from app.models.user import UserModel
 from app.repositories.review_events import ReviewEventsRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
@@ -22,6 +22,8 @@ from app.repositories.scenarios import ScenariosRepository
 from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.users import UsersRepository
 from app.schemas.workflow import ReviewQueueItem, ReviewedScenarioItem
+from app.services.audit_helpers import record_scenario_audit
+from app.services.audit_service import AuditService
 from app.services.mailer_service import MailerService, NoopMailer
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 
@@ -36,6 +38,7 @@ class WorkflowService:
         assignments_repo: ReviewerAssignmentsRepository,
         suggestions_repo: SuggestionsRepository | None = None,
         mailer: MailerService | NoopMailer | None = None,
+        audit_service: AuditService | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._review_events_repo = review_events_repo
@@ -43,6 +46,7 @@ class WorkflowService:
         self._assignments_repo = assignments_repo
         self._suggestions_repo = suggestions_repo
         self._mailer = mailer if mailer is not None else MailerService()
+        self._audit = audit_service
 
     async def review_queue(
         self,
@@ -168,6 +172,15 @@ class WorkflowService:
             from_state=scenario.state,
             to_state=updated.state,
         )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_CHANGES_REQUESTED,
+            scenario_id=updated.id or "",
+            from_state=scenario.state,
+            to_state=updated.state,
+            current_extra={"note": note.strip()},
+        )
         await self._notify_author_outcome(scenario=updated, outcome="changes_required", detail=note)
         return updated, datetime.now(UTC)
 
@@ -200,6 +213,18 @@ class WorkflowService:
             from_state=scenario.state,
             to_state=updated.state,
         )
+        extra: dict[str, str] = {}
+        if reason:
+            extra["reason"] = reason.strip()
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_MARKED_NOT_SUITABLE,
+            scenario_id=updated.id or "",
+            from_state=scenario.state,
+            to_state=updated.state,
+            current_extra=extra or None,
+        )
         await self._notify_author_outcome(
             scenario=updated,
             outcome="not_suitable",
@@ -220,6 +245,14 @@ class WorkflowService:
             scenario_id=updated.id or "",
             event_type=ReviewEventType.REOPENED_FROM_NOT_SUITABLE,
             actor=current_user,
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_REOPENED,
+            scenario_id=updated.id or "",
             from_state=scenario.state,
             to_state=updated.state,
         )
@@ -260,6 +293,14 @@ class WorkflowService:
             scenario_id=updated.id or "",
             event_type=ReviewEventType.PUBLISHED,
             actor=current_user,
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_PUBLISHED,
+            scenario_id=updated.id or "",
             from_state=scenario.state,
             to_state=updated.state,
         )

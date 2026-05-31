@@ -23,6 +23,7 @@ import { ScenarioEditorPage } from "./pages/ScenarioEditorPage";
 import { AdminCatalogPage } from "./pages/AdminCatalogPage";
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage";
 import { AdminEvaluationsPage } from "./pages/AdminEvaluationsPage";
+import { AdminAuditPage } from "./pages/AdminAuditPage";
 import { PublishedScenariosSection } from "./components/PublishedScenariosSection";
 import { ScenarioSearchField } from "./components/ScenarioSearchField";
 import { matchesScenarioSearch } from "./components/scenarioSearch";
@@ -50,6 +51,7 @@ function HomePage() {
         {getRole() === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
         {getRole() === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
         {getRole() === "admin" ? <Link to="/admin/evaluations">Moderate evaluations</Link> : null}
+        {getRole() === "admin" ? <Link to="/admin/audit">Activity log</Link> : null}
 
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
@@ -751,6 +753,16 @@ export function App() {
             <RequireAuth>
               <RequireAdmin>
                 <AdminEvaluationsPage />
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/audit"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <AdminAuditPage />
               </RequireAdmin>
             </RequireAuth>
           }

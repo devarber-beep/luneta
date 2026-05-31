@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import (
+    admin_audit,
     admin_catalogs,
     admin_evaluations,
     admin_users,
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_users.router, prefix="/admin", tags=["admin"])
     app.include_router(admin_catalogs.router, prefix="/admin", tags=["admin"])
     app.include_router(admin_evaluations.router, prefix="/admin", tags=["admin"])
+    app.include_router(admin_audit.router, prefix="/admin", tags=["admin"])
     app.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"])
     app.include_router(suggestions.router, prefix="/scenarios", tags=["suggestions"])
     app.include_router(evaluations.router, prefix="/scenarios", tags=["evaluations"])

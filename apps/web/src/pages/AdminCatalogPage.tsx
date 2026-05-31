@@ -67,7 +67,8 @@ export function AdminCatalogPage() {
       <h2>Admin — catalogs</h2>
       <p>
         <Link to="/admin/assignments">Reviewer assignments</Link> ·{" "}
-        <Link to="/admin/evaluations">Moderate evaluations</Link> · <Link to="/">Home</Link>
+        <Link to="/admin/evaluations">Moderate evaluations</Link> · <Link to="/admin/audit">Activity log</Link> ·{" "}
+        <Link to="/">Home</Link>
       </p>
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
         <button type="button" onClick={() => setTab("classification")} disabled={tab === "classification"}>

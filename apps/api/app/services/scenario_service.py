@@ -18,7 +18,7 @@ from app.core.scenario_access import (
     can_submit_review,
     can_update_scenario,
 )
-from app.domain.enums import CollaboratorRole, ReviewEventType, ScenarioState, UserAccountStatus, UserRole
+from app.domain.enums import AuditActionType, CollaboratorRole, ReviewEventType, ScenarioState, UserAccountStatus, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
@@ -28,6 +28,7 @@ from app.repositories.scenario_classification import ScenarioClassificationRepos
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
+from app.services.audit_helpers import record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 from app.services.mailer_service import MailerService, NoopMailer
@@ -105,6 +106,13 @@ class ScenarioService:
             event_type=ReviewEventType.CREATE_DRAFT,
             actor_user_id=current_user.id or "",
             actor_role=UserRole(current_user.role),
+            to_state=scenario.state,
+        )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_CREATED,
+            scenario_id=scenario.id or "",
             to_state=scenario.state,
         )
         return scenario
@@ -398,6 +406,14 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
         )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_SUBMITTED_FOR_REVIEW,
+            scenario_id=updated.id or "",
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
         await self._notify_reviewers_for_submitted_scenario(scenario=updated)
         return updated
 
@@ -499,6 +515,13 @@ class ScenarioService:
             actor_user_id=actor_user_id,
             actor_role=UserRole(current_user.role),
         )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_COLLABORATOR_ADDED,
+            scenario_id=updated.id or "",
+            current_extra={"collaborator_user_id": collaborator_user_id},
+        )
         return updated
 
     async def remove_collaborator(
@@ -536,6 +559,13 @@ class ScenarioService:
             actor_user_id=actor_user_id,
             actor_role=UserRole(current_user.role),
         )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_COLLABORATOR_REMOVED,
+            scenario_id=updated.id or "",
+            current_extra={"collaborator_user_id": collaborator_user_id},
+        )
         return updated
 
     async def _get_editable_for_assets(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
@@ -558,4 +588,11 @@ class ScenarioService:
         deleted = await self._scenarios_repo.soft_delete_draft(scenario_id=scenario_id)
         if deleted is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_DRAFT_DELETED,
+            scenario_id=scenario_id,
+            from_state=scenario.state,
+        )
 

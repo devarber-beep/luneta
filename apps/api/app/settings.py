@@ -3,14 +3,31 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Monorepo root `.env` (Luneta/), not `apps/api/.env`.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def _optional_env_file() -> Path | None:
+    """First `.env` found walking up from this module (monorepo root in local dev).
+
+    In Docker the API image is `/app/app/`; compose injects vars via `env_file`, so no
+    on-disk `.env` is required inside the container.
+    """
+    here = Path(__file__).resolve()
+    for directory in (here.parent, *here.parents):
+        candidate = directory / ".env"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+_env_file = _optional_env_file()
+_settings_config = (
+    SettingsConfigDict(extra="ignore", env_file=_env_file) if _env_file else SettingsConfigDict(extra="ignore")
+)
 
 
 class Settings(BaseSettings):
     # Monorepo root `.env` may define keys for web, AI, etc.; ignore unknowns so API tests
     # work when pytest is run from repo root (`python -m pytest`) as well as from `apps/api`.
-    model_config = SettingsConfigDict(env_file=_REPO_ROOT / ".env", extra="ignore")
+    model_config = _settings_config
 
     app_name: str = "Luneta API"
     api_url: str = "http://localhost:8000"
@@ -41,5 +58,6 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None
     openai_embedding_model: str = "text-embedding-3-small"
+
 
 settings = Settings()

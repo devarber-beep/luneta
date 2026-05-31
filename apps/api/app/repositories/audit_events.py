@@ -48,3 +48,54 @@ class AuditEventsRepository:
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return AuditEventModel.model_validate(doc)
+
+    async def get_by_id(self, event_id: str) -> AuditEventModel | None:
+        try:
+            oid = ObjectId(event_id)
+        except Exception:
+            return None
+        doc = await self._collection.find_one({"_id": oid})
+        if doc is None:
+            return None
+        doc["_id"] = str(doc["_id"])
+        return AuditEventModel.model_validate(doc)
+
+    async def list_filtered(
+        self,
+        *,
+        actor_user_id: str | None = None,
+        action_types: list[AuditActionType] | None = None,
+        subject_type: AuditSubjectType | None = None,
+        subject_id: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[AuditEventModel], int]:
+        await self.ensure_indexes()
+        query: dict[str, Any] = {}
+        if actor_user_id:
+            query["actor_user_id"] = actor_user_id
+        if action_types:
+            values = [item.value for item in action_types]
+            query["action_type"] = values[0] if len(values) == 1 else {"$in": values}
+        if subject_type is not None:
+            query["subject_type"] = subject_type.value
+        if subject_id:
+            query["subject_id"] = subject_id
+        if created_from is not None or created_to is not None:
+            created_filter: dict[str, Any] = {}
+            if created_from is not None:
+                created_filter["$gte"] = created_from
+            if created_to is not None:
+                created_filter["$lte"] = created_to
+            query["created_at"] = created_filter
+
+        total = await self._collection.count_documents(query)
+        skip = max(0, (page - 1) * page_size)
+        cursor = self._collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+        items: list[AuditEventModel] = []
+        async for doc in cursor:
+            doc["_id"] = str(doc["_id"])
+            items.append(AuditEventModel.model_validate(doc))
+        return items, total
