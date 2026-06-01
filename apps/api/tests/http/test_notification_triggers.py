@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from bson import ObjectId
 
-from tests.user_doc_helpers import user_doc
+from tests.conftest import user_doc
 
 
 async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, token: str) -> dict:

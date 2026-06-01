@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.user_doc_helpers import user_doc
+from tests.conftest import user_doc
 
 
 async def _admin_token(api_client, fake_db) -> str:

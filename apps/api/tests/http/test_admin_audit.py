@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from tests.user_doc_helpers import user_doc
+from tests.conftest import user_doc
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ Uses `api_client` (+ `fake_db` by default). Exercises status codes, auth headers
 ## Shared fixtures
 
 - `../conftest.py` — `fake_db`, `api_client`, optional real Mongo (`LUNETA_TEST_REAL_DB=1`)
-- `../user_doc_helpers.py` — helpers for inserting user documents in HTTP tests
+- `conftest.user_doc` — helper for inserting user documents in HTTP tests
 
 Run all tests from `apps/api`:
 
