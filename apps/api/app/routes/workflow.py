@@ -24,7 +24,7 @@ from app.schemas.workflow import (
     WorkflowActionResponse,
 )
 from app.services.audit_service import AuditService
-from app.services.mailer_service import MailerService
+from app.services.notifications_factory import build_notification_service
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -38,7 +38,7 @@ def _service(db: AsyncIOMotorDatabase) -> WorkflowService:
         users_repo=UsersRepository(db),
         assignments_repo=assignments,
         suggestions_repo=SuggestionsRepository(db),
-        mailer=MailerService(),
+        notification_service=build_notification_service(db),
         audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
     )
 

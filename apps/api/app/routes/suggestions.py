@@ -26,7 +26,7 @@ from app.schemas.suggestions import (
     SuggestionResponse,
 )
 from app.services.audit_service import AuditService
-from app.services.mailer_service import MailerService
+from app.services.notifications_factory import build_notification_service
 from app.services.suggestion_service import SuggestionService
 
 router = APIRouter()
@@ -41,7 +41,7 @@ def _service(db: AsyncIOMotorDatabase) -> SuggestionService:
         review_events_repo=ReviewEventsRepository(db),
         revisions_repo=ScenarioRevisionsRepository(db),
         audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
-        mailer=MailerService(),
+        notification_service=build_notification_service(db),
     )
 
 

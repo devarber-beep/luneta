@@ -24,7 +24,7 @@ from app.repositories.users import UsersRepository
 from app.schemas.workflow import ReviewQueueItem, ReviewedScenarioItem
 from app.services.audit_helpers import record_scenario_audit
 from app.services.audit_service import AuditService
-from app.services.mailer_service import MailerService, NoopMailer
+from app.services.notification_service import NotificationService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 
 
@@ -37,7 +37,7 @@ class WorkflowService:
         users_repo: UsersRepository,
         assignments_repo: ReviewerAssignmentsRepository,
         suggestions_repo: SuggestionsRepository | None = None,
-        mailer: MailerService | NoopMailer | None = None,
+        notification_service: NotificationService | None = None,
         audit_service: AuditService | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
@@ -45,7 +45,7 @@ class WorkflowService:
         self._users_repo = users_repo
         self._assignments_repo = assignments_repo
         self._suggestions_repo = suggestions_repo
-        self._mailer = mailer if mailer is not None else MailerService()
+        self._notifications = notification_service
         self._audit = audit_service
 
     async def review_queue(
@@ -181,7 +181,13 @@ class WorkflowService:
             to_state=updated.state,
             current_extra={"note": note.strip()},
         )
-        await self._notify_author_outcome(scenario=updated, outcome="changes_required", detail=note)
+        if self._notifications is not None:
+            await self._notifications.notify_scenario_changes_required(
+                owner_user_id=updated.author_user_id,
+                scenario=updated,
+                actor_user_id=current_user.id or "",
+                note=note,
+            )
         return updated, datetime.now(UTC)
 
     async def mark_not_suitable(
@@ -225,11 +231,13 @@ class WorkflowService:
             to_state=updated.state,
             current_extra=extra or None,
         )
-        await self._notify_author_outcome(
-            scenario=updated,
-            outcome="not_suitable",
-            detail=reason,
-        )
+        if self._notifications is not None:
+            await self._notifications.notify_scenario_not_suitable(
+                owner_user_id=updated.author_user_id,
+                scenario=updated,
+                actor_user_id=current_user.id or "",
+                reason=reason,
+            )
         return updated, datetime.now(UTC)
 
     async def reopen(self, *, scenario_id: str, current_user: UserModel):
@@ -256,11 +264,11 @@ class WorkflowService:
             from_state=scenario.state,
             to_state=updated.state,
         )
-        author = await self._users_repo.get_by_id(updated.author_user_id)
-        if author is not None and author.email_verified_at is not None:
-            await self._mailer.send_scenario_reopened_to_author(
-                to_email=str(author.email_normalized),
-                scenario_title=updated.title,
+        if self._notifications is not None:
+            await self._notifications.notify_scenario_reopened(
+                owner_user_id=updated.author_user_id,
+                scenario=updated,
+                actor_user_id=current_user.id or "",
             )
         return updated, datetime.now(UTC)
 
@@ -304,14 +312,11 @@ class WorkflowService:
             from_state=scenario.state,
             to_state=updated.state,
         )
-        author = await self._users_repo.get_by_id(updated.author_user_id)
-        slug = updated.public_slug or updated.slug
-        title = updated.public_title or updated.title
-        if author is not None and author.email_verified_at is not None and slug:
-            await self._mailer.send_scenario_live_to_author(
-                to_email=str(author.email_normalized),
-                scenario_title=title,
-                public_slug=slug,
+        if self._notifications is not None:
+            await self._notifications.notify_scenario_published(
+                owner_user_id=updated.author_user_id,
+                scenario=updated,
+                actor_user_id=current_user.id or "",
             )
         return updated, datetime.now(UTC)
 
@@ -361,13 +366,3 @@ class WorkflowService:
             to_state=to_state,
         )
 
-    async def _notify_author_outcome(self, *, scenario, outcome: str, detail: str | None) -> None:
-        author = await self._users_repo.get_by_id(scenario.author_user_id)
-        if author is None or author.email_verified_at is None:
-            return
-        await self._mailer.send_review_outcome_to_author(
-            to_email=str(author.email_normalized),
-            scenario_title=scenario.title,
-            outcome=outcome,
-            detail=detail,
-        )

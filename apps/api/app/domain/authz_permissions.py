@@ -25,6 +25,8 @@ class Permission(StrEnum):
     USER_READ_SELF = "user_read_self"
     USER_UPDATE_SELF = "user_update_self"
     USER_CHANGE_OWN_PASSWORD = "user_change_own_password"
+    NOTIFICATION_READ_SELF = "notification_read_self"
+    NOTIFICATION_UPDATE_SELF = "notification_update_self"
     USER_ADMIN_CREATE_INVESTIGATOR = "user_admin_create_investigator"
     USER_ADMIN_SET_USER_ROLE = "user_admin_set_user_role"
     USER_ADMIN_SET_ACCOUNT_STATUS = "user_admin_set_account_status"

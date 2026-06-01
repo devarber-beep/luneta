@@ -8,7 +8,6 @@ from app.domain.enums import ReviewEventType, ScenarioState, UserAccountStatus, 
 from app.models.scenario import ScenarioModel, slugify_title
 from app.models.user import UserModel
 from app.schemas.workflow import ReviewQueueItem
-from app.services.mailer_service import NoopMailer
 from app.services.scenario_service import ScenarioService
 from app.services.workflow_service import WorkflowService
 
@@ -304,7 +303,6 @@ async def test_vertical_slice_happy_path_unit() -> None:
     revisions_repo = _FakeRevisionsRepo()
     review_events_repo = _FakeReviewEventsRepo()
     users_repo = _FakeUsersRepo()
-    noop_mailer = NoopMailer()
     author = _author()
     reviewer = _reviewer()
     assignments_repo = _FakeAssignmentsRepo({reviewer.id or "": [author.id or ""]})
@@ -318,14 +316,14 @@ async def test_vertical_slice_happy_path_unit() -> None:
         assignments_repo=assignments_repo,
         classification_repo=classification_repo,
         ethical_repo=ethical_repo,
-        mailer=noop_mailer,
+        notification_service=None,
     )
     workflow_service = WorkflowService(
         scenarios_repo=scenarios_repo,
         review_events_repo=review_events_repo,
         users_repo=users_repo,
         assignments_repo=assignments_repo,
-        mailer=noop_mailer,
+        notification_service=None,
     )
 
     users_repo.users[author.id or ""] = author

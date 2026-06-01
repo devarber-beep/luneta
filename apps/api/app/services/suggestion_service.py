@@ -35,7 +35,7 @@ from app.repositories.scenarios import ScenariosRepository
 from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.users import UsersRepository
 from app.services.audit_service import AuditService
-from app.services.mailer_service import MailerService, NoopMailer
+from app.services.notification_service import NotificationService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 
 
@@ -50,7 +50,7 @@ class SuggestionService:
         review_events_repo: ReviewEventsRepository,
         revisions_repo: ScenarioRevisionsRepository,
         audit_service: AuditService,
-        mailer: MailerService | NoopMailer | None = None,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._suggestions_repo = suggestions_repo
@@ -59,7 +59,7 @@ class SuggestionService:
         self._review_events_repo = review_events_repo
         self._revisions_repo = revisions_repo
         self._audit = audit_service
-        self._mailer = mailer if mailer is not None else MailerService()
+        self._notifications = notification_service
 
     async def user_can_create_suggestion(
         self,
@@ -191,12 +191,12 @@ class SuggestionService:
                 "paragraph_index": paragraph_index,
             },
         )
-        author = await self._users_repo.get_by_id(scenario.author_user_id)
-        if author is not None and author.email_verified_at is not None:
-            await self._mailer.send_suggestion_created_to_owner(
-                to_email=str(author.email_normalized),
-                scenario_title=scenario.title,
-                scenario_id=scenario_id,
+        if self._notifications is not None:
+            await self._notifications.notify_suggestion_received(
+                owner_user_id=scenario.author_user_id,
+                scenario=scenario,
+                suggestion_id=suggestion.id or "",
+                actor_user_id=current_user.id or "",
             )
         return suggestion
 
@@ -236,12 +236,13 @@ class SuggestionService:
             previous={"status": SuggestionStatus.PENDING.value},
             current={"status": SuggestionStatus.ACCEPTED.value, "scenario_id": scenario_id},
         )
-        suggester = await self._users_repo.get_by_id(suggestion.author_user_id)
-        if suggester is not None and suggester.email_verified_at is not None:
-            await self._mailer.send_suggestion_resolved_to_author(
-                to_email=str(suggester.email_normalized),
-                scenario_title=updated_scenario.title,
-                outcome="accepted",
+        if self._notifications is not None:
+            await self._notifications.notify_suggestion_resolved(
+                suggester_user_id=suggestion.author_user_id,
+                scenario=updated_scenario,
+                suggestion_id=suggestion_id,
+                accepted=True,
+                actor_user_id=current_user.id or "",
             )
         await self._record_acceptance_revision(
             scenario=updated_scenario,
@@ -281,12 +282,13 @@ class SuggestionService:
             previous={"status": SuggestionStatus.PENDING.value},
             current={"status": SuggestionStatus.REJECTED.value, "scenario_id": scenario_id},
         )
-        suggester = await self._users_repo.get_by_id(suggestion.author_user_id)
-        if suggester is not None and suggester.email_verified_at is not None:
-            await self._mailer.send_suggestion_resolved_to_author(
-                to_email=str(suggester.email_normalized),
-                scenario_title=scenario.title,
-                outcome="rejected",
+        if self._notifications is not None:
+            await self._notifications.notify_suggestion_resolved(
+                suggester_user_id=suggestion.author_user_id,
+                scenario=scenario,
+                suggestion_id=suggestion_id,
+                accepted=False,
+                actor_user_id=current_user.id or "",
             )
         return resolved
 
@@ -507,6 +509,12 @@ class SuggestionService:
             from_state=scenario.state,
             to_state=updated.state,
         )
+        if self._notifications is not None:
+            await self._notifications.notify_collaborator_added(
+                collaborator_user_id=collaborator_user_id,
+                scenario=updated,
+                actor_user_id=added_by_user_id,
+            )
         return updated
 
     def _validate_suggestion_shape(

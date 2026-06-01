@@ -18,7 +18,7 @@ from app.core.scenario_access import (
     can_submit_review,
     can_update_scenario,
 )
-from app.domain.enums import AuditActionType, CollaboratorRole, ReviewEventType, ScenarioState, UserAccountStatus, UserRole
+from app.domain.enums import AuditActionType, CollaboratorRole, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
@@ -31,7 +31,7 @@ from app.repositories.users import UsersRepository
 from app.services.audit_helpers import record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
-from app.services.mailer_service import MailerService, NoopMailer
+from app.services.notification_service import NotificationService
 from app.services.content_policy import enforce_content_policies
 from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.scenario_submit_validation import ensure_ready_for_submit
@@ -51,7 +51,7 @@ class ScenarioService:
         ethical_repo: EthicalRisksRepository,
         audit_service: AuditService | None = None,
         similarity_service: ScenarioSimilarityService | None = None,
-        mailer: MailerService | NoopMailer | None = None,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._revisions_repo = revisions_repo
@@ -62,7 +62,7 @@ class ScenarioService:
         self._ethical_repo = ethical_repo
         self._audit = audit_service
         self._similarity = similarity_service
-        self._mailer = mailer if mailer is not None else MailerService()
+        self._notifications = notification_service
 
     async def _portfolio_for(self, user: UserModel) -> frozenset[str]:
         return await portfolio_investigator_ids_for_user(
@@ -414,26 +414,27 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
         )
-        await self._notify_reviewers_for_submitted_scenario(scenario=updated)
+        await self._notify_reviewers_for_submitted_scenario(
+            scenario=updated,
+            actor_user_id=actor_user_id,
+        )
         return updated
 
-    async def _notify_reviewers_for_submitted_scenario(self, *, scenario: ScenarioModel) -> None:
-        """Email verified reviewers assigned to the scenario owner."""
-        addresses: set[str] = set()
+    async def _notify_reviewers_for_submitted_scenario(
+        self, *, scenario: ScenarioModel, actor_user_id: str
+    ) -> None:
+        if self._notifications is None:
+            return
         reviewer_ids = await self._assignments_repo.list_reviewer_ids_for_investigator(
             scenario.author_user_id
         )
-        for reviewer in (await self._users_repo.get_by_ids(reviewer_ids)).values():
-            if (
-                reviewer.email_verified_at is not None
-                and reviewer.account_status == UserAccountStatus.ACTIVE
-            ):
-                addresses.add(str(reviewer.email_normalized))
-        for address in addresses:
-            await self._mailer.send_scenario_submitted_for_review(
-                to_email=address,
-                scenario_title=scenario.title,
-                scenario_id=scenario.id or "",
+        for reviewer_id in reviewer_ids:
+            if reviewer_id == actor_user_id:
+                continue
+            await self._notifications.notify_scenario_submitted_for_review(
+                reviewer_user_id=reviewer_id,
+                scenario=scenario,
+                actor_user_id=actor_user_id,
             )
 
     async def start_applying_changes(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
@@ -522,6 +523,12 @@ class ScenarioService:
             scenario_id=updated.id or "",
             current_extra={"collaborator_user_id": collaborator_user_id},
         )
+        if self._notifications is not None:
+            await self._notifications.notify_collaborator_added(
+                collaborator_user_id=collaborator_user_id,
+                scenario=updated,
+                actor_user_id=actor_user_id,
+            )
         return updated
 
     async def remove_collaborator(

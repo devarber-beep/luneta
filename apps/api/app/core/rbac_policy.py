@@ -13,6 +13,8 @@ _REGISTERED_PERMISSIONS: frozenset[Permission] = _ANONYMOUS_PERMISSIONS | frozen
         Permission.USER_READ_SELF,
         Permission.USER_UPDATE_SELF,
         Permission.USER_CHANGE_OWN_PASSWORD,
+        Permission.NOTIFICATION_READ_SELF,
+        Permission.NOTIFICATION_UPDATE_SELF,
     }
 )
 
@@ -30,6 +32,8 @@ _INVESTIGATOR_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.USER_READ_SELF,
         Permission.USER_UPDATE_SELF,
         Permission.USER_CHANGE_OWN_PASSWORD,
+        Permission.NOTIFICATION_READ_SELF,
+        Permission.NOTIFICATION_UPDATE_SELF,
         Permission.AUDIT_EVENT_CREATE,
     }
 )

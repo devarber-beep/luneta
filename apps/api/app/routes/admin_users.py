@@ -29,7 +29,7 @@ from app.schemas.auth import MeResponse, ProfilePatchRequest
 from app.services.admin_user_service import AdminUserService
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
-from app.services.mailer_service import MailerService
+from app.services.notifications_factory import build_notification_service
 from app.services.reviewer_assignment_service import ReviewerAssignmentService
 from app.settings import settings
 from app.storage.minio_storage import MinioUserAvatarStorage
@@ -41,7 +41,7 @@ def _admin_user_service(db: AsyncIOMotorDatabase) -> AdminUserService:
     return AdminUserService(
         users_repo=UsersRepository(db),
         tokens_repo=EmailVerificationTokensRepository(db),
-        mailer=MailerService(),
+        notification_service=build_notification_service(db),
         email_verification_token_ttl_minutes=settings.email_verification_token_ttl_minutes,
         audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
     )

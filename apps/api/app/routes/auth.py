@@ -28,6 +28,7 @@ from app.presenters.me_response import build_me_response
 from app.services.auth_service import AuthService
 from app.services.email_verification_service import EmailVerificationService
 from app.services.mailer_service import MailerService
+from app.services.notifications_factory import build_notification_service
 from app.settings import settings
 from app.storage.minio_storage import MinioUserAvatarStorage
 
@@ -199,4 +200,4 @@ async def change_password(
         current_password=payload.current_password,
         new_password=payload.new_password,
     )
-    await MailerService().send_password_changed_notification(to_email=str(user.email_normalized))
+    await build_notification_service(db).notify_password_changed(user=user)

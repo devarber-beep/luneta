@@ -23,6 +23,7 @@ from app.schemas.evaluations import (
 )
 from app.services.audit_service import AuditService
 from app.services.evaluation_service import EvaluationService
+from app.services.notifications_factory import build_notification_service
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ def _service(db: AsyncIOMotorDatabase) -> EvaluationService:
         ethical_repo=EthicalRisksRepository(db),
         users_repo=UsersRepository(db),
         audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
+        notification_service=build_notification_service(db),
     )
 
 

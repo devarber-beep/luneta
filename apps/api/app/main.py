@@ -14,6 +14,7 @@ from app.routes import (
     public,
     scenarios,
     evaluations,
+    notifications,
     suggestions,
     workflow,
 )
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     # Organizations (first real MongoDB access)
     app.include_router(orgs.router, prefix="/orgs", tags=["orgs"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
     app.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
     app.include_router(admin_users.router, prefix="/admin", tags=["admin"])
     app.include_router(admin_catalogs.router, prefix="/admin", tags=["admin"])

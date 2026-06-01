@@ -37,7 +37,7 @@ from app.schemas.scenarios import (
     SubmitReviewResponse,
 )
 from app.services.audit_service import AuditService
-from app.services.mailer_service import MailerService
+from app.services.notifications_factory import build_notification_service
 from app.services.scenario_service import ScenarioService
 from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.suggestion_service import SuggestionService
@@ -61,7 +61,7 @@ def _service(db: AsyncIOMotorDatabase) -> ScenarioService:
         ethical_repo=EthicalRisksRepository(db),
         audit_service=_audit(db),
         similarity_service=_similarity_service(db),
-        mailer=MailerService(),
+        notification_service=build_notification_service(db),
     )
 
 
@@ -81,7 +81,7 @@ def _suggestion_service(db: AsyncIOMotorDatabase) -> SuggestionService:
         review_events_repo=ReviewEventsRepository(db),
         revisions_repo=ScenarioRevisionsRepository(db),
         audit_service=AuditService(audit_repo=AuditEventsRepository(db)),
-        mailer=MailerService(),
+        notification_service=build_notification_service(db),
     )
 
 

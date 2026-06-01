@@ -132,6 +132,16 @@ async def test_registered_submits_evaluation_owner_sees_summary(api_client, fake
     assert submit.status_code == 201
     assert submit.json()["risk_score"] == 7.5
 
+    owner_notifs = await api_client.get("/notifications", headers=owner_h)
+    assert owner_notifs.status_code == 200
+    eval_notifs = [
+        n
+        for n in owner_notifs.json()["items"]
+        if n["notification_type"] == "scenario_evaluation_received"
+    ]
+    assert len(eval_notifs) == 1
+    assert eval_notifs[0]["scenario_id"] == sid
+
     dup = await api_client.post(
         f"/scenarios/{sid}/evaluations",
         headers=reg_h,

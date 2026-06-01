@@ -22,6 +22,7 @@ from app.repositories.scenario_evaluations import ScenarioEvaluationsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.services.audit_service import AuditService
+from app.services.notification_service import NotificationService
 
 
 class EvaluationService:
@@ -33,12 +34,14 @@ class EvaluationService:
         ethical_repo: EthicalRisksRepository,
         users_repo: UsersRepository,
         audit_service: AuditService,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self._scenarios_repo = scenarios_repo
         self._evaluations_repo = evaluations_repo
         self._ethical_repo = ethical_repo
         self._users_repo = users_repo
         self._audit = audit_service
+        self._notifications = notification_service
 
     async def get_my_evaluation(
         self,
@@ -113,6 +116,12 @@ class EvaluationService:
                 "benefit_score": benefit_score,
             },
         )
+        if self._notifications is not None:
+            await self._notifications.notify_scenario_evaluation_received(
+                scenario=scenario,
+                evaluation_id=created.id or "",
+                evaluator_user_id=current_user.id or "",
+            )
         return created
 
     async def get_summary(

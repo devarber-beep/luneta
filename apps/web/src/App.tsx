@@ -14,7 +14,8 @@ import {
   type SuggestionItem,
   verifyEmail,
 } from "./api";
-import { clearSession, getRole, getToken, setRole, setToken } from "./session";
+import { clearSession, setRole, setToken } from "./session";
+import { useRole, useToken } from "./useSession";
 import { DescriptionWithSuggestions } from "./components/DescriptionWithSuggestions";
 import { ScenarioEvaluationPanel } from "./components/ScenarioEvaluationPanel";
 import { ScenarioEvaluationInsights } from "./components/ScenarioEvaluationInsights";
@@ -27,31 +28,42 @@ import { AdminAuditPage } from "./pages/AdminAuditPage";
 import { PublishedScenariosSection } from "./components/PublishedScenariosSection";
 import { ScenarioSearchField } from "./components/ScenarioSearchField";
 import { matchesScenarioSearch } from "./components/scenarioSearch";
+import { SessionToolbar } from "./components/SessionToolbar";
 
 const layoutStyle: CSSProperties = {
   maxWidth: "860px",
   margin: "0 auto",
   padding: "2rem",
+  paddingTop: "3.5rem",
   fontFamily: "system-ui, sans-serif",
 };
 
 function HomePage() {
-  const token = getToken();
+  const token = useToken();
+  const role = useRole();
   return (
     <main style={layoutStyle}>
       <h1>Luneta</h1>
-      <nav style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
+      <nav
+        style={{
+          display: "flex",
+          gap: "1rem",
+          flexWrap: "wrap",
+          marginTop: "1rem",
+          alignItems: "center",
+        }}
+      >
         {!token ? <Link to="/signup">Signup</Link> : null}
         <Link to="/verify-email">Verify email</Link>
         {!token ? <Link to="/login">Login</Link> : null}
         {token ? <Link to="/my-scenarios">My scenarios</Link> : null}
         {token ? <Link to="/my-profile">My profile</Link> : null}
         {token ? <Link to="/scenarios/new">New scenario</Link> : null}
-        {getRole() === "reviewer" || getRole() === "admin" ? <Link to="/review">Review queue</Link> : null}
-        {getRole() === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
-        {getRole() === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
-        {getRole() === "admin" ? <Link to="/admin/evaluations">Moderate evaluations</Link> : null}
-        {getRole() === "admin" ? <Link to="/admin/audit">Activity log</Link> : null}
+        {role === "reviewer" || role === "admin" ? <Link to="/review">Review queue</Link> : null}
+        {role === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
+        {role === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
+        {role === "admin" ? <Link to="/admin/evaluations">Moderate evaluations</Link> : null}
+        {role === "admin" ? <Link to="/admin/audit">Activity log</Link> : null}
 
       </nav>
       {token ? <p style={{ marginTop: "1rem" }}>Active session.</p> : <p style={{ marginTop: "1rem" }}>No session.</p>}
@@ -167,14 +179,15 @@ function LoginPage() {
 }
 
 function RequireAdmin({ children }: { children: ReactElement }) {
-  if (getRole() !== "admin") {
+  const role = useRole();
+  if (role !== "admin") {
     return <Navigate to="/" replace />;
   }
   return children;
 }
 
 function RequireAuth({ children }: { children: ReactElement }) {
-  const token = getToken();
+  const token = useToken();
   if (!token) {
     return <Navigate to="/login" replace />;
   }
@@ -182,6 +195,7 @@ function RequireAuth({ children }: { children: ReactElement }) {
 }
 
 function MyProfilePage() {
+  const token = useToken();
   const [nickname, setNickname] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -197,7 +211,6 @@ function MyProfilePage() {
   const [message, setMessage] = useState("");
 
   const load = async () => {
-    const token = getToken();
     if (!token) return;
     const profile = await me(token);
     setNickname(profile.nickname);
@@ -217,11 +230,10 @@ function MyProfilePage() {
 
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
-  }, []);
+  }, [token]);
 
   const onSaveProfile = async (event: FormEvent) => {
     event.preventDefault();
-    const token = getToken();
     if (!token) return;
     const nick = nickname.trim();
     if (nick.length < 2) {
@@ -243,7 +255,6 @@ function MyProfilePage() {
 
   const onChangePassword = async (event: FormEvent) => {
     event.preventDefault();
-    const token = getToken();
     if (!token) return;
     if (newPassword.length < 8) {
       setMessage("New password must be at least 8 characters.");
@@ -361,6 +372,7 @@ function MyProfilePage() {
 }
 
 function MyScenariosPage() {
+  const token = useToken();
   const [items, setItems] = useState<
     Array<{
       id: string;
@@ -376,7 +388,6 @@ function MyScenariosPage() {
   const [message, setMessage] = useState("");
 
   const load = async () => {
-    const token = getToken();
     if (!token) {
       return;
     }
@@ -389,7 +400,6 @@ function MyScenariosPage() {
   };
 
   const onDeleteDraft = async (id: string, title: string) => {
-    const token = getToken();
     if (!token) {
       return;
     }
@@ -407,7 +417,7 @@ function MyScenariosPage() {
 
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
-  }, []);
+  }, [token]);
 
   const visibleItems = items.filter((s) =>
     matchesScenarioSearch(appliedSearchQ, [s.title, s.state, s.my_participation_role]),
@@ -467,6 +477,8 @@ function MyScenariosPage() {
 
 function PublicScenarioPage() {
   const { slug } = useParams();
+  const token = useToken();
+  const role = useRole();
   const [scenarioId, setScenarioId] = useState("");
   const [authorUserId, setAuthorUserId] = useState("");
   const [authorNickname, setAuthorNickname] = useState("");
@@ -487,7 +499,6 @@ function PublicScenarioPage() {
   const [message, setMessage] = useState("");
 
   const loadSuggestions = async (sid: string) => {
-    const token = getToken();
     if (!token) return;
     try {
       const list = await listScenarioSuggestions(token, sid);
@@ -500,13 +511,14 @@ function PublicScenarioPage() {
   };
 
   useEffect(() => {
-    const token = getToken();
     if (token) {
       me(token)
         .then((profile) => setMyUserId(profile.user_id))
         .catch(() => setMyUserId(null));
+    } else {
+      setMyUserId(null);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (!slug) {
@@ -532,7 +544,6 @@ function PublicScenarioPage() {
             .sort((a, b) => a.order - b.order)
             .map((x) => ({ url: x.signed_url, alt: x.alt_text ?? "scenario image" })),
         );
-        const token = getToken();
         if (token && data.id) {
           try {
             const detail = await getScenario(token, data.id);
@@ -544,7 +555,7 @@ function PublicScenarioPage() {
         }
       })
       .catch((error: Error) => setMessage(error.message));
-  }, [slug]);
+  }, [slug, token]);
 
   return (
     <main style={layoutStyle}>
@@ -598,7 +609,7 @@ function PublicScenarioPage() {
       <h3>{title}</h3>
       <div style={{ marginBottom: inlineImages.length ? "1rem" : 0 }}>
         {scenarioId &&
-        getToken() &&
+        token &&
         myUserId &&
         authorUserId &&
         myUserId !== authorUserId &&
@@ -632,19 +643,19 @@ function PublicScenarioPage() {
           ))}
         </section>
       ) : null}
-      {scenarioId && getToken() ? (
+      {scenarioId && token ? (
         <>
           <ScenarioEvaluationInsights
             scenarioId={scenarioId}
-            token={getToken() ?? ""}
+            token={token}
             showSummary
-            ownerView={Boolean(myUserId && authorUserId && myUserId === authorUserId) && getRole() !== "admin"}
-            showDetail={getRole() === "admin"}
-            showModeration={getRole() === "admin"}
+            ownerView={Boolean(myUserId && authorUserId && myUserId === authorUserId) && role !== "admin"}
+            showDetail={role === "admin"}
+            showModeration={role === "admin"}
           />
           <ScenarioEvaluationPanel
             scenarioId={scenarioId}
-            token={getToken() ?? ""}
+            token={token}
             authorUserId={authorUserId}
             myUserId={myUserId}
           />
@@ -656,24 +667,10 @@ function PublicScenarioPage() {
   );
 }
 
-function LogoutButton() {
-  return (
-    <button
-      onClick={() => {
-        clearSession();
-        window.location.href = "/";
-      }}
-      style={{ position: "fixed", top: 12, right: 12 }}
-    >
-      Logout
-    </button>
-  );
-}
-
 export function App() {
   return (
     <>
-      <LogoutButton />
+      <SessionToolbar />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/signup" element={<SignupPage />} />

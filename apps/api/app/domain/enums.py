@@ -103,3 +103,28 @@ class AuditActionType(StrEnum):
     SCENARIO_DRAFT_DELETED = "scenario_draft_deleted"
     SCENARIO_COLLABORATOR_ADDED = "scenario_collaborator_added"
     SCENARIO_COLLABORATOR_REMOVED = "scenario_collaborator_removed"
+
+
+class NotificationEntityType(StrEnum):
+    SCENARIO = "scenario"
+    SUGGESTION = "suggestion"
+    USER = "user"
+    EVALUATION = "evaluation"
+
+
+class NotificationType(StrEnum):
+    SUGGESTION_RECEIVED = "suggestion_received"
+    SUGGESTION_ACCEPTED = "suggestion_accepted"
+    SUGGESTION_REJECTED = "suggestion_rejected"
+    SCENARIO_SUBMITTED_FOR_REVIEW = "scenario_submitted_for_review"
+    SCENARIO_REVIEW_PUBLISHED = "scenario_review_published"
+    SCENARIO_REVIEW_CHANGES_REQUIRED = "scenario_review_changes_required"
+    SCENARIO_REVIEW_NOT_SUITABLE = "scenario_review_not_suitable"
+    SCENARIO_REOPENED = "scenario_reopened"
+    COLLABORATOR_ADDED = "collaborator_added"
+    INVESTIGATOR_INVITED = "investigator_invited"
+    ACCOUNT_DISABLED = "account_disabled"
+    ACCOUNT_REACTIVATED = "account_reactivated"
+    USER_ROLE_CHANGED = "user_role_changed"
+    SCENARIO_EVALUATION_RECEIVED = "scenario_evaluation_received"
+    PASSWORD_CHANGED = "password_changed"

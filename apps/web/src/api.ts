@@ -891,3 +891,60 @@ export async function moderateScenarioEvaluation(
     throw new Error(await getFetchErrorMessage(response));
   }
 }
+
+export type NotificationItem = {
+  id: string;
+  notification_type: string;
+  title: string;
+  message: string | null;
+  entity_type: string;
+  entity_id: string;
+  scenario_id: string | null;
+  actor_user_id: string | null;
+  link_path: string | null;
+  payload: Record<string, unknown> | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+export type NotificationListResponse = {
+  items: NotificationItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  unread_count: number;
+};
+
+export async function listNotifications(
+  token: string,
+  params: { unread_only?: boolean; page?: number; page_size?: number } = {},
+): Promise<NotificationListResponse> {
+  const search = new URLSearchParams();
+  if (params.unread_only) search.set("unread_only", "true");
+  if (params.page) search.set("page", String(params.page));
+  if (params.page_size) search.set("page_size", String(params.page_size));
+  const q = search.toString();
+  return request(`/notifications${q ? `?${q}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function getNotificationUnreadCount(token: string): Promise<{ unread_count: number }> {
+  return request("/notifications/unread-count", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function markNotificationRead(token: string, notificationId: string): Promise<NotificationItem> {
+  return request(`/notifications/${notificationId}/read`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function markAllNotificationsRead(token: string): Promise<{ unread_count: number }> {
+  return request("/notifications/read-all", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

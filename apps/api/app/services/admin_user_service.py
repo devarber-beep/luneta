@@ -26,7 +26,7 @@ from app.services.audit_service import AuditService
 
 from app.services.email_verification_service import EmailVerificationService
 
-from app.services.mailer_service import MailerService, NoopMailer
+from app.services.notification_service import NotificationService
 
 
 
@@ -44,7 +44,7 @@ class AdminUserService:
 
         tokens_repo: EmailVerificationTokensRepository,
 
-        mailer: MailerService | NoopMailer,
+        notification_service: NotificationService,
 
         email_verification_token_ttl_minutes: int,
 
@@ -56,7 +56,7 @@ class AdminUserService:
 
         self._tokens_repo = tokens_repo
 
-        self._mailer = mailer
+        self._notifications = notification_service
 
         self._email_verification_token_ttl_minutes = email_verification_token_ttl_minutes
 
@@ -128,9 +128,9 @@ class AdminUserService:
 
         verification_token = await ev.issue_token(user_id=uid, email=str(user.email_normalized))
 
-        await self._mailer.send_investigator_invite(
+        await self._notifications.notify_investigator_invited(
 
-            to_email=str(user.email_normalized),
+            user=user,
 
             temporary_password=temporary_password,
 
@@ -240,6 +240,18 @@ class AdminUserService:
 
             )
 
+        await self._notifications.notify_user_role_changed(
+
+            user=updated,
+
+            previous_role=current,
+
+            new_role=new_role,
+
+            actor_user_id=actor.id or "",
+
+        )
+
         return updated
 
 
@@ -285,6 +297,18 @@ class AdminUserService:
                 current={"account_status": account_status.value},
 
             )
+
+        await self._notifications.notify_account_status_changed(
+
+            user=updated,
+
+            previous_status=previous_status,
+
+            new_status=account_status,
+
+            actor_user_id=actor.id or "",
+
+        )
 
         return updated
 
