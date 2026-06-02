@@ -29,6 +29,8 @@ import { PublishedScenariosSection } from "./components/PublishedScenariosSectio
 import { ScenarioSearchField } from "./components/ScenarioSearchField";
 import { matchesScenarioSearch } from "./components/scenarioSearch";
 import { SessionToolbar } from "./components/SessionToolbar";
+import { describeUsageContext } from "./components/usageContextLabels";
+import type { ScenarioUsageContext } from "./api";
 
 const layoutStyle: CSSProperties = {
   maxWidth: "860px",
@@ -489,6 +491,7 @@ function PublicScenarioPage() {
   const [summary, setSummary] = useState<string | null>(null);
   const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [ethicalRisks, setEthicalRisks] = useState<Array<{ id: string; label: string }>>([]);
+  const [usageContextLines, setUsageContextLines] = useState<string[]>([]);
   const [publicCanSuggest, setPublicCanSuggest] = useState(false);
   const [publishedAt, setPublishedAt] = useState("");
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
@@ -535,6 +538,7 @@ function PublicScenarioPage() {
         setSummary(data.summary ?? null);
         setCategories(data.categories ?? []);
         setEthicalRisks(data.ethical_risks ?? []);
+        setUsageContextLines(describeUsageContext(data.usage_context as ScenarioUsageContext | null));
         setPublishedAt(data.published_at);
         setCoverUrl(data.cover_image?.signed_url ?? null);
         setCoverAlt(data.cover_image?.alt_text ?? "cover image");
@@ -589,6 +593,13 @@ function PublicScenarioPage() {
           <p style={{ margin: "0.5rem 0 0" }}>
             <strong>Ethical risks:</strong> {ethicalRisks.map((r) => r.label).join(", ")}
           </p>
+        ) : null}
+        {usageContextLines.length > 0 ? (
+          <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.25rem" }}>
+            {usageContextLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
         ) : null}
       </section>
       {coverUrl ? (

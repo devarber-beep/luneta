@@ -15,7 +15,7 @@ from app.core.evaluation_access import (
 )
 from app.domain.enums import AuditActionType, AuditSubjectType, EvaluationVisibility
 from app.models.scenario import ScenarioModel
-from app.models.scenario_evaluation import EvaluationAspectsModel, ScenarioEvaluationModel
+from app.models.scenario_evaluation import ScenarioEvaluationModel
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.scenario_evaluations import ScenarioEvaluationsRepository
@@ -68,7 +68,6 @@ class EvaluationService:
         benefit_score: float,
         detected_ethical_risk_ids: list[str],
         comment: str,
-        aspects: EvaluationAspectsModel,
     ) -> ScenarioEvaluationModel:
         scenario = await self._require_scenario(scenario_id)
         if not can_submit_evaluation(user=current_user, scenario=scenario):
@@ -95,7 +94,6 @@ class EvaluationService:
                 benefit_score=benefit_score,
                 detected_ethical_risk_ids=detected_ethical_risk_ids,
                 comment=comment,
-                aspects=aspects,
             )
         except ValueError as exc:
             if str(exc) == "evaluation_already_exists":
@@ -223,7 +221,6 @@ class EvaluationService:
             "detected_ethical_risk_ids": evaluation.detected_ethical_risk_ids,
             "detected_ethical_risk_labels": labels,
             "comment": evaluation.comment,
-            "aspects": evaluation.aspects.model_dump(mode="json"),
             "visibility": evaluation.visibility,
             "submitted_at": evaluation.submitted_at,
         }

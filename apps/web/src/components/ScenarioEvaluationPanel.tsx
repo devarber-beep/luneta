@@ -3,37 +3,8 @@ import {
   fetchActiveEthicalRisks,
   getMyScenarioEvaluation,
   submitScenarioEvaluation,
-  type EvaluationAspects,
   type EvaluationItem,
 } from "../api";
-
-const CHILDREN_AGE_OPTIONS: Array<{ value: EvaluationAspects["children_age"]; label: string }> = [
-  { value: "0-4", label: "0–4" },
-  { value: "5-9", label: "5–9" },
-  { value: "10-14", label: "10–14" },
-  { value: "15_or_more", label: "15 or more" },
-];
-
-const DURATION_OPTIONS: Array<{ value: EvaluationAspects["duration_frequency"]; label: string }> = [
-  { value: "daily", label: "Daily" },
-  { value: "once_a_week", label: "Once a week" },
-  { value: "several_times_a_day", label: "Several times a day" },
-  { value: "several_times_a_week", label: "Several times a week" },
-  { value: "once_a_month", label: "Once a month" },
-];
-
-const YES_NO_OPTIONS: Array<{ value: EvaluationAspects["consent"]; label: string }> = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-];
-
-const emptyAspects = (): EvaluationAspects => ({
-  children_age: "",
-  duration_frequency: "",
-  execution_place: "",
-  special_circumstances: "",
-  consent: "",
-});
 
 function formatScore(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -66,36 +37,6 @@ function HalfPointSlider({
   );
 }
 
-function YesNoField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: "" | "yes" | "no";
-  onChange: (next: "yes" | "no") => void;
-}) {
-  return (
-    <fieldset style={{ border: "none", margin: 0, padding: 0 }}>
-      <legend style={{ marginBottom: "0.35rem", fontWeight: 500 }}>{label}</legend>
-      <div style={{ display: "flex", gap: "1rem" }}>
-        {YES_NO_OPTIONS.map((opt) => (
-          <label key={opt.value} style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
-            <input
-              type="radio"
-              name={label}
-              checked={value === opt.value}
-              onChange={() => onChange(opt.value)}
-              required={value === ""}
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
 type Props = {
   scenarioId: string;
   token: string;
@@ -111,7 +52,6 @@ export function ScenarioEvaluationPanel({ scenarioId, token, authorUserId, myUse
   const [benefitScore, setBenefitScore] = useState(5);
   const [selectedRisks, setSelectedRisks] = useState<string[]>([]);
   const [comment, setComment] = useState("");
-  const [aspects, setAspects] = useState<EvaluationAspects>(emptyAspects);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -142,21 +82,10 @@ export function ScenarioEvaluationPanel({ scenarioId, token, authorUserId, myUse
     reload().catch((e: Error) => setMessage(e.message));
   }, [scenarioId, token, isOwner]);
 
-  const aspectsComplete =
-    aspects.children_age !== "" &&
-    aspects.duration_frequency !== "" &&
-    aspects.execution_place !== "" &&
-    aspects.special_circumstances !== "" &&
-    aspects.consent !== "";
-
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (selectedRisks.length === 0) {
       setMessage("Select at least one ethical risk from the catalog.");
-      return;
-    }
-    if (!aspectsComplete) {
-      setMessage("Complete all required fields in the evaluation form.");
       return;
     }
     try {
@@ -165,7 +94,6 @@ export function ScenarioEvaluationPanel({ scenarioId, token, authorUserId, myUse
         benefit_score: benefitScore,
         detected_ethical_risk_ids: selectedRisks,
         comment,
-        aspects: aspects as EvaluationAspects,
       });
       setMessage("Evaluation submitted. Thank you.");
       await reload();
@@ -249,68 +177,6 @@ export function ScenarioEvaluationPanel({ scenarioId, token, authorUserId, myUse
             <span>Free comment (optional)</span>
             <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
           </label>
-
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Children age range</span>
-            <select
-              required
-              value={aspects.children_age}
-              onChange={(e) =>
-                setAspects((prev) => ({
-                  ...prev,
-                  children_age: e.target.value as EvaluationAspects["children_age"],
-                }))
-              }
-            >
-              <option value="" disabled>
-                Select a range
-              </option>
-              {CHILDREN_AGE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Duration and frequency</span>
-            <select
-              required
-              value={aspects.duration_frequency}
-              onChange={(e) =>
-                setAspects((prev) => ({
-                  ...prev,
-                  duration_frequency: e.target.value as EvaluationAspects["duration_frequency"],
-                }))
-              }
-            >
-              <option value="" disabled>
-                Select an option
-              </option>
-              {DURATION_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <YesNoField
-            label="Does the execution place affect the scenario?"
-            value={aspects.execution_place}
-            onChange={(next) => setAspects((prev) => ({ ...prev, execution_place: next }))}
-          />
-          <YesNoField
-            label="Are there special circumstances for the child?"
-            value={aspects.special_circumstances}
-            onChange={(next) => setAspects((prev) => ({ ...prev, special_circumstances: next }))}
-          />
-          <YesNoField
-            label="Is consent in place for this scenario?"
-            value={aspects.consent}
-            onChange={(next) => setAspects((prev) => ({ ...prev, consent: next }))}
-          />
 
           <button type="submit">Submit evaluation</button>
         </form>

@@ -6,7 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.enums import EvaluationVisibility
-from app.models.scenario_evaluation import EvaluationAspectsModel, _validate_half_point_score
+from app.models.scenario_evaluation import _validate_half_point_score
 
 
 class SubmitEvaluationRequest(BaseModel):
@@ -19,11 +19,6 @@ class SubmitEvaluationRequest(BaseModel):
         return _validate_half_point_score(value)
     detected_ethical_risk_ids: list[str] = Field(min_length=1)
     comment: str = ""
-    aspects: EvaluationAspectsModel
-
-
-class EvaluationAspectsResponse(EvaluationAspectsModel):
-    pass
 
 
 class EvaluationResponse(BaseModel):
@@ -36,7 +31,6 @@ class EvaluationResponse(BaseModel):
     detected_ethical_risk_ids: list[str]
     detected_ethical_risk_labels: list[str] = Field(default_factory=list)
     comment: str
-    aspects: EvaluationAspectsResponse
     visibility: EvaluationVisibility
     submitted_at: datetime
 

@@ -51,7 +51,7 @@ def can_read_evaluation_comments(*, user: UserModel, scenario: ScenarioModel) ->
 
 
 def can_read_evaluation_detail(*, user: UserModel, scenario: ScenarioModel) -> bool:
-    """Per-evaluation breakdown including scores, aspects, and evaluator identity; admin only."""
+    """Per-evaluation breakdown including scores and evaluator identity; admin only."""
     if scenario.deleted_at is not None:
         return False
     return UserRole(user.role) == UserRole.ADMIN

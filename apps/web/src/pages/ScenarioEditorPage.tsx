@@ -26,6 +26,13 @@ import {
 import { fetchActiveCategories, fetchActiveEthicalRisks } from "../adminApi";
 import { DescriptionWithSuggestions } from "../components/DescriptionWithSuggestions";
 import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsights";
+import {
+  ScenarioUsageContextFields,
+  emptyUsageContextForm,
+  usageContextFromScenario,
+  usageContextToPatch,
+  type UsageContextFormState,
+} from "../components/ScenarioUsageContextFields";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "860px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -72,6 +79,7 @@ export function ScenarioEditorPage({
   const [description, setDescription] = useState("");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [ethicalRiskIds, setEthicalRiskIds] = useState<string[]>([]);
+  const [usageContext, setUsageContext] = useState<UsageContextFormState>(emptyUsageContextForm);
   const [catalogCategories, setCatalogCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [ethicalOptions, setEthicalOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [state, setState] = useState(isCreate ? "draft" : "");
@@ -173,6 +181,7 @@ export function ScenarioEditorPage({
     setDescription(scenario.description ?? "");
     setCategoryIds(scenario.category_ids ?? []);
     setEthicalRiskIds(scenario.ethical_risk_ids ?? []);
+    setUsageContext(usageContextFromScenario(scenario.usage_context));
     setReviewFeedbackNote(scenario.review_feedback_note ?? null);
     setAuthorUserId(scenario.author_user_id);
     setState(scenario.state);
@@ -310,6 +319,7 @@ export function ScenarioEditorPage({
         description: description.trim(),
         category_ids: categoryIds,
         ethical_risk_ids: ethicalRiskIds,
+        usage_context: usageContextToPatch(usageContext),
       });
       if (coverFile) {
         updated = await uploadScenarioCover(token, id, coverFile);
@@ -369,6 +379,7 @@ export function ScenarioEditorPage({
         description: description.trim(),
         category_ids: categoryIds,
         ethical_risk_ids: ethicalRiskIds,
+        usage_context: usageContextToPatch(usageContext),
       });
       if (coverFile) {
         await uploadScenarioCover(token, id, coverFile);
@@ -741,6 +752,14 @@ export function ScenarioEditorPage({
               {r.label}
             </label>
           ))}
+        </section>
+
+        <section style={sectionStyle}>
+          <h3 style={{ marginTop: 0 }}>Usage context</h3>
+          <p style={{ marginTop: 0, color: "#555", fontSize: "0.95rem" }}>
+            Describe how this scenario is intended to be used with children. Required before submitting for review.
+          </p>
+          <ScenarioUsageContextFields value={usageContext} onChange={setUsageContext} disabled={locked} />
         </section>
 
         {scenarioId && getToken() && state === "published" ? (

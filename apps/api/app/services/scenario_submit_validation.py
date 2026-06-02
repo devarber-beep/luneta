@@ -25,6 +25,9 @@ async def ensure_ready_for_submit(
         missing.append("categories")
     if not scenario.ethical_risk_ids:
         missing.append("ethical_risks")
+    ctx = scenario.usage_context
+    if ctx is None or not ctx.is_complete():
+        missing.append("usage_context")
 
     if missing:
         raise HTTPException(

@@ -128,7 +128,7 @@ El sistema deberá permitir crear, editar, validar y gestionar escenarios.
 
 ### RF-3.1 Datos de los escenarios
 
-- **RF-3.1.1:** El escenario deberá incluir, como mínimo, un **título**, una **descripción**, una **imagen** que sirva de **portada**, una **categoría** y el **etiquetado de los riesgos éticos**.
+- **RF-3.1.1:** El escenario deberá incluir, como mínimo, un **título**, una **descripción**, una **imagen** que sirva de **portada**, una **categoría**, el **etiquetado de los riesgos éticos** y su **contexto de uso** (RF-8.3).
 - **RF-3.1.2:** El sistema permitirá completar datos complementarios, como **otras imágenes** y **etiquetas** útiles para su clasificación (si participan otros usuarios o solo los niños, edad para la que está dirigido, si ocurre en un espacio interior o exterior, etc.).
 - **RF-3.1.3:** El escenario podrá incluir información sobre **beneficios** ofrecidos por el escenario.
 
@@ -154,7 +154,7 @@ El sistema deberá permitir crear, editar, validar y gestionar escenarios.
 ### RF-3.5 Envío a revisión
 
 - **RF-3.5.1:** Una vez terminado el nuevo escenario, el **investigador** (como **propietario**) deberá **enviarlo a revisión**. El escenario **no** será visible al público hasta completar el flujo de revisión.
-- **RF-3.5.2:** Para enviarlo a publicación, el escenario debe tener **título**, **descripción**, **imagen de portada**, **categoría** y **etiquetado de riesgos**.
+- **RF-3.5.2:** Para enviarlo a publicación, el escenario debe tener **título**, **descripción**, **imagen de portada**, **categoría**, **etiquetado de riesgos** y **contexto de uso completo**.
 
 ### RF-3.6 Clasificación de los escenarios
 
@@ -364,17 +364,16 @@ El sistema deberá permitir la **evaluación ética** de escenarios **publicados
 - **RF-8.2.5:** Podrá añadir un **comentario libre**.
 - **RF-8.2.6:** Solo las evaluaciones **completas** podrán enviarse.
 
-### RF-8.3 Aspectos a considerar
+### RF-8.3 Contexto de uso del escenario (autor)
 
-- **RF-8.3.1:** **Edad de los niños:** qué ocurre en cada rango de edad.
-- **RF-8.3.2:** **Duración y frecuencia:** para cada rango de edad, durante cuánto tiempo y con qué frecuencia sería aceptable el uso del escenario.
-- **RF-8.3.3:** **Número de niños y niñas:** si participan varios, cuál sería el mínimo y el máximo recomendado.
-- **RF-8.3.4:** **Personas físicamente presentes:** quiénes están presentes en persona.
-- **RF-8.3.5:** **Personas presentes de forma en línea o virtual.**
-- **RF-8.3.6:** **Uso de las gafas:** quiénes de los presentes usan las gafas.
-- **RF-8.3.7:** **Lugar de ejecución:** cómo afecta el lugar al desarrollo del escenario.
-- **RF-8.3.8:** **Circunstancias especiales** del niño o la niña (discapacidades, enfermedad, etc.).
-- **RF-8.3.9:** **Consentimiento:** quién da el consentimiento para que se ejecute el escenario.
+- **RF-8.3.1:** **Rango de edad:** se informará con dos números (inicio y fin), generando un rango del tipo `inicio-fin`.
+- **RF-8.3.2:** **Duración y frecuencia:** durante cuánto tiempo y con qué frecuencia sería aceptable el uso del escenario.
+- **RF-8.3.3:** **Número de niños y niñas:** se informará un único valor numérico o **indefinido**.
+- **RF-8.3.4:** **Presencia física:** indicador sí/no de si hay personas físicamente presentes.
+- **RF-8.3.5:** **Presencia online/virtual:** indicador sí/no de si hay personas presentes en remoto.
+- **RF-8.3.6:** **Lugar de ejecución:** si el lugar afecta al desarrollo del escenario (sí/no).
+- **RF-8.3.7:** **Circunstancias especiales** del niño o la niña (sí/no).
+- **RF-8.3.8:** **Consentimiento:** si existe consentimiento para ejecutar el escenario (sí/no).
 
 ### RF-8.4 Reglas de evaluación
 
@@ -384,7 +383,7 @@ El sistema deberá permitir la **evaluación ética** de escenarios **publicados
 ### RF-8.5 Visibilidad de las evaluaciones
 
 - **RF-8.5.1:** El sistema mostrará para los **investigadores** la **media global** de la puntuación de **riesgo** y de **beneficio** del escenario y las **etiquetas de riesgo**.
-- **RF-8.5.2:** El **administrador** podrá consultar el **detalle** de cada evaluación (puntuaciones, aspectos, riesgos detectados y comentario). El **propietario** verá el **resumen agregado** como el resto de usuarios (**RF-8.5.1**) y, si hay **comentarios libres** no vacíos, también esos textos; en ningún caso verá la **identidad** del evaluador ni el detalle individual de cada evaluación.
+- **RF-8.5.2:** El **administrador** podrá consultar el **detalle** de cada evaluación (puntuaciones, riesgos detectados y comentario). El **propietario** verá el **resumen agregado** como el resto de usuarios (**RF-8.5.1**) y, si hay **comentarios libres** no vacíos, también esos textos; en ningún caso verá la **identidad** del evaluador ni el detalle individual de cada evaluación.
 - **RF-8.5.3:** Solo el **administrador** podrá ver la **identidad** del usuario evaluador.
 
 ### RF-8.6 Moderación y control

@@ -6,7 +6,7 @@ import {
   type EvaluationItem,
   type EvaluationSummary,
 } from "../api";
-import { describeEvaluationAspects, formatEvaluationScore } from "./evaluationLabels";
+import { formatEvaluationScore } from "./evaluationLabels";
 import { getRole } from "../session";
 
 function OwnerCommentsBody({ comments }: { comments: string[] }) {
@@ -167,11 +167,6 @@ export function ScenarioEvaluationInsights({
                   <span> ({ev.detected_ethical_risk_labels.join(", ")})</span>
                 ) : null}
                 {ev.comment ? <p style={{ margin: "0.25rem 0 0" }}>{ev.comment}</p> : null}
-                <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", color: "#444", fontSize: "0.9rem" }}>
-                  {describeEvaluationAspects(ev.aspects).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
               </li>
             ))}
           </ul>

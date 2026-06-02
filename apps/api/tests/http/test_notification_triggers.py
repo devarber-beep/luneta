@@ -8,6 +8,7 @@ import pytest
 from bson import ObjectId
 
 from tests.conftest import user_doc
+from tests.scenario_fixtures import COMPLETE_USAGE_CONTEXT
 
 
 async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, token: str) -> dict:
@@ -110,7 +111,11 @@ async def _prepare_in_review(
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": COMPLETE_USAGE_CONTEXT,
+        },
         headers=owner_h,
     )
     submit = await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)

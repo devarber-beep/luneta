@@ -176,6 +176,17 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
         json={
             "category_ids": [cat_id],
             "ethical_risk_ids": [risk_id],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
         },
         headers=author_headers,
     )
@@ -335,3 +346,8 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
         json={"email": "author@luneta.dev", "password": "Newpass456!"},
     )
     assert login_after_pw_change.status_code == 200
+
+
+
+
+

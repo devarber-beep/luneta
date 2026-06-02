@@ -69,6 +69,17 @@ async def test_http_reviewer_cannot_publish_own_scenario(api_client, fake_db) ->
         json={
             "category_ids": [str(cat.inserted_id)],
             "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
         },
         headers=headers,
     )
@@ -79,3 +90,8 @@ async def test_http_reviewer_cannot_publish_own_scenario(api_client, fake_db) ->
     assert start.status_code == 200
     pub = await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=headers)
     assert pub.status_code == 403
+
+
+
+
+

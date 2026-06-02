@@ -105,6 +105,7 @@ def _to_response(scenario) -> ScenarioResponse:
         description=scenario.description,
         category_ids=scenario.category_ids,
         ethical_risk_ids=scenario.ethical_risk_ids,
+        usage_context=scenario.usage_context,
         author_user_id=scenario.author_user_id,
         collaborators=[
             ScenarioCollaboratorResponse(
@@ -257,6 +258,7 @@ async def patch_scenario(
     ),
 ) -> ScenarioResponse:
     raw = payload.model_dump(exclude_unset=True)
+    usage_context_raw = raw.get("usage_context")
     scenario = await _service(db).patch_draft(
         scenario_id=scenario_id,
         current_user=current_user,
@@ -267,6 +269,7 @@ async def patch_scenario(
         tags=raw.get("tags"),
         category_ids=raw.get("category_ids"),
         ethical_risk_ids=raw.get("ethical_risk_ids"),
+        usage_context=payload.usage_context if usage_context_raw is not None else None,
         sensitive_data_involved=raw.get("sensitive_data_involved"),
     )
     return _to_response(scenario)

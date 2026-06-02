@@ -6,6 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from app.domain.enums import CollaboratorRole, ScenarioState
+from app.models.scenario_usage_context import ScenarioUsageContextModel
 
 
 class ScenarioParticipationRole(StrEnum):
@@ -36,6 +37,7 @@ class ScenarioPatchRequest(BaseModel):
     tags: list[str] | None = None
     category_ids: list[str] | None = None
     ethical_risk_ids: list[str] | None = None
+    usage_context: ScenarioUsageContextModel | None = None
     sensitive_data_involved: bool | None = None
 
 
@@ -62,6 +64,7 @@ class ScenarioResponse(BaseModel):
     description: str
     category_ids: list[str] = Field(default_factory=list)
     ethical_risk_ids: list[str] = Field(default_factory=list)
+    usage_context: ScenarioUsageContextModel | None = None
     author_user_id: str
     collaborators: list["ScenarioCollaboratorResponse"]
     state: ScenarioState

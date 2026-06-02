@@ -47,6 +47,17 @@ async def test_submit_review_blocked_by_sensitive_email(api_client, fake_db) -> 
                 "cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0},
                 "category_ids": [str(cat.inserted_id)],
                 "ethical_risk_ids": [str(risk.inserted_id)],
+                "usage_context": {
+                    "children_age_start": 5,
+                    "children_age_end": 9,
+                    "children_count": 12,
+                    "duration_frequency": "once_a_week",
+                    "physically_present": "yes",
+                    "online_present": "no",
+                    "execution_place_affects_scenario": "yes",
+                    "special_circumstances": "no",
+                    "consent_in_place": "yes",
+                },
                 "description": "Reach the teacher at teacher@school.edu for details.",
             }
         },
@@ -112,3 +123,8 @@ async def test_similarity_check_finds_heuristic_match(api_client, fake_db) -> No
     body = check.json()
     assert body["provider"] in ("heuristic", "openai_embeddings")
     assert len(body["candidates"]) >= 1
+
+
+
+
+

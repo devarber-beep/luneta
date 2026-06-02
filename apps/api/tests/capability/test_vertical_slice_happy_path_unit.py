@@ -52,6 +52,7 @@ class _FakeScenariosRepo:
         tags: list[str] | None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
+        usage_context: dict | None = None,
         sensitive_data_involved: bool | None = None,
     ):
         if not self.scenario or self.scenario.id != scenario_id:
@@ -66,6 +67,8 @@ class _FakeScenariosRepo:
             data["category_ids"] = category_ids
         if ethical_risk_ids is not None:
             data["ethical_risk_ids"] = ethical_risk_ids
+        if usage_context is not None:
+            data["usage_context"] = usage_context
         if summary is not None:
             data["summary"] = summary
         if categories is not None:
@@ -354,6 +357,17 @@ async def test_vertical_slice_happy_path_unit() -> None:
     }
     ready["category_ids"] = ["cat-1"]
     ready["ethical_risk_ids"] = ["risk-1"]
+    ready["usage_context"] = {
+        "children_age_start": 5,
+        "children_age_end": 9,
+        "children_count": 12,
+        "duration_frequency": "once_a_week",
+        "physically_present": "yes",
+        "online_present": "no",
+        "execution_place_affects_scenario": "yes",
+        "special_circumstances": "no",
+        "consent_in_place": "yes",
+    }
     scenarios_repo.scenario = ScenarioModel.model_validate(ready)
 
     submitted = await scenario_service.submit_review(
@@ -408,3 +422,8 @@ async def test_vertical_slice_happy_path_unit() -> None:
     assert ReviewEventType.DRAFT_SAVED in event_types
     assert event_types.count(ReviewEventType.SUBMITTED) == 2
     assert event_types.count(ReviewEventType.PUBLISHED) == 2
+
+
+
+
+

@@ -84,7 +84,21 @@ async def test_reviewer_suggestion_blocks_publish_until_resolved(api_client, fak
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -142,7 +156,21 @@ async def test_reviewer_accept_moves_to_applying_changes(api_client, fake_db) ->
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -222,7 +250,21 @@ async def test_investigator_alternative_text_accept_adds_collaborator(api_client
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -308,7 +350,21 @@ async def test_suggester_cannot_list_suggestions(api_client, fake_db) -> None:
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     owner_doc = await fake_db["users"].find_one({"email_normalized": "sugown3@luneta.dev"})
@@ -366,7 +422,21 @@ async def test_suggester_can_list_own_suggestions(api_client, fake_db) -> None:
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -414,7 +484,21 @@ async def test_reviewer_review_feedback_status(api_client, fake_db) -> None:
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     owner_doc = await fake_db["users"].find_one({"email_normalized": "sugown4@luneta.dev"})
@@ -471,7 +555,21 @@ async def test_investigator_scenario_comment_on_other_published(api_client, fake
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -538,7 +636,21 @@ async def test_investigator_suggests_on_other_published_scenario(api_client, fak
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -607,7 +719,21 @@ async def test_reviewer_published_suggestion_blocked_if_they_reviewed(api_client
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -660,7 +786,21 @@ async def test_investigator_paragraph_comment_on_published(api_client, fake_db) 
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -726,7 +866,21 @@ async def test_suggestion_author_visible_only_to_admin(api_client, fake_db) -> N
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -748,5 +902,10 @@ async def test_suggestion_author_visible_only_to_admin(api_client, fake_db) -> N
     admin_list = await api_client.get(f"/scenarios/{sid}/suggestions", headers=admin_h)
     assert admin_list.status_code == 200
     assert admin_list.json()["items"][0]["author_user_id"] == rev_id
+
+
+
+
+
 
 

@@ -20,6 +20,7 @@ from app.core.scenario_access import (
 )
 from app.domain.enums import AuditActionType, CollaboratorRole, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
+from app.models.scenario_usage_context import ScenarioUsageContextModel
 from app.models.user import UserModel
 from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.review_events import ReviewEventsRepository
@@ -145,6 +146,7 @@ class ScenarioService:
         tags: list[str] | None = None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
+        usage_context: ScenarioUsageContextModel | None = None,
         sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
@@ -186,6 +188,7 @@ class ScenarioService:
             tags=tags,
             category_ids=category_ids,
             ethical_risk_ids=ethical_risk_ids,
+            usage_context=usage_context.model_dump(mode="json") if usage_context is not None else None,
             sensitive_data_involved=sensitive_data_involved,
         )
         if updated is None:

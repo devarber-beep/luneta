@@ -10,6 +10,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.enums import CollaboratorRole, ScenarioState
+from app.models.scenario_usage_context import ScenarioUsageContextModel
 
 
 class ScenarioCollaboratorModel(BaseModel):
@@ -51,6 +52,7 @@ class ScenarioModel(BaseModel):
     description: str = ""
     category_ids: list[str] = Field(default_factory=list)
     ethical_risk_ids: list[str] = Field(default_factory=list)
+    usage_context: ScenarioUsageContextModel | None = None
     author_user_id: str
     collaborators: list[ScenarioCollaboratorModel] = Field(default_factory=list)
     state: ScenarioState = ScenarioState.DRAFT

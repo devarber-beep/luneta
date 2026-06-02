@@ -185,6 +185,7 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
         published_at=scenario.published_at or scenario.updated_at,
         categories=categories,
         ethical_risks=ethical_risks,
+        usage_context=scenario.usage_context,
         cover_image=cover,
         inline_assets=inline_assets,
         collaborators=collaborators,

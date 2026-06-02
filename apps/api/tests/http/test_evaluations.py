@@ -7,6 +7,8 @@ from unittest.mock import patch
 import pytest
 from bson import ObjectId
 
+from tests.scenario_fixtures import COMPLETE_USAGE_CONTEXT
+
 
 async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, token: str) -> dict:
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value=token):
@@ -19,16 +21,6 @@ async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, tok
     login = await api_client.post("/auth/login", json={"email": email, "password": "Password123!"})
     assert login.status_code == 200
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
-
-def _aspects_payload() -> dict:
-    return {
-        "children_age": "5-9",
-        "duration_frequency": "once_a_week",
-        "execution_place": "yes",
-        "special_circumstances": "no",
-        "consent": "yes",
-    }
 
 
 async def _publish_scenario(api_client, fake_db, *, owner_h: dict, rev_h: dict) -> tuple[str, str]:
@@ -86,7 +78,11 @@ async def _publish_scenario(api_client, fake_db, *, owner_h: dict, rev_h: dict) 
     )
     await api_client.patch(
         f"/scenarios/{sid}",
-        json={"category_ids": [str(cat.inserted_id)], "ethical_risk_ids": [str(risk.inserted_id)]},
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": COMPLETE_USAGE_CONTEXT,
+        },
         headers=owner_h,
     )
     await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
@@ -126,7 +122,6 @@ async def test_registered_submits_evaluation_owner_sees_summary(api_client, fake
             "benefit_score": 4,
             "detected_ethical_risk_ids": [risk_id],
             "comment": "Needs tighter consent wording.",
-            "aspects": _aspects_payload(),
         },
     )
     assert submit.status_code == 201
@@ -150,7 +145,6 @@ async def test_registered_submits_evaluation_owner_sees_summary(api_client, fake
             "benefit_score": 5,
             "detected_ethical_risk_ids": [risk_id],
             "comment": "",
-            "aspects": _aspects_payload(),
         },
     )
     assert dup.status_code == 409

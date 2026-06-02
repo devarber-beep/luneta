@@ -9,7 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from app.domain.enums import EvaluationVisibility
-from app.models.scenario_evaluation import EvaluationAspectsModel, ScenarioEvaluationModel
+from app.models.scenario_evaluation import ScenarioEvaluationModel
 
 
 class ScenarioEvaluationsRepository:
@@ -32,7 +32,6 @@ class ScenarioEvaluationsRepository:
         benefit_score: float,
         detected_ethical_risk_ids: list[str],
         comment: str,
-        aspects: EvaluationAspectsModel,
     ) -> ScenarioEvaluationModel:
         now = datetime.now(UTC)
         doc: dict[str, Any] = {
@@ -42,7 +41,6 @@ class ScenarioEvaluationsRepository:
             "benefit_score": benefit_score,
             "detected_ethical_risk_ids": list(detected_ethical_risk_ids),
             "comment": comment.strip(),
-            "aspects": aspects.model_dump(mode="json"),
             "visibility": EvaluationVisibility.VISIBLE.value,
             "submitted_at": now,
             "created_at": now,

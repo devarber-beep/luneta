@@ -78,7 +78,6 @@ async def submit_evaluation(
         benefit_score=body.benefit_score,
         detected_ethical_risk_ids=body.detected_ethical_risk_ids,
         comment=body.comment,
-        aspects=body.aspects,
     )
     payload = await service.build_evaluation_response(created, include_evaluator_identity=True)
     return EvaluationResponse(**payload)

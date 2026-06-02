@@ -168,6 +168,7 @@ export type ScenarioResponse = {
   description: string;
   category_ids: string[];
   ethical_risk_ids: string[];
+  usage_context?: ScenarioUsageContext | null;
   author_user_id: string;
   state:
     | "draft"
@@ -357,6 +358,7 @@ export async function patchScenario(
     description?: string;
     category_ids?: string[];
     ethical_risk_ids?: string[];
+    usage_context?: ScenarioUsageContext | null;
   },
 ): Promise<ScenarioResponse> {
   return request(`/scenarios/${id}`, {
@@ -584,6 +586,7 @@ export async function publicScenario(slug: string): Promise<{
   summary?: string | null;
   categories?: Array<{ id: string; label: string }>;
   ethical_risks?: Array<{ id: string; label: string }>;
+  usage_context?: ScenarioUsageContext | null;
 }> {
   return request(`/public/scenarios/${slug}`);
 }
@@ -779,18 +782,22 @@ export async function applyAcceptedSuggestionText(
   });
 }
 
-export type EvaluationAspects = {
-  children_age: "0-4" | "5-9" | "10-14" | "15_or_more" | "";
-  duration_frequency:
+export type ScenarioUsageContext = {
+  children_age_start?: number | null;
+  children_age_end?: number | null;
+  children_count?: number | null;
+  duration_frequency?:
     | "daily"
     | "once_a_week"
     | "several_times_a_day"
     | "several_times_a_week"
     | "once_a_month"
-    | "";
-  execution_place: "yes" | "no" | "";
-  special_circumstances: "yes" | "no" | "";
-  consent: "yes" | "no" | "";
+    | null;
+  physically_present?: "yes" | "no" | null;
+  online_present?: "yes" | "no" | null;
+  execution_place_affects_scenario?: "yes" | "no" | null;
+  special_circumstances?: "yes" | "no" | null;
+  consent_in_place?: "yes" | "no" | null;
 };
 
 export type EvaluationItem = {
@@ -803,7 +810,6 @@ export type EvaluationItem = {
   detected_ethical_risk_ids: string[];
   detected_ethical_risk_labels: string[];
   comment: string;
-  aspects: EvaluationAspects;
   visibility: string;
   submitted_at: string;
 };
@@ -825,13 +831,6 @@ export async function submitScenarioEvaluation(
     benefit_score: number;
     detected_ethical_risk_ids: string[];
     comment: string;
-    aspects: {
-      children_age: Exclude<EvaluationAspects["children_age"], "">;
-      duration_frequency: Exclude<EvaluationAspects["duration_frequency"], "">;
-      execution_place: Exclude<EvaluationAspects["execution_place"], "">;
-      special_circumstances: Exclude<EvaluationAspects["special_circumstances"], "">;
-      consent: Exclude<EvaluationAspects["consent"], "">;
-    };
   },
 ): Promise<EvaluationItem> {
   return request(`/scenarios/${scenarioId}/evaluations`, {

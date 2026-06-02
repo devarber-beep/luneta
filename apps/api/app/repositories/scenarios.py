@@ -47,6 +47,7 @@ class ScenariosRepository:
             "description": description,
             "category_ids": [],
             "ethical_risk_ids": [],
+            "usage_context": {},
             "author_user_id": author_user_id,
             "collaborators": [
                 {
@@ -121,6 +122,7 @@ class ScenariosRepository:
         tags: list[str] | None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
+        usage_context: dict | None = None,
         sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
@@ -135,6 +137,8 @@ class ScenariosRepository:
             set_doc["category_ids"] = category_ids
         if ethical_risk_ids is not None:
             set_doc["ethical_risk_ids"] = ethical_risk_ids
+        if usage_context is not None:
+            set_doc["usage_context"] = usage_context
         if summary is not None:
             set_doc["summary"] = summary
         if categories is not None:

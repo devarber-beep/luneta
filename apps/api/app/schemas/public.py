@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.scenario_usage_context import ScenarioUsageContextModel
+
 class PublicScenarioListItem(BaseModel):
     id: str
     title: str
@@ -53,6 +55,7 @@ class PublicScenarioResponse(BaseModel):
     published_at: datetime
     categories: list[PublicCatalogLabel] = Field(default_factory=list)
     ethical_risks: list[PublicCatalogLabel] = Field(default_factory=list)
+    usage_context: ScenarioUsageContextModel | None = None
     cover_image: PublicScenarioAsset | None = None
     inline_assets: list[PublicScenarioAsset] = Field(default_factory=list)
     collaborators: list[PublicScenarioParticipant] = Field(default_factory=list)
