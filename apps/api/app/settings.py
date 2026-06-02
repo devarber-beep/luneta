@@ -56,8 +56,14 @@ class Settings(BaseSettings):
     auth_token_secret: str = "change-me-in-env"
     auth_token_ttl_seconds: int = 3600
 
+    ai_provider: str = "gemini"
+    gemini_api_key: str | None = None
+    gemini_chat_model: str = "gemini-2.5-flash-lite"
+    gemini_embedding_model: str = "gemini-embedding-001"
     openai_api_key: str | None = None
     openai_embedding_model: str = "text-embedding-3-small"
+    openai_chat_model: str = "gpt-4o-mini"
+    ai_suggestion_generations_per_hour: int = 2
 
 
 settings = Settings()

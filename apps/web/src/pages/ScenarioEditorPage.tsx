@@ -8,6 +8,7 @@ import {
   deleteScenarioInlineAsset,
   getScenario,
   getScenarioAssetReadUrl,
+  checkScenarioSimilarity,
   getScenarioReviewFeedbackStatus,
   listScenarioSuggestions,
   me,
@@ -33,6 +34,7 @@ import {
   usageContextToPatch,
   type UsageContextFormState,
 } from "../components/ScenarioUsageContextFields";
+import { ScenarioAiSuggestionsPanel } from "../components/ScenarioAiSuggestionsPanel";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "860px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -99,6 +101,7 @@ export function ScenarioEditorPage({
   const [blockingError, setBlockingError] = useState(false);
   const [sensitiveFindings, setSensitiveFindings] = useState<SensitiveFindingLocation[]>([]);
   const [similarMatches, setSimilarMatches] = useState<SimilarScenarioMatch[]>([]);
+  const [saveSimilarityMatches, setSaveSimilarityMatches] = useState<SimilarScenarioMatch[]>([]);
 
   const role = getRole();
   const isOwner = Boolean(myUserId && authorUserId && myUserId === authorUserId);
@@ -311,6 +314,7 @@ export function ScenarioEditorPage({
     setBlockingError(false);
     setSensitiveFindings([]);
     setSimilarMatches([]);
+    setSaveSimilarityMatches([]);
     try {
       const id = await persistDraft();
       if (!id) return;
@@ -347,8 +351,20 @@ export function ScenarioEditorPage({
         updated.cover_image?.asset_id ?? null,
         (updated.inline_assets ?? []).map((a) => a.asset_id),
       );
+      const similarity = await checkScenarioSimilarity(token, {
+        title: title.trim(),
+        description: description.trim(),
+        exclude_scenario_id: id,
+      });
+      setSaveSimilarityMatches(similarity.candidates);
       setBlockingError(false);
-      setMessage(`Saved. Revision #${updated.current_revision_number}`);
+      if (similarity.candidates.length > 0) {
+        setMessage(
+          `Saved. Revision #${updated.current_revision_number}\nWarning: this scenario looks similar to published scenario(s). Review before submitting.`,
+        );
+      } else {
+        setMessage(`Saved. Revision #${updated.current_revision_number}`);
+      }
     } catch (error) {
       if (error instanceof ContentPolicyError) {
         setBlockingError(true);
@@ -371,6 +387,7 @@ export function ScenarioEditorPage({
     setBlockingError(false);
     setSensitiveFindings([]);
     setSimilarMatches([]);
+    setSaveSimilarityMatches([]);
     try {
       const id = await persistDraft();
       if (!id) return;
@@ -642,6 +659,25 @@ export function ScenarioEditorPage({
 
       {!isCollaborator ? (
       <form onSubmit={onSave} style={{ display: "grid", gap: "1rem" }}>
+        {isOwner && scenarioId && ownerCanEditDescription ? (
+          <ScenarioAiSuggestionsPanel
+            token={getToken() ?? ""}
+            scenarioId={scenarioId}
+            disabled={locked || saving}
+            title={title}
+            description={description}
+            onApplyToForm={(next) => {
+              if (next.title !== undefined) setTitle(next.title);
+              if (next.description !== undefined) setDescription(next.description);
+            }}
+            onStatusMessage={setMessage}
+            onSensitiveBlocked={(error) => {
+              setBlockingError(true);
+              setMessage(error.message);
+              setSensitiveFindings(error.findings ?? []);
+            }}
+          />
+        ) : null}
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Basics</h3>
           <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -878,6 +914,33 @@ export function ScenarioEditorPage({
         >
           {message}
         </p>
+      ) : null}
+      {saveSimilarityMatches.length > 0 && !blockingError ? (
+        <section
+          style={{
+            marginTop: "0.75rem",
+            padding: "0.85rem 1rem",
+            background: "#fff7e6",
+            border: "1px solid #f0c36d",
+            borderRadius: "8px",
+          }}
+        >
+          <strong style={{ display: "block", marginBottom: "0.35rem" }}>Similar published scenario(s)</strong>
+          <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
+            {saveSimilarityMatches.map((c) => (
+              <li key={c.scenario_id} style={{ marginBottom: "0.35rem" }}>
+                {c.public_path ? (
+                  <Link to={c.public_path} target="_blank" rel="noopener noreferrer">
+                    {c.title}
+                  </Link>
+                ) : (
+                  c.title
+                )}
+                <span style={{ color: "#666", marginLeft: "0.35rem" }}>(score {c.score})</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
       <p style={{ marginTop: "1rem" }}>
         <Link to="/my-scenarios">My scenarios</Link> · <Link to="/">Home</Link>

@@ -1,4 +1,4 @@
-"""Block save/submit when sensitive data or strong similarity is detected."""
+"""Content-policy checks for sensitive data and scenario similarity."""
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -148,7 +148,7 @@ async def enforce_content_policies(
         actor=current_user,
         exclude_scenario_id=scenario_id or None,
     )
-    if similarity_result.candidates:
+    if similarity_result.candidates and action == "submit_review":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_similarity_detail(action=action, candidates=similarity_result.candidates),

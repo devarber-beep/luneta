@@ -8,11 +8,12 @@ from app.models.scenario import ScenarioModel
 from app.models.user import UserModel
 from app.repositories.scenarios import ScenariosRepository
 from app.services.audit_service import AuditService
+from app.services.gemini_client import embed_texts, gemini_api_key, is_gemini_provider
 from app.domain.enums import AuditActionType, AuditSubjectType
 from app.settings import settings
 
-_HEURISTIC_MIN_SCORE = 0.28
-_EMBEDDING_MIN_SCORE = 0.82
+_HEURISTIC_MIN_SCORE = 0.75
+_EMBEDDING_MIN_SCORE = 0.75
 
 
 @dataclass(frozen=True)
@@ -90,17 +91,27 @@ class ScenarioSimilarityService:
         provider = "heuristic"
         candidates: list[SimilarityCandidate] = []
 
-        api_key = (settings.openai_api_key or "").strip()
-        if api_key:
+        if is_gemini_provider() and gemini_api_key():
             try:
-                candidates = await self._embedding_candidates(
+                candidates = await self._embedding_candidates_gemini(
                     query_text=query_text,
                     published=published,
-                    api_key=api_key,
                 )
-                provider = "openai_embeddings"
+                provider = "gemini_embeddings"
             except Exception:
                 candidates = []
+        elif not is_gemini_provider():
+            api_key = (settings.openai_api_key or "").strip()
+            if api_key:
+                try:
+                    candidates = await self._embedding_candidates_openai(
+                        query_text=query_text,
+                        published=published,
+                        api_key=api_key,
+                    )
+                    provider = "openai_embeddings"
+                except Exception:
+                    candidates = []
 
         if not candidates:
             candidates = self._heuristic_candidates(query_text=query_text, published=published)
@@ -144,17 +155,9 @@ class ScenarioSimilarityService:
         scored.sort(key=lambda row: row.score, reverse=True)
         return scored[:8]
 
-    async def _embedding_candidates(
-        self,
-        *,
-        query_text: str,
-        published: list[ScenarioModel],
-        api_key: str,
-    ) -> list[SimilarityCandidate]:
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(api_key=api_key)
-        model = settings.openai_embedding_model
+    def _corpus_for_embedding(
+        self, *, published: list[ScenarioModel]
+    ) -> list[tuple[ScenarioModel, str]]:
         corpus: list[tuple[ScenarioModel, str]] = []
         for scenario in published[:40]:
             text = _combined_text(
@@ -162,15 +165,17 @@ class ScenarioSimilarityService:
                 description=scenario.public_description or scenario.description,
             )
             corpus.append((scenario, text))
-        if not corpus:
-            return []
+        return corpus
 
-        inputs = [query_text, *[text for _, text in corpus]]
-        response = await client.embeddings.create(model=model, input=inputs)
-        vectors = [row.embedding for row in response.data]
-        query_vec = vectors[0]
+    def _score_embedding_vectors(
+        self,
+        *,
+        query_vec: list[float],
+        corpus: list[tuple[ScenarioModel, str]],
+        vectors: list[list[float]],
+    ) -> list[SimilarityCandidate]:
         scored: list[SimilarityCandidate] = []
-        for (scenario, _), vec in zip(corpus, vectors[1:], strict=True):
+        for (scenario, _), vec in zip(corpus, vectors, strict=True):
             score = _cosine(query_vec, vec)
             if score >= _EMBEDDING_MIN_SCORE:
                 scored.append(
@@ -183,3 +188,46 @@ class ScenarioSimilarityService:
                 )
         scored.sort(key=lambda row: row.score, reverse=True)
         return scored[:8]
+
+    async def _embedding_candidates_gemini(
+        self,
+        *,
+        query_text: str,
+        published: list[ScenarioModel],
+    ) -> list[SimilarityCandidate]:
+        corpus = self._corpus_for_embedding(published=published)
+        if not corpus:
+            return []
+        inputs = [query_text, *[text for _, text in corpus]]
+        vectors = await embed_texts(inputs)
+        if len(vectors) != len(inputs):
+            return []
+        return self._score_embedding_vectors(
+            query_vec=vectors[0],
+            corpus=corpus,
+            vectors=vectors[1:],
+        )
+
+    async def _embedding_candidates_openai(
+        self,
+        *,
+        query_text: str,
+        published: list[ScenarioModel],
+        api_key: str,
+    ) -> list[SimilarityCandidate]:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=api_key)
+        model = settings.openai_embedding_model
+        corpus = self._corpus_for_embedding(published=published)
+        if not corpus:
+            return []
+
+        inputs = [query_text, *[text for _, text in corpus]]
+        response = await client.embeddings.create(model=model, input=inputs)
+        vectors = [row.embedding for row in response.data]
+        return self._score_embedding_vectors(
+            query_vec=vectors[0],
+            corpus=corpus,
+            vectors=vectors[1:],
+        )

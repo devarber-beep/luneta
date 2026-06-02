@@ -44,6 +44,19 @@ class AuditService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit event not found")
         return event
 
+    async def count_for_actor_since(
+        self,
+        *,
+        actor_user_id: str,
+        action_type: AuditActionType,
+        since: datetime,
+    ) -> int:
+        return await self._audit_repo.count_for_actor_since(
+            actor_user_id=actor_user_id,
+            action_type=action_type,
+            since=since,
+        )
+
     async def list_events(
         self,
         *,

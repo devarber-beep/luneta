@@ -115,13 +115,13 @@ async def test_similarity_check_finds_heuristic_match(api_client, fake_db) -> No
         "/scenarios/similarity-check",
         headers=headers,
         json={
-            "title": "Smart glasses classroom pilot copy",
-            "description": "Students wear smart glasses during lessons for a new observation study.",
+            "title": "Classroom smart glasses pilot copy",
+            "description": "Students wear smart glasses during lessons for observation research in class.",
         },
     )
     assert check.status_code == 200
     body = check.json()
-    assert body["provider"] in ("heuristic", "openai_embeddings")
+    assert body["provider"] in ("heuristic", "openai_embeddings", "gemini_embeddings")
     assert len(body["candidates"]) >= 1
 
 

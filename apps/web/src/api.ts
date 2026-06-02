@@ -379,6 +379,7 @@ export type SimilarityCandidate = {
   scenario_id: string;
   title: string;
   score: number;
+  public_path: string | null;
 };
 
 export async function checkScenarioSimilarity(
@@ -386,6 +387,67 @@ export async function checkScenarioSimilarity(
   payload: { title: string; description: string; exclude_scenario_id?: string },
 ): Promise<{ provider: string; candidates: SimilarityCandidate[] }> {
   return request("/scenarios/similarity-check", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export type AiSuggestionScope = "title" | "description_full" | "description_paragraph";
+export type AiSuggestionKind = "clarity" | "structure" | "safety" | "rewrite";
+
+export type AiSuggestionItem = {
+  id: string;
+  scope: AiSuggestionScope;
+  kind: AiSuggestionKind;
+  paragraph_index: number | null;
+  current_excerpt: string;
+  proposed_text: string;
+  rationale: string;
+};
+
+export type AiSuggestionActionPayload = {
+  request_id: string;
+  scope: AiSuggestionScope;
+  kind: AiSuggestionKind;
+  paragraph_index?: number | null;
+  current_excerpt: string;
+  proposed_text: string;
+  rationale: string;
+};
+
+export async function generateAiSuggestions(
+  token: string,
+  scenarioId: string,
+  payload?: { title?: string; description?: string },
+): Promise<{ request_id: string; items: AiSuggestionItem[]; provider: string; raw_items_received?: number }> {
+  return request(`/scenarios/${scenarioId}/ai-suggestions/generate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export async function recordAiSuggestionApplied(
+  token: string,
+  scenarioId: string,
+  itemId: string,
+  payload: AiSuggestionActionPayload,
+): Promise<{ recorded: boolean }> {
+  return request(`/scenarios/${scenarioId}/ai-suggestions/${itemId}/applied`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function discardAiSuggestion(
+  token: string,
+  scenarioId: string,
+  itemId: string,
+  payload: AiSuggestionActionPayload,
+): Promise<{ recorded: boolean }> {
+  return request(`/scenarios/${scenarioId}/ai-suggestions/${itemId}/discard`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),

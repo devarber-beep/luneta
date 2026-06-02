@@ -99,3 +99,17 @@ class AuditEventsRepository:
             doc["_id"] = str(doc["_id"])
             items.append(AuditEventModel.model_validate(doc))
         return items, total
+
+    async def count_for_actor_since(
+        self,
+        *,
+        actor_user_id: str,
+        action_type: AuditActionType,
+        since: datetime,
+    ) -> int:
+        query = {
+            "actor_user_id": actor_user_id,
+            "action_type": action_type.value,
+            "created_at": {"$gte": since},
+        }
+        return await self._collection.count_documents(query)

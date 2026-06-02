@@ -15,6 +15,7 @@ from app.routes import (
     scenarios,
     evaluations,
     notifications,
+    ai_suggestions,
     suggestions,
     workflow,
 )
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_evaluations.router, prefix="/admin", tags=["admin"])
     app.include_router(admin_audit.router, prefix="/admin", tags=["admin"])
     app.include_router(scenarios.router, prefix="/scenarios", tags=["scenarios"])
+    app.include_router(ai_suggestions.router, prefix="/scenarios", tags=["ai-suggestions"])
     app.include_router(suggestions.router, prefix="/scenarios", tags=["suggestions"])
     app.include_router(evaluations.router, prefix="/scenarios", tags=["evaluations"])
     app.include_router(workflow.router, prefix="/workflow", tags=["workflow"])
