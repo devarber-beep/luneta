@@ -219,6 +219,38 @@ class ScenarioService:
             from_state=prior_state,
             to_state=bumped.state,
         )
+        changed_fields: list[str] = []
+        if title is not None:
+            changed_fields.append("title")
+        if description is not None:
+            changed_fields.append("description")
+        if summary is not None:
+            changed_fields.append("summary")
+        if categories is not None:
+            changed_fields.append("categories")
+        if tags is not None:
+            changed_fields.append("tags")
+        if category_ids is not None:
+            changed_fields.append("category_ids")
+        if ethical_risk_ids is not None:
+            changed_fields.append("ethical_risk_ids")
+        if usage_context is not None:
+            changed_fields.append("usage_context")
+        if sensitive_data_involved is not None:
+            changed_fields.append("sensitive_data_involved")
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_CONTENT_UPDATED,
+            scenario_id=bumped.id or "",
+            from_state=prior_state,
+            to_state=bumped.state,
+            current_extra={
+                "revision_number": bumped.current_revision_number,
+                "changed_fields": changed_fields,
+                "review_event_type": event_type.value,
+            },
+        )
         return bumped
 
     async def upload_cover_image(

@@ -460,6 +460,37 @@ class AiSuggestionService:
             },
         )
 
+    async def record_apply_failed(
+        self,
+        *,
+        scenario_id: str,
+        item_id: str,
+        current_user: UserModel,
+        request_id: str,
+        scope: AiSuggestionScope,
+        kind: AiSuggestionKind,
+        paragraph_index: int | None,
+        current_excerpt: str,
+        proposed_text: str,
+        rationale: str,
+        reason: str = "stale_excerpt",
+    ) -> None:
+        await self._require_owner_editable(scenario_id=scenario_id, current_user=current_user)
+        await self._audit.record(
+            actor=current_user,
+            action_type=AuditActionType.AI_SUGGESTION_APPLY_FAILED,
+            subject_type=AuditSubjectType.SCENARIO,
+            subject_id=scenario_id,
+            current={
+                "request_id": request_id,
+                "item_id": item_id,
+                "scope": scope,
+                "kind": kind,
+                "paragraph_index": paragraph_index,
+                "reason": reason,
+            },
+        )
+
     async def record_discarded(
         self,
         *,

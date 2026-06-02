@@ -441,6 +441,19 @@ export async function recordAiSuggestionApplied(
   });
 }
 
+export async function recordAiSuggestionApplyFailed(
+  token: string,
+  scenarioId: string,
+  itemId: string,
+  payload: AiSuggestionActionPayload,
+): Promise<{ recorded: boolean }> {
+  return request(`/scenarios/${scenarioId}/ai-suggestions/${itemId}/apply-failed`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function discardAiSuggestion(
   token: string,
   scenarioId: string,

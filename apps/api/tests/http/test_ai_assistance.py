@@ -80,7 +80,13 @@ async def test_submit_review_blocked_by_sensitive_email(api_client, fake_db) -> 
     audit = await fake_db["audit_events"].find_one({"action_type": "sensitive_data_check_run"})
     assert audit is not None
     assert audit["current"]["passed"] is False
+    assert audit["current"]["action"] == "submit_review"
     assert "email" in audit["current"]["finding_types"]
+    assert not any(
+        row.get("action_type") == "sensitive_data_check_run"
+        and row.get("current", {}).get("action") == "save"
+        for row in fake_db["audit_events"]._docs
+    )
 
 
 @pytest.mark.asyncio

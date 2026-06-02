@@ -234,7 +234,13 @@ class SuggestionService:
             subject_type=AuditSubjectType.SUGGESTION,
             subject_id=suggestion_id,
             previous={"status": SuggestionStatus.PENDING.value},
-            current={"status": SuggestionStatus.ACCEPTED.value, "scenario_id": scenario_id},
+            current={
+                "status": SuggestionStatus.ACCEPTED.value,
+                "scenario_id": scenario_id,
+                "scope": suggestion.scope,
+                "kind": suggestion.kind,
+                "paragraph_index": suggestion.paragraph_index,
+            },
         )
         if self._notifications is not None:
             await self._notifications.notify_suggestion_resolved(
@@ -280,7 +286,13 @@ class SuggestionService:
             subject_type=AuditSubjectType.SUGGESTION,
             subject_id=suggestion_id,
             previous={"status": SuggestionStatus.PENDING.value},
-            current={"status": SuggestionStatus.REJECTED.value, "scenario_id": scenario_id},
+            current={
+                "status": SuggestionStatus.REJECTED.value,
+                "scenario_id": scenario_id,
+                "scope": suggestion.scope,
+                "kind": suggestion.kind,
+                "paragraph_index": suggestion.paragraph_index,
+            },
         )
         if self._notifications is not None:
             await self._notifications.notify_suggestion_resolved(

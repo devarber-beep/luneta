@@ -80,6 +80,34 @@ async def record_ai_suggestion_applied(
 
 
 @router.post(
+    "/{scenario_id}/ai-suggestions/{item_id}/apply-failed",
+    response_model=AiSuggestionActionResponse,
+)
+async def record_ai_suggestion_apply_failed(
+    scenario_id: str,
+    item_id: str,
+    body: AiSuggestionActionRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: UserModel = Depends(
+        require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)
+    ),
+) -> AiSuggestionActionResponse:
+    await _service(db).record_apply_failed(
+        scenario_id=scenario_id,
+        item_id=item_id,
+        current_user=current_user,
+        request_id=body.request_id,
+        scope=body.scope,
+        kind=body.kind,
+        paragraph_index=body.paragraph_index,
+        current_excerpt=body.current_excerpt,
+        proposed_text=body.proposed_text,
+        rationale=body.rationale,
+    )
+    return AiSuggestionActionResponse()
+
+
+@router.post(
     "/{scenario_id}/ai-suggestions/{item_id}/discard",
     response_model=AiSuggestionActionResponse,
 )

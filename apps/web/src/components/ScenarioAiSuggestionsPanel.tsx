@@ -4,6 +4,7 @@ import {
   discardAiSuggestion,
   generateAiSuggestions,
   recordAiSuggestionApplied,
+  recordAiSuggestionApplyFailed,
   type AiSuggestionItem,
 } from "../api";
 import { applyAiSuggestionToDraft } from "./applyAiSuggestion";
@@ -97,16 +98,21 @@ export function ScenarioAiSuggestionsPanel({
     const result = applyAiSuggestionToDraft(item, { title, description });
     onApplyToForm({ title: result.title, description: result.description });
     setPendingSaveHint(true);
+    const actionPayload = {
+      request_id: requestId,
+      scope: item.scope,
+      kind: item.kind,
+      paragraph_index: item.paragraph_index,
+      current_excerpt: item.current_excerpt,
+      proposed_text: item.proposed_text,
+      rationale: item.rationale,
+    };
     try {
-      await recordAiSuggestionApplied(token, scenarioId, item.id, {
-        request_id: requestId,
-        scope: item.scope,
-        kind: item.kind,
-        paragraph_index: item.paragraph_index,
-        current_excerpt: item.current_excerpt,
-        proposed_text: item.proposed_text,
-        rationale: item.rationale,
-      });
+      if (result.excerptFound) {
+        await recordAiSuggestionApplied(token, scenarioId, item.id, actionPayload);
+      } else {
+        await recordAiSuggestionApplyFailed(token, scenarioId, item.id, actionPayload);
+      }
       setItems((prev) => prev.filter((row) => row.id !== item.id));
       if (!result.excerptFound) {
         onStatusMessage(

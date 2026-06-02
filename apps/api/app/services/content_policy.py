@@ -123,7 +123,7 @@ async def enforce_content_policies(
     scenario_id = scenario.id or ""
 
     sensitive_check = scan_scenario_for_sensitive_data(effective)
-    if audit is not None:
+    if audit is not None and action == "submit_review":
         await audit.record(
             actor=current_user,
             action_type=AuditActionType.SENSITIVE_DATA_CHECK_RUN,

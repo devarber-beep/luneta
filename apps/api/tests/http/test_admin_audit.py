@@ -102,6 +102,53 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
 
 
 @pytest.mark.asyncio
+async def test_patch_draft_writes_scenario_content_updated_audit(api_client, fake_db) -> None:
+    headers = await _signup_investigator_headers(api_client, fake_db)
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Audit draft", "description": "Initial paragraph."},
+        headers=headers,
+    )
+    assert create.status_code in (200, 201)
+    sid = create.json()["id"]
+    patched = await api_client.patch(
+        f"/scenarios/{sid}",
+        json={"description": "Updated paragraph."},
+        headers=headers,
+    )
+    assert patched.status_code == 200
+    event = await fake_db["audit_events"].find_one({"action_type": "scenario_content_updated"})
+    assert event is not None
+    assert event["subject_id"] == sid
+    assert event["current"]["revision_number"] >= 2
+    assert "description" in event["current"]["changed_fields"]
+
+
+async def _signup_investigator_headers(api_client, fake_db) -> dict[str, str]:
+    from unittest.mock import patch
+
+    with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="audit-patch"):
+        await api_client.post(
+            "/auth/signup",
+            json={
+                "email": "inv-audit-patch@luneta.dev",
+                "password": "Password123!",
+                "nickname": "invpatch",
+            },
+        )
+        await api_client.post("/auth/verify-email", json={"token": "audit-patch"})
+    await fake_db["users"].update_one(
+        {"email_normalized": "inv-audit-patch@luneta.dev"},
+        {"$set": {"role": "investigator"}},
+    )
+    login = await api_client.post(
+        "/auth/login",
+        json={"email": "inv-audit-patch@luneta.dev", "password": "Password123!"},
+    )
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+@pytest.mark.asyncio
 async def test_create_investigator_writes_listable_audit_event(api_client, fake_db) -> None:
     await fake_db["users"].insert_one(
         user_doc(email="adm-audit2@luneta.dev", role="admin", password_plain="AdminPass123!")

@@ -184,6 +184,37 @@ async def test_generate_accepts_gemini_field_aliases(api_client, fake_db, monkey
 
 
 @pytest.mark.asyncio
+async def test_record_apply_failed_writes_audit(api_client, fake_db, monkeypatch) -> None:
+    _patch_gemini(monkeypatch)
+    headers = await _signup_investigator(
+        api_client, fake_db, email="ai-sug-fail@luneta.dev", token="ai-sug-fail"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Contact study", "description": "A classroom observation study."},
+        headers=headers,
+    )
+    sid = create.json()["id"]
+    payload = {
+        "request_id": "req-fail-1",
+        "scope": "title",
+        "kind": "clarity",
+        "current_excerpt": "Old title",
+        "proposed_text": "New title",
+        "rationale": "Clearer.",
+    }
+    failed = await api_client.post(
+        f"/scenarios/{sid}/ai-suggestions/item-1/apply-failed",
+        headers=headers,
+        json=payload,
+    )
+    assert failed.status_code == 200
+    audit = await fake_db["audit_events"].find_one({"action_type": "ai_suggestion_apply_failed"})
+    assert audit is not None
+    assert audit["current"]["reason"] == "stale_excerpt"
+
+
+@pytest.mark.asyncio
 async def test_record_applied_and_discarded(api_client, fake_db, monkeypatch) -> None:
     _patch_gemini(monkeypatch)
     headers = await _signup_investigator(
