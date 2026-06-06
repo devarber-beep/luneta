@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  fetchPublicSearchCategories,
   markNotSuitableScenario,
   publishScenario,
   requestChangesScenario,
@@ -8,9 +9,10 @@ import {
   reviewQueue,
   reopenScenario,
   startReviewScenario,
+  type PublicCatalogEntry,
 } from "../api";
+import { CatalogFilterDropdown } from "../components/CatalogFilterDropdown";
 import { ScenarioSearchField } from "../components/ScenarioSearchField";
-import { matchesScenarioSearch } from "../components/scenarioSearch";
 import { getRole, getToken } from "../session";
 
 const layoutStyle = { maxWidth: "900px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
@@ -19,6 +21,7 @@ type QueueItem = {
   scenario_id: string;
   title: string;
   author_user_id: string;
+  author_university?: string | null;
   state: string;
   has_prior_approval: boolean;
   submitted_at?: string | null;
@@ -35,6 +38,7 @@ export function ReviewQueuePage() {
     Array<{
       scenario_id: string;
       title: string;
+      author_university?: string | null;
       state: string;
       last_reviewed_at: string;
       last_review_outcome?: string | null;
@@ -43,19 +47,44 @@ export function ReviewQueuePage() {
   >([]);
   const [message, setMessage] = useState("");
   const [searchQ, setSearchQ] = useState("");
-  const [appliedSearchQ, setAppliedSearchQ] = useState("");
+  const [submittedQ, setSubmittedQ] = useState("");
+  const [categories, setCategories] = useState<PublicCatalogEntry[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchPublicSearchCategories()
+      .then((res) => setCategories(res.items))
+      .catch(() => setCategories([]));
+  }, []);
+
+  const searchParams = {
+    q: submittedQ || undefined,
+    category_id: selectedCategoryIds.length ? selectedCategoryIds : undefined,
+  };
 
   const load = async () => {
     const token = getToken();
     if (!token) return;
-    const [queue, done] = await Promise.all([reviewQueue(token), reviewedScenarios(token)]);
-    setPending(queue.items);
-    setReviewed(done.items);
+    setLoading(true);
+    try {
+      const [queue, done] = await Promise.all([
+        reviewQueue(token, searchParams),
+        reviewedScenarios(token, searchParams),
+      ]);
+      setPending(queue.items);
+      setReviewed(done.items);
+      setMessage("");
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
-  }, []);
+  }, [submittedQ, selectedCategoryIds]);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
@@ -70,19 +99,6 @@ export function ReviewQueuePage() {
   const token = getToken() ?? "";
   const isAdmin = getRole() === "admin";
 
-  const filteredPending = pending.filter((item) =>
-    matchesScenarioSearch(appliedSearchQ, [
-      item.title,
-      item.state,
-      item.author_user_id,
-      item.live_public_title,
-      item.live_public_description,
-    ]),
-  );
-  const filteredReviewed = reviewed.filter((item) =>
-    matchesScenarioSearch(appliedSearchQ, [item.title, item.state, item.last_review_outcome]),
-  );
-
   return (
     <main style={layoutStyle}>
       <h2>Review</h2>
@@ -90,9 +106,18 @@ export function ReviewQueuePage() {
       <ScenarioSearchField
         value={searchQ}
         onChange={setSearchQ}
-        onSubmit={() => setAppliedSearchQ(searchQ.trim())}
-        placeholder="Search queue by title, state, or owner id"
+        onSubmit={() => setSubmittedQ(searchQ.trim())}
+        placeholder="Search by title, description, author or university"
       />
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+        <CatalogFilterDropdown
+          label="Categories"
+          emptyLabel="All categories"
+          options={categories.map((c) => ({ id: c.id, label: c.label }))}
+          selectedIds={selectedCategoryIds}
+          onChange={setSelectedCategoryIds}
+        />
+      </div>
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
         <button type="button" onClick={() => setTab("pending")} disabled={tab === "pending"}>
           Pending queue
@@ -101,16 +126,20 @@ export function ReviewQueuePage() {
           Already reviewed
         </button>
       </div>
+      {loading ? <p style={{ color: "#666" }}>Loading…</p> : null}
       {tab === "pending" ? (
         <>
-          {filteredPending.map((item) => (
+          {pending.map((item) => (
             <div
               key={item.scenario_id}
               style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}
             >
               <strong>{item.title}</strong> — {item.state}
               <br />
-              <span style={{ fontSize: "0.85rem", color: "#555" }}>Owner: {item.author_user_id}</span>
+              <span style={{ fontSize: "0.85rem", color: "#555" }}>
+                Owner: {item.author_user_id}
+                {item.author_university ? ` · ${item.author_university}` : ""}
+              </span>
               {item.submitted_at ? (
                 <p style={{ fontSize: "0.85rem", margin: "0.35rem 0" }}>
                   Submitted: {new Date(item.submitted_at).toLocaleString()}
@@ -178,17 +207,19 @@ export function ReviewQueuePage() {
               </div>
             </div>
           ))}
-          {!pending.length ? <p>No pending items.</p> : null}
-          {pending.length > 0 && !filteredPending.length ? <p>No pending items match your search.</p> : null}
+          {!loading && !pending.length ? <p>No pending items match your filters.</p> : null}
         </>
       ) : (
         <>
-          {filteredReviewed.map((item) => (
+          {reviewed.map((item) => (
             <div
               key={item.scenario_id}
               style={{ border: "1px solid #ddd", padding: "0.75rem", marginBottom: "0.75rem" }}
             >
               <strong>{item.title}</strong> — {item.state} ({item.last_review_outcome ?? "—"})
+              {item.author_university ? (
+                <p style={{ fontSize: "0.85rem", margin: "0.25rem 0" }}>{item.author_university}</p>
+              ) : null}
               <p style={{ fontSize: "0.85rem" }}>Reviewed: {new Date(item.last_reviewed_at).toLocaleString()}</p>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <Link to={`/scenarios/${item.scenario_id}/edit`}>Open</Link>
@@ -204,10 +235,7 @@ export function ReviewQueuePage() {
               </div>
             </div>
           ))}
-          {!reviewed.length ? <p>No reviewed items yet.</p> : null}
-          {reviewed.length > 0 && !filteredReviewed.length ? (
-            <p>No reviewed items match your search.</p>
-          ) : null}
+          {!loading && !reviewed.length ? <p>No reviewed items match your filters.</p> : null}
         </>
       )}
       {message ? <p>{message}</p> : null}
@@ -215,4 +243,3 @@ export function ReviewQueuePage() {
     </main>
   );
 }
-

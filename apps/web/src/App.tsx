@@ -27,7 +27,6 @@ import { AdminEvaluationsPage } from "./pages/AdminEvaluationsPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
 import { PublishedScenariosSection } from "./components/PublishedScenariosSection";
 import { ScenarioSearchField } from "./components/ScenarioSearchField";
-import { matchesScenarioSearch } from "./components/scenarioSearch";
 import { SessionToolbar } from "./components/SessionToolbar";
 import { describeUsageContext } from "./components/usageContextLabels";
 import type { ScenarioUsageContext } from "./api";
@@ -201,6 +200,7 @@ function MyProfilePage() {
   const [nickname, setNickname] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [university, setUniversity] = useState("");
   const [readOnlyEmail, setReadOnlyEmail] = useState("");
   const [readOnlyRole, setReadOnlyRole] = useState("");
   const [verified, setVerified] = useState(false);
@@ -218,6 +218,7 @@ function MyProfilePage() {
     setNickname(profile.nickname);
     setFirstName(profile.first_name ?? "");
     setLastName(profile.last_name ?? "");
+    setUniversity(profile.university ?? "");
     setReadOnlyEmail(profile.email_normalized);
     setReadOnlyRole(profile.role);
     setVerified(profile.email_verified_at != null);
@@ -247,6 +248,7 @@ function MyProfilePage() {
         nickname: nick,
         first_name: firstName.trim() || null,
         last_name: lastName.trim() || null,
+        university: university.trim() || null,
       });
       setMessage("Profile saved.");
       await load();
@@ -315,6 +317,10 @@ function MyProfilePage() {
         <label style={{ display: "grid", gap: "0.25rem" }}>
           <span>Last name</span>
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="optional" />
+        </label>
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>University</span>
+          <input value={university} onChange={(e) => setUniversity(e.target.value)} placeholder="optional" />
         </label>
         <button type="submit">Save profile</button>
       </form>
@@ -386,18 +392,25 @@ function MyScenariosPage() {
     }>
   >([]);
   const [searchQ, setSearchQ] = useState("");
-  const [appliedSearchQ, setAppliedSearchQ] = useState("");
+  const [submittedQ, setSubmittedQ] = useState("");
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   const load = async () => {
     if (!token) {
       return;
     }
+    setLoading(true);
     try {
-      const rows = await listMyScenarios(token);
+      const rows = await listMyScenarios(token, {
+        q: submittedQ || undefined,
+      });
       setItems(rows);
+      setMessage("");
     } catch (e) {
       setMessage((e as Error).message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -419,11 +432,7 @@ function MyScenariosPage() {
 
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
-  }, [token]);
-
-  const visibleItems = items.filter((s) =>
-    matchesScenarioSearch(appliedSearchQ, [s.title, s.state, s.my_participation_role]),
-  );
+  }, [token, submittedQ]);
 
   return (
     <main style={layoutStyle}>
@@ -434,14 +443,15 @@ function MyScenariosPage() {
       <ScenarioSearchField
         value={searchQ}
         onChange={setSearchQ}
-        onSubmit={() => setAppliedSearchQ(searchQ.trim())}
-        placeholder="Search my scenarios by title or state"
+        onSubmit={() => setSubmittedQ(searchQ.trim())}
+        placeholder="Search by title or description"
       />
       <button type="button" onClick={() => load().catch((e: Error) => setMessage(e.message))}>
         Refresh
       </button>
+      {loading ? <p style={{ color: "#666" }}>Loading…</p> : null}
       <ul style={{ marginTop: "1rem", paddingLeft: "1.25rem" }}>
-        {visibleItems.map((s) => (
+        {items.map((s) => (
           <li key={s.id} style={{ marginBottom: "0.5rem" }}>
             <strong>{s.title}</strong> — {s.state}{" "}
             <span style={{ color: "#666", fontSize: "0.9rem" }}>
@@ -469,8 +479,11 @@ function MyScenariosPage() {
           </li>
         ))}
       </ul>
-      {!items.length && <p>No scenarios are associated with your account.</p>}
-      {items.length > 0 && !visibleItems.length ? <p>No scenarios match your search.</p> : null}
+      {!loading && !items.length ? (
+        <p>
+          {submittedQ ? "No scenarios match your search." : "No scenarios are associated with your account."}
+        </p>
+      ) : null}
       {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
       <Link to="/">Back</Link>
     </main>
@@ -484,6 +497,7 @@ function PublicScenarioPage() {
   const [scenarioId, setScenarioId] = useState("");
   const [authorUserId, setAuthorUserId] = useState("");
   const [authorNickname, setAuthorNickname] = useState("");
+  const [authorUniversity, setAuthorUniversity] = useState<string | null>(null);
   const [collaborators, setCollaborators] = useState<Array<{ user_id: string; nickname: string }>>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -532,6 +546,7 @@ function PublicScenarioPage() {
         setScenarioId(data.id);
         setAuthorUserId(data.author_user_id);
         setAuthorNickname(data.author_nickname);
+        setAuthorUniversity(data.author_university ?? null);
         setCollaborators(data.collaborators ?? []);
         setTitle(data.title);
         setDescription(data.description);
@@ -568,6 +583,7 @@ function PublicScenarioPage() {
       <section style={{ marginBottom: "1rem", fontSize: "0.95rem", color: "#444" }}>
         <p style={{ margin: "0.25rem 0" }}>
           <strong>Owner:</strong> {authorNickname || authorUserId}
+          {authorUniversity ? ` · ${authorUniversity}` : ""}
         </p>
         {collaborators.length > 0 ? (
           <div style={{ marginTop: "0.35rem" }}>

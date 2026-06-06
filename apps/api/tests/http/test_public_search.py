@@ -147,3 +147,77 @@ async def test_public_search_text_filter_and_pagination(api_client, fake_db) -> 
     page = await api_client.get("/public/scenarios", params={"page": 1, "page_size": 1})
     assert page.json()["total"] == 2
     assert len(_public_items(page.json())) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_search_university_text(api_client, fake_db) -> None:
+    now = datetime.now(UTC)
+    uabc = str(ObjectId())
+    uxyz = str(ObjectId())
+    await fake_db["users"].insert_one(
+        {
+            "_id": ObjectId(uabc),
+            "email_normalized": "abc@luneta.dev",
+            "nickname": "authorabc",
+            "nickname_normalized": "authorabc",
+            "university": "University of ABC",
+            "university_normalized": "university of abc",
+            "role": "investigator",
+            "password_hash": "x",
+            "password_updated_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    await fake_db["users"].insert_one(
+        {
+            "_id": ObjectId(uxyz),
+            "email_normalized": "xyz@luneta.dev",
+            "nickname": "authorxyz",
+            "nickname_normalized": "authorxyz",
+            "university": "University of XYZ",
+            "university_normalized": "university of xyz",
+            "role": "investigator",
+            "password_hash": "x",
+            "password_updated_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    await _seed_published(
+        fake_db,
+        scenario_id=str(ObjectId()),
+        author_id=uabc,
+        title="ABC campus study",
+        description="Research at ABC.",
+        slug="abc-campus",
+        published_at=now,
+    )
+    await _seed_published(
+        fake_db,
+        scenario_id=str(ObjectId()),
+        author_id=uxyz,
+        title="XYZ field trip",
+        description="Research at XYZ.",
+        slug="xyz-trip",
+        published_at=now,
+    )
+    await fake_db["scenarios"].update_many(
+        {"author_user_id": uabc},
+        {"$set": {"author_university": "University of ABC", "author_university_normalized": "university of abc"}},
+    )
+    await fake_db["scenarios"].update_many(
+        {"author_user_id": uxyz},
+        {"$set": {"author_university": "University of XYZ", "author_university_normalized": "university of xyz"}},
+    )
+
+    by_text = await api_client.get("/public/scenarios", params={"q": "University of ABC"})
+    assert by_text.status_code == 200
+    assert by_text.json()["total"] == 1
+    assert _public_items(by_text.json())[0]["title"] == "ABC campus study"
+    assert _public_items(by_text.json())[0]["author_university"] == "University of ABC"
+
+    by_text_xyz = await api_client.get("/public/scenarios", params={"q": "University of XYZ"})
+    assert by_text_xyz.status_code == 200
+    assert by_text_xyz.json()["total"] == 1
+    assert _public_items(by_text_xyz.json())[0]["title"] == "XYZ field trip"

@@ -1,7 +1,7 @@
 """Scenario routes for create/read/edit/submit-review."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.permissions import get_collaborator_role, has_republication_pending
@@ -107,6 +107,7 @@ def _to_response(scenario) -> ScenarioResponse:
         ethical_risk_ids=scenario.ethical_risk_ids,
         usage_context=scenario.usage_context,
         author_user_id=scenario.author_user_id,
+        author_university=scenario.author_university,
         collaborators=[
             ScenarioCollaboratorResponse(
                 user_id=collaborator.user_id,
@@ -170,10 +171,14 @@ async def create_scenario(
 
 @router.get("/mine", response_model=list[ScenarioSummaryResponse])
 async def list_my_scenarios(
+    q: str | None = Query(default=None, max_length=200),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
-    scenarios = await _service(db).list_my_scenarios(current_user=current_user)
+    scenarios = await _service(db).list_my_scenarios(
+        current_user=current_user,
+        q=q,
+    )
     uid = current_user.id or ""
     return [
         ScenarioSummaryResponse(

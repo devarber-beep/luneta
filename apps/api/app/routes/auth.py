@@ -10,6 +10,7 @@ from app.deps.storage import get_user_avatar_storage
 from app.domain.authz_permissions import Permission
 from app.models.user import UserModel
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
+from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.dev_email_verification_snapshot import get_last, record_last
 from app.schemas.auth import (
@@ -134,6 +135,7 @@ async def patch_me(
         users_repo=UsersRepository(db),
         token_secret=settings.auth_token_secret,
         token_ttl_seconds=settings.auth_token_ttl_seconds,
+        scenarios_repo=ScenariosRepository(db),
     )
     updated = await auth_service.update_profile(user=user, patch=payload)
     return build_me_response(user=updated, storage=storage)

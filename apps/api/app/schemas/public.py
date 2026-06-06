@@ -14,6 +14,7 @@ class PublicScenarioListItem(BaseModel):
     public_path: str
     author_user_id: str
     author_nickname: str
+    author_university: str | None = None
 
 
 class PublicScenarioSearchResponse(BaseModel):
@@ -49,6 +50,7 @@ class PublicScenarioResponse(BaseModel):
     id: str
     author_user_id: str
     author_nickname: str
+    author_university: str | None = None
     title: str
     description: str
     summary: str | None = None

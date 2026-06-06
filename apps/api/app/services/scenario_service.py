@@ -93,6 +93,8 @@ class ScenarioService:
             title=title,
             description=desc,
             author_user_id=current_user.id or "",
+            author_university=current_user.university,
+            author_university_normalized=current_user.university_normalized,
         )
         await self._revisions_repo.create_snapshot(
             scenario_id=scenario.id or "",
@@ -118,9 +120,22 @@ class ScenarioService:
         )
         return scenario
 
-    async def list_my_scenarios(self, *, current_user: UserModel) -> list[ScenarioModel]:
+    async def list_my_scenarios(
+        self,
+        *,
+        current_user: UserModel,
+        q: str | None = None,
+    ) -> list[ScenarioModel]:
         await self._scenarios_repo.ensure_indexes()
-        return await self._scenarios_repo.list_for_participating_user(user_id=current_user.id or "")
+        author_ids_from_nickname: list[str] | None = None
+        trimmed_q = (q or "").strip()
+        if trimmed_q:
+            author_ids_from_nickname = await self._users_repo.list_ids_matching_nickname(trimmed_q)
+        return await self._scenarios_repo.list_for_participating_user(
+            user_id=current_user.id or "",
+            q=q,
+            q_matching_author_user_ids=author_ids_from_nickname or None,
+        )
 
     async def get_scenario_if_readable(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)

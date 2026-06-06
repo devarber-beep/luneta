@@ -21,6 +21,7 @@ def build_me_response(*, user: UserModel, storage: MinioUserAvatarStorage) -> Me
         first_name=user.first_name,
         last_name=user.last_name,
         organization=user.organization,
+        university=user.university,
         biography=user.biography,
         avatar=MeResponse.AvatarResponse(**user.avatar.model_dump()) if user.avatar else None,
         avatar_url=avatar_url,

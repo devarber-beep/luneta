@@ -38,6 +38,8 @@ class ScenariosRepository:
         title: str,
         description: str,
         author_user_id: str,
+        author_university: str | None = None,
+        author_university_normalized: str | None = None,
     ) -> ScenarioModel:
         now = datetime.now(UTC)
         slug = await self._allocate_unique_slug(title=title)
@@ -49,6 +51,8 @@ class ScenariosRepository:
             "ethical_risk_ids": [],
             "usage_context": {},
             "author_user_id": author_user_id,
+            "author_university": author_university,
+            "author_university_normalized": author_university_normalized,
             "collaborators": [
                 {
                     "user_id": author_user_id,
@@ -100,6 +104,25 @@ class ScenariosRepository:
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return ScenarioModel.model_validate(doc)
+
+    async def sync_author_university_for_author(
+        self,
+        *,
+        author_user_id: str,
+        author_university: str | None,
+        author_university_normalized: str | None,
+    ) -> int:
+        result = await self._collection.update_many(
+            {"author_user_id": author_user_id},
+            {
+                "$set": {
+                    "author_university": author_university,
+                    "author_university_normalized": author_university_normalized,
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+        return int(result.modified_count)
 
     async def get_by_id(self, scenario_id: str) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
@@ -442,13 +465,21 @@ class ScenariosRepository:
         author_user_id: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        q: str | None = None,
+        q_matching_author_user_ids: list[str] | None = None,
+        category_ids: list[str] | None = None,
     ) -> list[ScenarioModel]:
-        query: dict[str, Any] = {
-            "state": {"$in": [s.value for s in states]},
-            "deleted_at": None,
-        }
-        if author_user_id:
-            query["author_user_id"] = author_user_id
+        query = self._build_list_query(
+            base={
+                "state": {"$in": [s.value for s in states]},
+                "deleted_at": None,
+            },
+            author_user_id=author_user_id,
+            q=q,
+            q_matching_author_user_ids=q_matching_author_user_ids,
+            category_ids=category_ids,
+            include_draft_fields=True,
+        )
         if submitted_from is not None or submitted_to is not None:
             date_clause: dict[str, Any] = {}
             if submitted_from is not None:
@@ -456,13 +487,7 @@ class ScenariosRepository:
             if submitted_to is not None:
                 date_clause["$lte"] = submitted_to
             query["submitted_for_review_at"] = date_clause
-        items: list[ScenarioModel] = []
-        cursor = self._collection.find(query).sort("submitted_for_review_at", -1)
-        async for doc in cursor:
-            model = self._to_model(doc)
-            if model is not None:
-                items.append(model)
-        return items
+        return await self._find_sorted(query, sort_field="submitted_for_review_at", sort_direction=-1)
 
     async def list_reviewed(
         self,
@@ -471,8 +496,11 @@ class ScenariosRepository:
         author_user_id: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        q: str | None = None,
+        q_matching_author_user_ids: list[str] | None = None,
+        category_ids: list[str] | None = None,
     ) -> list[ScenarioModel]:
-        query: dict[str, Any] = {
+        base: dict[str, Any] = {
             "deleted_at": None,
             "last_reviewed_at": {"$ne": None},
             "state": {
@@ -484,23 +512,23 @@ class ScenariosRepository:
             },
         }
         if reviewer_user_id:
-            query["last_reviewed_by_user_id"] = reviewer_user_id
-        if author_user_id:
-            query["author_user_id"] = author_user_id
+            base["last_reviewed_by_user_id"] = reviewer_user_id
         if submitted_from is not None or submitted_to is not None:
-            date_clause: dict[str, Any] = {}
+            date_clause: dict[str, Any] = {"$ne": None}
             if submitted_from is not None:
                 date_clause["$gte"] = submitted_from
             if submitted_to is not None:
                 date_clause["$lte"] = submitted_to
-            query["last_reviewed_at"] = date_clause
-        items: list[ScenarioModel] = []
-        cursor = self._collection.find(query).sort("last_reviewed_at", -1)
-        async for doc in cursor:
-            model = self._to_model(doc)
-            if model is not None:
-                items.append(model)
-        return items
+            base["last_reviewed_at"] = date_clause
+        query = self._build_list_query(
+            base=base,
+            author_user_id=author_user_id,
+            q=q,
+            q_matching_author_user_ids=q_matching_author_user_ids,
+            category_ids=category_ids,
+            include_draft_fields=True,
+        )
+        return await self._find_sorted(query, sort_field="last_reviewed_at", sort_direction=-1)
 
     @staticmethod
     def _published_visibility_filter() -> dict[str, Any]:
@@ -530,32 +558,24 @@ class ScenariosRepository:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[ScenarioModel], int]:
-        clauses: list[dict[str, Any]] = [self._published_visibility_filter()]
-        trimmed_q = (q or "").strip()
-        if trimmed_q:
-            pattern = re.escape(trimmed_q)
-            text_or: list[dict[str, Any]] = [
-                {"public_title": {"$regex": pattern, "$options": "i"}},
-                {"public_description": {"$regex": pattern, "$options": "i"}},
-                {"summary": {"$regex": pattern, "$options": "i"}},
-            ]
-            tokens = self._search_tokens(trimmed_q)
-            if tokens:
-                text_or.append({"keywords_normalized": {"$in": tokens}})
-            if q_matching_author_user_ids:
-                text_or.append({"author_user_id": {"$in": list(q_matching_author_user_ids)}})
-            clauses.append({"$or": text_or})
-        if author_user_id:
-            clauses.append({"author_user_id": author_user_id})
+        query = self._build_list_query(
+            base=self._published_visibility_filter(),
+            author_user_id=author_user_id,
+            q=q,
+            q_matching_author_user_ids=q_matching_author_user_ids,
+            category_ids=category_ids,
+            include_draft_fields=False,
+        )
         if published_from is not None:
-            clauses.append({"published_at": {"$gte": published_from}})
+            query = self._merge_query(query, {"published_at": {"$gte": published_from}})
         if published_to is not None:
-            clauses.append({"published_at": {"$lte": published_to}})
-        if category_ids:
-            clauses.append({"category_ids": {"$in": list(category_ids)}})
+            existing = query.get("published_at")
+            if isinstance(existing, dict):
+                existing["$lte"] = published_to
+            else:
+                query["published_at"] = {"$lte": published_to}
         if ethical_risk_ids:
-            clauses.append({"ethical_risk_ids": {"$in": list(ethical_risk_ids)}})
-        query: dict[str, Any] = {"$and": clauses} if len(clauses) > 1 else clauses[0]
+            query = self._merge_query(query, {"ethical_risk_ids": {"$in": list(ethical_risk_ids)}})
         total = await self._collection.count_documents(query)
         skip = max(page - 1, 0) * page_size
         items: list[ScenarioModel] = []
@@ -580,21 +600,117 @@ class ScenariosRepository:
                 tokens.append(tok)
         return list(dict.fromkeys(tokens))
 
-    async def list_for_participating_user(self, *, user_id: str) -> list[ScenarioModel]:
+    async def list_for_participating_user(
+        self,
+        *,
+        user_id: str,
+        q: str | None = None,
+        q_matching_author_user_ids: list[str] | None = None,
+        category_ids: list[str] | None = None,
+    ) -> list[ScenarioModel]:
         """Scenarios where the user is author or listed as collaborator."""
-        query = {
-            "$and": [
-                {"deleted_at": None},
-                {
-                    "$or": [
-                        {"author_user_id": user_id},
-                        {"collaborators.user_id": user_id},
-                    ]
-                },
+        participation = {
+            "$or": [
+                {"author_user_id": user_id},
+                {"collaborators.user_id": user_id},
             ]
         }
+        query = self._build_list_query(
+            base={"deleted_at": None},
+            q=q,
+            q_matching_author_user_ids=q_matching_author_user_ids,
+            category_ids=category_ids,
+            include_draft_fields=True,
+            include_author_university_in_text_search=False,
+            extra_clauses=[participation],
+        )
+        return await self._find_sorted(query, sort_field="updated_at", sort_direction=-1)
+
+    @staticmethod
+    def _merge_query(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+        if not base:
+            return extra
+        if "$and" in base:
+            return {"$and": [*base["$and"], extra]}
+        return {"$and": [base, extra]}
+
+    def _build_list_query(
+        self,
+        *,
+        base: dict[str, Any],
+        author_user_id: str | None = None,
+        q: str | None = None,
+        q_matching_author_user_ids: list[str] | None = None,
+        category_ids: list[str] | None = None,
+        include_draft_fields: bool,
+        include_author_university_in_text_search: bool = True,
+        extra_clauses: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        clauses: list[dict[str, Any]] = [base]
+        if extra_clauses:
+            clauses.extend(extra_clauses)
+        text_clause = self._text_search_clause(
+            q=q,
+            q_matching_author_user_ids=q_matching_author_user_ids,
+            include_draft_fields=include_draft_fields,
+            include_author_university_in_text_search=include_author_university_in_text_search,
+        )
+        if text_clause is not None:
+            clauses.append(text_clause)
+        if author_user_id:
+            clauses.append({"author_user_id": author_user_id})
+        if category_ids:
+            clauses.append({"category_ids": {"$in": list(category_ids)}})
+        if len(clauses) == 1:
+            return clauses[0]
+        return {"$and": clauses}
+
+    def _text_search_clause(
+        self,
+        *,
+        q: str | None,
+        q_matching_author_user_ids: list[str] | None,
+        include_draft_fields: bool,
+        include_author_university_in_text_search: bool = True,
+    ) -> dict[str, Any] | None:
+        trimmed_q = (q or "").strip()
+        if not trimmed_q:
+            return None
+        pattern = re.escape(trimmed_q)
+        text_or: list[dict[str, Any]] = []
+        if include_draft_fields:
+            text_or.extend(
+                [
+                    {"title": {"$regex": pattern, "$options": "i"}},
+                    {"description": {"$regex": pattern, "$options": "i"}},
+                ]
+            )
+        else:
+            text_or.extend(
+                [
+                    {"public_title": {"$regex": pattern, "$options": "i"}},
+                    {"public_description": {"$regex": pattern, "$options": "i"}},
+                ]
+            )
+        text_or.append({"summary": {"$regex": pattern, "$options": "i"}})
+        if include_author_university_in_text_search:
+            text_or.append({"author_university": {"$regex": pattern, "$options": "i"}})
+        tokens = self._search_tokens(trimmed_q)
+        if tokens:
+            text_or.append({"keywords_normalized": {"$in": tokens}})
+        if q_matching_author_user_ids:
+            text_or.append({"author_user_id": {"$in": list(q_matching_author_user_ids)}})
+        return {"$or": text_or}
+
+    async def _find_sorted(
+        self,
+        query: dict[str, Any],
+        *,
+        sort_field: str,
+        sort_direction: int,
+    ) -> list[ScenarioModel]:
         items: list[ScenarioModel] = []
-        cursor = self._collection.find(query).sort("updated_at", -1)
+        cursor = self._collection.find(query).sort(sort_field, sort_direction)
         async for doc in cursor:
             model = self._to_model(doc)
             if model is not None:

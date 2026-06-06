@@ -48,6 +48,8 @@ async def review_queue(
     author_user_id: str | None = Query(default=None),
     submitted_from: datetime | None = Query(default=None),
     submitted_to: datetime | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
+    category_id: list[str] = Query(default=[]),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_REVIEW_QUEUE)),
 ) -> ReviewQueueResponse:
@@ -56,6 +58,8 @@ async def review_queue(
         author_user_id=author_user_id,
         submitted_from=submitted_from,
         submitted_to=submitted_to,
+        q=q,
+        category_ids=category_id or None,
     )
     return ReviewQueueResponse(items=items)
 
@@ -65,6 +69,8 @@ async def reviewed_list(
     author_user_id: str | None = Query(default=None),
     submitted_from: datetime | None = Query(default=None),
     submitted_to: datetime | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
+    category_id: list[str] = Query(default=[]),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_REVIEW_QUEUE)),
 ) -> ReviewedListResponse:
@@ -73,6 +79,8 @@ async def reviewed_list(
         author_user_id=author_user_id,
         submitted_from=submitted_from,
         submitted_to=submitted_to,
+        q=q,
+        category_ids=category_id or None,
     )
     return ReviewedListResponse(items=items)
 

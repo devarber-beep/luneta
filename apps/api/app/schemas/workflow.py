@@ -10,6 +10,7 @@ class ReviewQueueItem(BaseModel):
     scenario_id: str
     title: str
     author_user_id: str
+    author_university: str | None = None
     state: ScenarioState
     has_prior_approval: bool = False
     submitted_at: datetime | None = None
@@ -22,6 +23,7 @@ class ReviewedScenarioItem(BaseModel):
     scenario_id: str
     title: str
     author_user_id: str
+    author_university: str | None = None
     state: ScenarioState
     last_reviewed_at: datetime
     last_review_outcome: ReviewOutcome | None = None

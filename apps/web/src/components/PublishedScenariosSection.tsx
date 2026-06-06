@@ -68,7 +68,7 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           setPage(1);
           setSubmittedQ(q.trim());
         }}
-        placeholder="Search by title, description or author"
+        placeholder="Search by title, description, author or university"
       />
       <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
         <CatalogFilterDropdown
@@ -100,7 +100,8 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           <li key={s.id} style={{ marginBottom: "0.65rem" }}>
             <Link to={s.public_path}>{s.title}</Link>
             <div style={{ fontSize: "0.85rem", color: "#555" }}>
-              {s.author_nickname} · {new Date(s.published_at).toLocaleDateString()}
+              {s.author_nickname}
+              {s.author_university ? ` · ${s.author_university}` : ""} · {new Date(s.published_at).toLocaleDateString()}
             </div>
           </li>
         ))}

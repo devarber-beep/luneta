@@ -7,8 +7,10 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from app.core.security import build_access_token, hash_password, parse_access_token, verify_password
+from app.core.university_text import parse_university_field
 from app.domain.enums import UserAccountStatus, UserRole
 from app.models.user import UserModel
+from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.auth import ProfilePatchRequest
 from app.storage.minio_storage import MinioUserAvatarStorage
@@ -27,10 +29,12 @@ class AuthService:
         users_repo: UsersRepository,
         token_secret: str,
         token_ttl_seconds: int,
+        scenarios_repo: ScenariosRepository | None = None,
     ) -> None:
         self._users_repo = users_repo
         self._token_secret = token_secret
         self._token_ttl_seconds = token_ttl_seconds
+        self._scenarios_repo = scenarios_repo
 
     async def signup(self, *, email: str, password: str, nickname: str) -> UserModel:
         existing = await self._users_repo.get_by_email(email)
@@ -144,10 +148,20 @@ class AuthService:
         for key in ("first_name", "last_name", "organization", "biography"):
             if key in raw:
                 updates[key] = _optional_text(raw[key])
+        if "university" in raw:
+            display, normalized = parse_university_field(raw["university"])
+            updates["university"] = display
+            updates["university_normalized"] = normalized
 
         updated = await self._users_repo.apply_profile_updates(user.id or "", updates)
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if "university" in raw and self._scenarios_repo is not None:
+            await self._scenarios_repo.sync_author_university_for_author(
+                author_user_id=user.id or "",
+                author_university=updated.university,
+                author_university_normalized=updated.university_normalized,
+            )
         return updated
 
     async def change_password(

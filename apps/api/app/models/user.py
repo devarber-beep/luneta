@@ -34,6 +34,8 @@ class UserModel(BaseModel):
     first_name: str | None = Field(default=None, max_length=60)
     last_name: str | None = Field(default=None, max_length=60)
     organization: str | None = Field(default=None, max_length=200)
+    university: str | None = Field(default=None, max_length=200)
+    university_normalized: str | None = Field(default=None, max_length=200)
     biography: str | None = Field(default=None, max_length=4000)
     avatar: UserAvatarModel | None = None
     must_change_password: bool = False

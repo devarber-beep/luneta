@@ -66,6 +66,7 @@ class ScenarioResponse(BaseModel):
     ethical_risk_ids: list[str] = Field(default_factory=list)
     usage_context: ScenarioUsageContextModel | None = None
     author_user_id: str
+    author_university: str | None = None
     collaborators: list["ScenarioCollaboratorResponse"]
     state: ScenarioState
     current_revision_number: int

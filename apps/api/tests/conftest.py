@@ -48,6 +48,8 @@ def user_doc(
         "first_name": None,
         "last_name": None,
         "organization": None,
+        "university": None,
+        "university_normalized": None,
         "biography": None,
         "avatar": None,
         "must_change_password": False,
@@ -314,19 +316,39 @@ class FakeCollection:
         docs = list(self._docs)
         rows: list[dict[str, Any]] = []
         for stage in pipeline:
-            if "$group" not in stage:
+            if "$match" in stage:
+                docs = [doc for doc in docs if _matches(doc, stage["$match"])]
                 continue
-            group = stage["$group"]
-            group_id = group.get("_id")
-            if not isinstance(group_id, str) or not group_id.startswith("$"):
+            if "$group" in stage:
+                group = stage["$group"]
+                group_id = group.get("_id")
+                if isinstance(group_id, str) and group_id.startswith("$"):
+                    field = group_id[1:]
+                    buckets: dict[Any, dict[str, Any]] = {}
+                    for doc in docs:
+                        key = doc.get(field)
+                        if key not in buckets:
+                            buckets[key] = {"_id": key}
+                        for out_key, spec in group.items():
+                            if out_key == "_id" or not isinstance(spec, dict):
+                                continue
+                            if "$first" in spec:
+                                src = spec["$first"]
+                                if isinstance(src, str) and src.startswith("$") and out_key not in buckets[key]:
+                                    buckets[key][out_key] = doc.get(src[1:])
+                    rows = list(buckets.values())
                 continue
-            field = group_id[1:]
-            counts: dict[Any, int] = {}
-            for doc in docs:
-                key = doc.get(field)
-                counts[key] = counts.get(key, 0) + 1
-            rows = [{"_id": key, "count": value} for key, value in counts.items()]
-        return FakeAggregateCursor(rows)
+            if "$sort" in stage:
+                sort_spec = stage["$sort"]
+                target = rows if rows else docs
+                for field, direction in reversed(list(sort_spec.items())):
+                    reverse = direction == -1
+                    target.sort(key=lambda row, f=field: row.get(f), reverse=reverse)
+                if rows:
+                    rows = target
+                else:
+                    docs = target
+        return FakeAggregateCursor(rows if rows else docs)
 
 
 def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:

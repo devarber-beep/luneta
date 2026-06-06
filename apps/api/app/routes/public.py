@@ -80,6 +80,7 @@ async def _list_items_for_scenarios(
                 public_path=f"/public/{scenario.public_slug}",
                 author_user_id=scenario.author_user_id,
                 author_nickname=author_nickname,
+                author_university=scenario.author_university,
             )
         )
     return items
@@ -179,6 +180,7 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
         id=scenario.id or "",
         author_user_id=scenario.author_user_id,
         author_nickname=author_nickname,
+        author_university=scenario.author_university,
         title=scenario.public_title or scenario.title,
         description=scenario.public_description or scenario.description,
         summary=scenario.summary,

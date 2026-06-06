@@ -55,12 +55,21 @@ class WorkflowService:
         author_user_id: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        q: str | None = None,
+        category_ids: list[str] | None = None,
     ) -> list[ReviewQueueItem]:
+        author_ids_from_nickname: list[str] | None = None
+        trimmed_q = (q or "").strip()
+        if trimmed_q:
+            author_ids_from_nickname = await self._users_repo.list_ids_matching_nickname(trimmed_q)
         scenarios = await self._scenarios_repo.list_by_states(
             states=[ScenarioState.QUEUED, ScenarioState.IN_REVIEW],
             author_user_id=author_user_id,
             submitted_from=submitted_from,
             submitted_to=submitted_to,
+            q=q,
+            q_matching_author_user_ids=author_ids_from_nickname or None,
+            category_ids=category_ids,
         )
         portfolio = await portfolio_investigator_ids_for_user(
             user=current_user,
@@ -84,15 +93,24 @@ class WorkflowService:
         author_user_id: str | None = None,
         submitted_from: datetime | None = None,
         submitted_to: datetime | None = None,
+        q: str | None = None,
+        category_ids: list[str] | None = None,
     ) -> list[ReviewedScenarioItem]:
         reviewer_filter: str | None = None
         if UserRole(current_user.role) == UserRole.REVIEWER:
             reviewer_filter = current_user.id or ""
+        author_ids_from_nickname: list[str] | None = None
+        trimmed_q = (q or "").strip()
+        if trimmed_q:
+            author_ids_from_nickname = await self._users_repo.list_ids_matching_nickname(trimmed_q)
         scenarios = await self._scenarios_repo.list_reviewed(
             reviewer_user_id=reviewer_filter,
             author_user_id=author_user_id,
             submitted_from=submitted_from,
             submitted_to=submitted_to,
+            q=q,
+            q_matching_author_user_ids=author_ids_from_nickname or None,
+            category_ids=category_ids,
         )
         portfolio = await portfolio_investigator_ids_for_user(
             user=current_user,
@@ -114,6 +132,7 @@ class WorkflowService:
                     scenario_id=scenario.id or "",
                     title=scenario.title,
                     author_user_id=scenario.author_user_id,
+                    author_university=scenario.author_university,
                     state=scenario.state,
                     last_reviewed_at=scenario.last_reviewed_at,
                     last_review_outcome=scenario.last_review_outcome,
@@ -328,6 +347,7 @@ class WorkflowService:
             scenario_id=scenario.id or "",
             title=scenario.title,
             author_user_id=scenario.author_user_id,
+            author_university=scenario.author_university,
             state=scenario.state,
             has_prior_approval=scenario.first_approved_at is not None,
             submitted_at=scenario.submitted_for_review_at or scenario.last_state_changed_at,

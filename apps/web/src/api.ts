@@ -170,6 +170,7 @@ export type ScenarioResponse = {
   ethical_risk_ids: string[];
   usage_context?: ScenarioUsageContext | null;
   author_user_id: string;
+  author_university?: string | null;
   state:
     | "draft"
     | "queued"
@@ -259,6 +260,7 @@ export type MeProfile = {
   first_name: string | null;
   last_name: string | null;
   organization: string | null;
+  university: string | null;
   biography: string | null;
   avatar: {
     bucket: string;
@@ -283,6 +285,7 @@ export type ProfilePatchPayload = {
   first_name?: string | null;
   last_name?: string | null;
   organization?: string | null;
+  university?: string | null;
   biography?: string | null;
 };
 
@@ -491,11 +494,29 @@ export type WorkflowActionResponse = {
   changed_at: string;
 };
 
-export async function reviewQueue(token: string): Promise<{
+export type ScenarioListSearchParams = {
+  q?: string;
+  category_id?: string[];
+};
+
+function appendScenarioListSearchParams(search: URLSearchParams, params: ScenarioListSearchParams = {}) {
+  if (params.q?.trim()) {
+    search.set("q", params.q.trim());
+  }
+  for (const id of params.category_id ?? []) {
+    search.append("category_id", id);
+  }
+}
+
+export async function reviewQueue(
+  token: string,
+  params: ScenarioListSearchParams = {},
+): Promise<{
   items: Array<{
     scenario_id: string;
     title: string;
     author_user_id: string;
+    author_university?: string | null;
     state: string;
     has_prior_approval: boolean;
     submitted_at?: string | null;
@@ -504,7 +525,10 @@ export async function reviewQueue(token: string): Promise<{
     live_public_path?: string | null;
   }>;
 }> {
-  return request("/workflow/review-queue", {
+  const search = new URLSearchParams();
+  appendScenarioListSearchParams(search, params);
+  const qs = search.toString();
+  return request(`/workflow/review-queue${qs ? `?${qs}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -554,18 +578,25 @@ export async function publishScenario(token: string, id: string): Promise<Workfl
   });
 }
 
-export async function reviewedScenarios(token: string): Promise<{
+export async function reviewedScenarios(
+  token: string,
+  params: ScenarioListSearchParams = {},
+): Promise<{
   items: Array<{
     scenario_id: string;
     title: string;
     author_user_id: string;
+    author_university?: string | null;
     state: string;
     last_reviewed_at: string;
     last_review_outcome?: string | null;
     live_public_path?: string | null;
   }>;
 }> {
-  return request("/workflow/reviewed", {
+  const search = new URLSearchParams();
+  appendScenarioListSearchParams(search, params);
+  const qs = search.toString();
+  return request(`/workflow/reviewed${qs ? `?${qs}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -584,6 +615,7 @@ export type PublicScenarioListItem = {
   public_path: string;
   author_user_id: string;
   author_nickname: string;
+  author_university?: string | null;
 };
 
 export type PublicScenarioSearchResult = {
@@ -660,6 +692,7 @@ export async function publicScenario(slug: string): Promise<{
   id: string;
   author_user_id: string;
   author_nickname: string;
+  author_university?: string | null;
   title: string;
   description: string;
   published_at: string;
@@ -692,8 +725,14 @@ export type ScenarioSummary = {
   my_participation_role: "owner" | "collaborator";
 };
 
-export async function listMyScenarios(token: string): Promise<ScenarioSummary[]> {
-  return request("/scenarios/mine", {
+export async function listMyScenarios(
+  token: string,
+  params: ScenarioListSearchParams = {},
+): Promise<ScenarioSummary[]> {
+  const search = new URLSearchParams();
+  appendScenarioListSearchParams(search, params);
+  const qs = search.toString();
+  return request(`/scenarios/mine${qs ? `?${qs}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

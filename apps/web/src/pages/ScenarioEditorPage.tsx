@@ -93,6 +93,7 @@ export function ScenarioEditorPage({
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [inlineFile, setInlineFile] = useState<File | null>(null);
   const [authorUserId, setAuthorUserId] = useState("");
+  const [authorUniversity, setAuthorUniversity] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [reviewerHasFeedback, setReviewerHasFeedback] = useState(false);
@@ -187,6 +188,7 @@ export function ScenarioEditorPage({
     setUsageContext(usageContextFromScenario(scenario.usage_context));
     setReviewFeedbackNote(scenario.review_feedback_note ?? null);
     setAuthorUserId(scenario.author_user_id);
+    setAuthorUniversity(scenario.author_university ?? null);
     setState(scenario.state);
     setApiCanSuggest(scenario.can_create_suggestion ?? false);
     setMyParticipationRole(scenario.my_participation_role ?? null);
@@ -493,7 +495,12 @@ export function ScenarioEditorPage({
   return (
     <main style={layoutStyle}>
       <h2>{isCreate ? "New scenario" : isCollaborator ? "View scenario" : "Edit scenario"}</h2>
-      {!isCreate ? <p>State: {state}</p> : null}
+      {!isCreate ? (
+        <p>
+          State: {state}
+          {authorUniversity ? ` · University: ${authorUniversity}` : ""}
+        </p>
+      ) : null}
 
       {isOwner && state === "changes_required" && reviewFeedbackNote ? (
         <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#fff8e6", borderRadius: "6px" }}>

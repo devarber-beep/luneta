@@ -47,6 +47,7 @@ class ProfilePatchRequest(BaseModel):
     first_name: str | None = Field(default=None, max_length=60)
     last_name: str | None = Field(default=None, max_length=60)
     organization: str | None = Field(default=None, max_length=200)
+    university: str | None = Field(default=None, max_length=200)
     biography: str | None = Field(default=None, max_length=4000)
 
     @model_validator(mode="after")
@@ -80,6 +81,7 @@ class MeResponse(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     organization: str | None = None
+    university: str | None = None
     biography: str | None = None
     avatar: AvatarResponse | None = None
     avatar_url: str | None = None

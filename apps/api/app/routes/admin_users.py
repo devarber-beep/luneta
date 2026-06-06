@@ -15,6 +15,7 @@ from app.presenters.me_response import build_me_response
 from app.repositories.audit_events import AuditEventsRepository
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
+from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.admin_users import (
     AdminCreateInvestigatorRequest,
@@ -106,6 +107,7 @@ async def admin_patch_user_profile(
         users_repo=users_repo,
         token_secret=settings.auth_token_secret,
         token_ttl_seconds=settings.auth_token_ttl_seconds,
+        scenarios_repo=ScenariosRepository(db),
     )
     updated = await auth_service.update_profile(user=target, patch=payload)
     return build_me_response(user=updated, storage=storage)
