@@ -8,8 +8,8 @@ Usage (from repo root, with venv active):
     python infra/scripts/create_reviewer_investigator.py
 
 Defaults:
-  reviewer:     reviewer@luneta.dev / Reviewer123! / nickname reviewer
-  investigator: investigator@luneta.dev / Investigator123! / nickname investigator
+  reviewer:     reviewer@luneta.dev / Reviewer123! / Reviewer User
+  investigator: investigator@luneta.dev / Investigator123! / Investigator User
 
 Override with CLI flags or env vars (LUNETA_BOOTSTRAP_REVIEWER_* / LUNETA_BOOTSTRAP_INVESTIGATOR_*).
 Use --no-assign to skip portfolio assignment.
@@ -43,7 +43,8 @@ async def _ensure_bootstrap_user(
     *,
     email: str,
     password_hash: str,
-    nickname: str,
+    first_name: str,
+    last_name: str,
     role,
 ) -> tuple[object, bool]:
     """Return (user, created) where created is False if the account already existed with that role."""
@@ -56,7 +57,8 @@ async def _ensure_bootstrap_user(
     user = await users.create_bootstrap_account(
         email=email,
         password_hash=password_hash,
-        nickname=nickname,
+        first_name=first_name,
+        last_name=last_name,
         role=role,
     )
     return user, True
@@ -66,10 +68,12 @@ async def _run(
     *,
     reviewer_email: str,
     reviewer_password: str,
-    reviewer_nickname: str,
+    reviewer_first_name: str,
+    reviewer_last_name: str,
     investigator_email: str,
     investigator_password: str,
-    investigator_nickname: str,
+    investigator_first_name: str,
+    investigator_last_name: str,
     assign: bool,
 ) -> int:
     from motor.motor_asyncio import AsyncIOMotorClient
@@ -92,20 +96,23 @@ async def _run(
         users,
         email=reviewer_email,
         password_hash=hash_password(reviewer_password),
-        nickname=reviewer_nickname,
+        first_name=reviewer_first_name,
+        last_name=reviewer_last_name,
         role=UserRole.REVIEWER,
     )
     investigator, investigator_created = await _ensure_bootstrap_user(
         users,
         email=investigator_email,
         password_hash=hash_password(investigator_password),
-        nickname=investigator_nickname,
+        first_name=investigator_first_name,
+        last_name=investigator_last_name,
         role=UserRole.INVESTIGATOR,
     )
 
     if reviewer_created:
         print(
-            f"Created reviewer id={reviewer.id} email={reviewer.email_normalized} nickname={reviewer.nickname}"
+            f"Created reviewer id={reviewer.id} email={reviewer.email_normalized} "
+            f"display_name={reviewer.display_name}"
         )
     else:
         print(f"Reviewer already exists: {reviewer.email_normalized} (id={reviewer.id})")
@@ -113,7 +120,7 @@ async def _run(
     if investigator_created:
         print(
             f"Created investigator id={investigator.id} email={investigator.email_normalized} "
-            f"nickname={investigator.nickname}"
+            f"display_name={investigator.display_name}"
         )
     else:
         print(f"Investigator already exists: {investigator.email_normalized} (id={investigator.id})")
@@ -151,8 +158,12 @@ def main() -> int:
         default=os.environ.get("LUNETA_BOOTSTRAP_REVIEWER_PASSWORD", "Reviewer123!"),
     )
     parser.add_argument(
-        "--reviewer-nickname",
-        default=os.environ.get("LUNETA_BOOTSTRAP_REVIEWER_NICKNAME", "reviewer"),
+        "--reviewer-first-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_REVIEWER_FIRST_NAME", "Reviewer"),
+    )
+    parser.add_argument(
+        "--reviewer-last-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_REVIEWER_LAST_NAME", "User"),
     )
     parser.add_argument(
         "--investigator-email",
@@ -163,8 +174,12 @@ def main() -> int:
         default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_PASSWORD", "Investigator123!"),
     )
     parser.add_argument(
-        "--investigator-nickname",
-        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_NICKNAME", "investigator"),
+        "--investigator-first-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_FIRST_NAME", "Investigator"),
+    )
+    parser.add_argument(
+        "--investigator-last-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_LAST_NAME", "User"),
     )
     parser.add_argument(
         "--no-assign",
@@ -184,10 +199,12 @@ def main() -> int:
             _run(
                 reviewer_email=args.reviewer_email,
                 reviewer_password=args.reviewer_password,
-                reviewer_nickname=args.reviewer_nickname,
+                reviewer_first_name=args.reviewer_first_name,
+                reviewer_last_name=args.reviewer_last_name,
                 investigator_email=args.investigator_email,
                 investigator_password=args.investigator_password,
-                investigator_nickname=args.investigator_nickname,
+                investigator_first_name=args.investigator_first_name,
+                investigator_last_name=args.investigator_last_name,
                 assign=not args.no_assign,
             )
         )

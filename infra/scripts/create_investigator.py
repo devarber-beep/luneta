@@ -4,7 +4,7 @@ Usage (from repo root, with venv active):
 
     python infra/scripts/create_investigator.py
 
-Defaults: investigator2@luneta.dev / Investigator2123! / nickname investigator2
+Defaults: investigator2@luneta.dev / Investigator2123! / name Investigator Two
 
 Optional: assign to a reviewer's portfolio (--reviewer-email reviewer@luneta.dev).
 """
@@ -36,7 +36,8 @@ async def _run(
     *,
     email: str,
     password: str,
-    nickname: str,
+    first_name: str,
+    last_name: str,
     reviewer_email: str | None,
 ) -> int:
     from motor.motor_asyncio import AsyncIOMotorClient
@@ -66,13 +67,14 @@ async def _run(
         investigator = await users.create_bootstrap_account(
             email=email,
             password_hash=hash_password(password),
-            nickname=nickname,
+            first_name=first_name,
+            last_name=last_name,
             role=UserRole.INVESTIGATOR,
         )
         created = True
         print(
             f"Created investigator id={investigator.id} email={investigator.email_normalized} "
-            f"nickname={investigator.nickname}"
+            f"display_name={investigator.display_name}"
         )
 
     if reviewer_email:
@@ -113,8 +115,12 @@ def main() -> int:
         default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_PASSWORD", "Investigator2123!"),
     )
     parser.add_argument(
-        "--nickname",
-        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_NICKNAME", "investigator2"),
+        "--first-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_FIRST_NAME", "Investigator"),
+    )
+    parser.add_argument(
+        "--last-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_INVESTIGATOR_LAST_NAME", "Two"),
     )
     parser.add_argument(
         "--reviewer-email",
@@ -134,7 +140,8 @@ def main() -> int:
         _run(
             email=args.email,
             password=args.password,
-            nickname=args.nickname,
+            first_name=args.first_name,
+            last_name=args.last_name,
             reviewer_email=None if args.no_assign else args.reviewer_email,
         )
     )

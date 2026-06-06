@@ -4,8 +4,8 @@ Usage (from repo root, with venv active):
 
     python infra/scripts/create_admin.py
 
-Defaults: admin@luneta.dev / Admin123! / nickname admin.
-Override with --email, --password, --nickname or LUNETA_BOOTSTRAP_* env vars.
+Defaults: admin@luneta.dev / Admin123! / name Admin User.
+Override with --email, --password, --first-name, --last-name or LUNETA_BOOTSTRAP_* env vars.
 
 The account is created verified, active, and without mandatory password change.
 """
@@ -33,7 +33,7 @@ def _mongodb_uri() -> str:
     return os.environ.get("MONGODB_URI", default)
 
 
-async def _run(*, email: str, password: str, nickname: str) -> int:
+async def _run(*, email: str, password: str, first_name: str, last_name: str) -> int:
     from motor.motor_asyncio import AsyncIOMotorClient
 
     from app.core.security import hash_password
@@ -61,9 +61,13 @@ async def _run(*, email: str, password: str, nickname: str) -> int:
     user = await users.create_admin_account(
         email=email,
         password_hash=hash_password(password),
-        nickname=nickname,
+        first_name=first_name,
+        last_name=last_name,
     )
-    print(f"Created admin user id={user.id} email_normalized={user.email_normalized}")
+    print(
+        f"Created admin user id={user.id} email_normalized={user.email_normalized} "
+        f"display_name={user.display_name}"
+    )
     client.close()
     return 0
 
@@ -78,12 +82,26 @@ def main() -> int:
         "--password",
         default=os.environ.get("LUNETA_BOOTSTRAP_ADMIN_PASSWORD", "Admin123!"),
     )
-    parser.add_argument("--nickname", default=os.environ.get("LUNETA_BOOTSTRAP_ADMIN_NICKNAME", "admin"))
+    parser.add_argument(
+        "--first-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_ADMIN_FIRST_NAME", "Admin"),
+    )
+    parser.add_argument(
+        "--last-name",
+        default=os.environ.get("LUNETA_BOOTSTRAP_ADMIN_LAST_NAME", "User"),
+    )
     args = parser.parse_args()
     if len(args.password) < 8:
         print("Error: password must be at least 8 characters", file=sys.stderr)
         return 1
-    return asyncio.run(_run(email=args.email, password=args.password, nickname=args.nickname))
+    return asyncio.run(
+        _run(
+            email=args.email,
+            password=args.password,
+            first_name=args.first_name,
+            last_name=args.last_name,
+        )
+    )
 
 
 if __name__ == "__main__":
