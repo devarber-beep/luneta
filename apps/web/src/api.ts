@@ -497,11 +497,15 @@ export type WorkflowActionResponse = {
 export type ScenarioListSearchParams = {
   q?: string;
   category_id?: string[];
+  state?: string;
 };
 
 function appendScenarioListSearchParams(search: URLSearchParams, params: ScenarioListSearchParams = {}) {
   if (params.q?.trim()) {
     search.set("q", params.q.trim());
+  }
+  if (params.state?.trim()) {
+    search.set("state", params.state.trim());
   }
   for (const id of params.category_id ?? []) {
     search.append("category_id", id);
@@ -543,12 +547,12 @@ export async function startReviewScenario(token: string, id: string): Promise<Wo
 export async function requestChangesScenario(
   token: string,
   id: string,
-  note: string,
+  note?: string,
 ): Promise<WorkflowActionResponse> {
   return request(`/workflow/scenarios/${id}/request-changes`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ note }),
+    body: JSON.stringify({ note: note ?? "" }),
   });
 }
 

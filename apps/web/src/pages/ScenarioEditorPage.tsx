@@ -15,6 +15,7 @@ import {
   patchScenario,
   reorderScenarioInlineAssets,
   submitReview,
+  startApplyingChanges,
   uploadScenarioCover,
   uploadScenarioInline,
   publishScenario,
@@ -85,7 +86,6 @@ export function ScenarioEditorPage({
   const [catalogCategories, setCatalogCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [ethicalOptions, setEthicalOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [state, setState] = useState(isCreate ? "draft" : "");
-  const [reviewFeedbackNote, setReviewFeedbackNote] = useState<string | null>(null);
   const [coverAsset, setCoverAsset] = useState<{ asset_id: string; alt_text?: string | null } | null>(null);
   const [inlineAssets, setInlineAssets] = useState<Array<{ asset_id: string; order: number; alt_text?: string | null }>>([]);
   const [assetPreviewUrls, setAssetPreviewUrls] = useState<Record<string, string>>({});
@@ -186,7 +186,6 @@ export function ScenarioEditorPage({
     setCategoryIds(scenario.category_ids ?? []);
     setEthicalRiskIds(scenario.ethical_risk_ids ?? []);
     setUsageContext(usageContextFromScenario(scenario.usage_context));
-    setReviewFeedbackNote(scenario.review_feedback_note ?? null);
     setAuthorUserId(scenario.author_user_id);
     setAuthorUniversity(scenario.author_university ?? null);
     setState(scenario.state);
@@ -502,10 +501,41 @@ export function ScenarioEditorPage({
         </p>
       ) : null}
 
-      {isOwner && state === "changes_required" && reviewFeedbackNote ? (
-        <section style={{ marginBottom: "1rem", padding: "0.75rem", background: "#fff8e6", borderRadius: "6px" }}>
-          <strong>Reviewer feedback</strong>
-          <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.5rem", fontSize: "0.9rem" }}>{reviewFeedbackNote}</pre>
+      {isOwner && state === "changes_required" ? (
+        <section
+          style={{
+            marginBottom: "1rem",
+            padding: "1rem 1.1rem",
+            background: "#fff8e6",
+            borderRadius: "10px",
+            border: "1px solid #f0d080",
+          }}
+        >
+          <p style={{ margin: "0 0 0.75rem", lineHeight: 1.45 }}>
+            Reviewers have requested changes. Read their suggestions below, then start editing when you are ready.
+          </p>
+          <button
+            type="button"
+            style={primaryReviewBtnStyle}
+            disabled={saving}
+            onClick={async () => {
+              const token = getToken();
+              if (!token || !scenarioId) return;
+              setSaving(true);
+              try {
+                const result = await startApplyingChanges(token, scenarioId);
+                setState(result.state);
+                setMessage("You can now edit and apply suggestions.");
+                await load(scenarioId);
+              } catch (e) {
+                setMessage((e as Error).message);
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            Start applying changes
+          </button>
         </section>
       ) : null}
 
@@ -528,11 +558,7 @@ export function ScenarioEditorPage({
                 onClick={() => {
                   const token = getToken();
                   if (!token || !scenarioId) return;
-                  requestChangesScenario(
-                    token,
-                    scenarioId,
-                    "Please address the reviewer's suggestions on this scenario.",
-                  )
+                  requestChangesScenario(token, scenarioId)
                     .then(async () => {
                       setMessage("Sent to changes required. The author can see your suggestions.");
                       await load(scenarioId);

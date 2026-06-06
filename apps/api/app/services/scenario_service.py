@@ -127,6 +127,7 @@ class ScenarioService:
         *,
         current_user: UserModel,
         q: str | None = None,
+        state: ScenarioState | None = None,
     ) -> list[ScenarioModel]:
         await self._scenarios_repo.ensure_indexes()
         author_ids_from_name: list[str] | None = None
@@ -137,6 +138,7 @@ class ScenarioService:
             user_id=current_user.id or "",
             q=q,
             q_matching_author_user_ids=author_ids_from_name or None,
+            state=state,
         )
 
     async def get_scenario_if_readable(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:

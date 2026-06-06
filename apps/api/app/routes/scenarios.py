@@ -172,12 +172,14 @@ async def create_scenario(
 @router.get("/mine", response_model=list[ScenarioSummaryResponse])
 async def list_my_scenarios(
     q: str | None = Query(default=None, max_length=200),
+    state: ScenarioState | None = Query(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
     scenarios = await _service(db).list_my_scenarios(
         current_user=current_user,
         q=q,
+        state=state,
     )
     uid = current_user.id or ""
     return [

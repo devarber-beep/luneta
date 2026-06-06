@@ -131,6 +131,44 @@ async def test_similarity_check_finds_heuristic_match(api_client, fake_db) -> No
     assert len(body["candidates"]) >= 1
 
 
+@pytest.mark.asyncio
+async def test_similarity_check_ignores_generic_unrelated_scenarios(api_client, fake_db) -> None:
+    headers = await _signup_investigator(
+        api_client, fake_db, email="similar2@luneta.dev", token="sim-2"
+    )
+    author_id = str((await fake_db["users"].find_one({"email_normalized": "similar2@luneta.dev"}))["_id"])
+    now = datetime.now(UTC)
+    await fake_db["scenarios"].insert_one(
+        {
+            "_id": ObjectId(),
+            "slug": "published-generic",
+            "title": "Ethics workshop with children",
+            "description": "Students participate in classroom activities during lessons for educational research.",
+            "public_title": "Ethics workshop with children",
+            "public_description": "Students participate in classroom activities during lessons for educational research.",
+            "public_slug": "ethics-workshop",
+            "author_user_id": author_id,
+            "collaborators": [],
+            "state": "published",
+            "category_ids": [],
+            "ethical_risk_ids": [],
+            "keywords_normalized": [],
+            "published_at": now,
+            "last_state_changed_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    check = await api_client.post(
+        "/scenarios/similarity-check",
+        headers=headers,
+        json={
+            "title": "Smart glasses field study",
+            "description": "Children wear devices while teachers observe learning outcomes in another school.",
+        },
+    )
+    assert check.status_code == 200
+    assert check.json()["candidates"] == []
 
 
 

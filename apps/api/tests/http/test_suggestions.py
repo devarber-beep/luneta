@@ -185,7 +185,7 @@ async def test_reviewer_accept_moves_to_applying_changes(api_client, fake_db) ->
     req = await api_client.post(
         f"/workflow/scenarios/{sid}/request-changes",
         headers=rev_h,
-        json={"note": "Please address the reviewer's suggestions on this scenario."},
+        json={"note": ""},
     )
     assert req.status_code == 200
     assert (await api_client.get(f"/scenarios/{sid}", headers=owner_h)).json()["state"] == "changes_required"
@@ -195,6 +195,81 @@ async def test_reviewer_accept_moves_to_applying_changes(api_client, fake_db) ->
     )
     assert accept.status_code == 200
     assert accept.json()["scenario"]["state"] == "applying_changes"
+
+
+@pytest.mark.asyncio
+async def test_owner_start_applying_changes_from_changes_required(api_client, fake_db) -> None:
+    owner_h = await _signup_and_promote(
+        api_client, fake_db, email="sugown10@luneta.dev", role="investigator", token="sug-own10-tok"
+    )
+    rev_h = await _signup_and_promote(
+        api_client, fake_db, email="sugrev10@luneta.dev", role="reviewer", token="sug-rev10-tok"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Needs edits", "description": "First paragraph.\n\nSecond paragraph."},
+        headers=owner_h,
+    )
+    sid = create.json()["id"]
+    now = datetime.now(UTC)
+    owner_doc = await fake_db["users"].find_one({"email_normalized": "sugown10@luneta.dev"})
+    rev_doc = await fake_db["users"].find_one({"email_normalized": "sugrev10@luneta.dev"})
+    await fake_db["reviewer_assignments"].insert_one(
+        {
+            "reviewer_user_id": str(rev_doc["_id"]),
+            "investigator_user_id": str(owner_doc["_id"]),
+            "created_at": now,
+        }
+    )
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "sug10-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "sug10-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=rev_h)
+    sug = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=rev_h,
+        json={"scope": "paragraph", "kind": "comment", "paragraph_index": 0, "body": "Clarify intro"},
+    )
+    assert sug.status_code == 201
+    req = await api_client.post(
+        f"/workflow/scenarios/{sid}/request-changes",
+        headers=rev_h,
+        json={"note": ""},
+    )
+    assert req.status_code == 200
+    assert (await api_client.get(f"/scenarios/{sid}", headers=owner_h)).json()["state"] == "changes_required"
+
+    start = await api_client.post(f"/scenarios/{sid}/start-applying-changes", headers=owner_h)
+    assert start.status_code == 200
+    assert start.json()["state"] == "applying_changes"
+    assert (await api_client.get(f"/scenarios/{sid}", headers=owner_h)).json()["state"] == "applying_changes"
 
 
 @pytest.mark.asyncio

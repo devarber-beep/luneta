@@ -441,6 +441,13 @@ function MyProfilePage() {
 
 function MyScenariosPage() {
   const token = useToken();
+  const [searchParams, setSearchParams] = useSearchParams();
+  type MyScenariosTab = "all" | "changes_required" | "applying_changes" | "published";
+  const tabParam = searchParams.get("state");
+  const activeTab: MyScenariosTab =
+    tabParam === "changes_required" || tabParam === "applying_changes" || tabParam === "published"
+      ? tabParam
+      : "all";
   const [items, setItems] = useState<
     Array<{
       id: string;
@@ -464,6 +471,7 @@ function MyScenariosPage() {
     try {
       const rows = await listMyScenarios(token, {
         q: submittedQ || undefined,
+        state: activeTab === "all" ? undefined : activeTab,
       });
       setItems(rows);
       setMessage("");
@@ -492,7 +500,26 @@ function MyScenariosPage() {
 
   useEffect(() => {
     load().catch((e: Error) => setMessage(e.message));
-  }, [token, submittedQ]);
+  }, [token, submittedQ, activeTab]);
+
+  const setTab = (tab: MyScenariosTab) => {
+    if (tab === "all") {
+      setSearchParams({});
+    } else {
+      setSearchParams({ state: tab });
+    }
+  };
+
+  const emptyMessage =
+    submittedQ
+      ? "No scenarios match your search."
+      : activeTab === "changes_required"
+        ? "No scenarios require changes."
+        : activeTab === "applying_changes"
+          ? "No scenarios are being updated."
+          : activeTab === "published"
+            ? "No published scenarios."
+            : "No scenarios are associated with your account.";
 
   return (
     <main style={layoutStyle}>
@@ -500,6 +527,28 @@ function MyScenariosPage() {
       <p>
         <Link to="/my-profile">My profile</Link>
       </p>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+        <button type="button" onClick={() => setTab("all")} disabled={activeTab === "all"}>
+          All scenarios
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("changes_required")}
+          disabled={activeTab === "changes_required"}
+        >
+          Changes required
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("applying_changes")}
+          disabled={activeTab === "applying_changes"}
+        >
+          Applying changes
+        </button>
+        <button type="button" onClick={() => setTab("published")} disabled={activeTab === "published"}>
+          Published
+        </button>
+      </div>
       <ScenarioSearchField
         value={searchQ}
         onChange={setSearchQ}
@@ -539,11 +588,7 @@ function MyScenariosPage() {
           </li>
         ))}
       </ul>
-      {!loading && !items.length ? (
-        <p>
-          {submittedQ ? "No scenarios match your search." : "No scenarios are associated with your account."}
-        </p>
-      ) : null}
+      {!loading && !items.length ? <p>{emptyMessage}</p> : null}
       {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
       <Link to="/">Back</Link>
     </main>

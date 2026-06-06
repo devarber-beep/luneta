@@ -39,7 +39,7 @@ class ReviewedListResponse(BaseModel):
 
 
 class RequestChangesBody(BaseModel):
-    note: str = Field(min_length=1, max_length=4000)
+    note: str = Field(default="", max_length=4000)
 
 
 class MarkNotSuitableBody(BaseModel):

@@ -12,9 +12,6 @@ from app.services.gemini_client import embed_texts, gemini_api_key, is_gemini_pr
 from app.domain.enums import AuditActionType, AuditSubjectType
 from app.settings import settings
 
-_HEURISTIC_MIN_SCORE = 0.75
-_EMBEDDING_MIN_SCORE = 0.75
-
 
 @dataclass(frozen=True)
 class SimilarityCandidate:
@@ -47,6 +44,24 @@ def _heuristic_score(left: str, right: str) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+def _heuristic_pair_score(
+    *,
+    left_title: str,
+    left_description: str,
+    right_title: str,
+    right_description: str,
+) -> float:
+    title_score = _heuristic_score(left_title, right_title)
+    desc_score = _heuristic_score(left_description, right_description)
+    shared = len(
+        _token_set(f"{left_title} {left_description}")
+        & _token_set(f"{right_title} {right_description}")
+    )
+    if shared < settings.scenario_similarity_min_shared_tokens:
+        return 0.0
+    return (title_score + desc_score) / 2
 
 
 def _cosine(left: list[float], right: list[float]) -> float:
@@ -114,7 +129,11 @@ class ScenarioSimilarityService:
                     candidates = []
 
         if not candidates:
-            candidates = self._heuristic_candidates(query_text=query_text, published=published)
+            candidates = self._heuristic_candidates(
+                title=title,
+                description=description,
+                published=published,
+            )
             provider = "heuristic"
 
         await self._audit.record(
@@ -133,21 +152,26 @@ class ScenarioSimilarityService:
     def _heuristic_candidates(
         self,
         *,
-        query_text: str,
+        title: str,
+        description: str,
         published: list[ScenarioModel],
     ) -> list[SimilarityCandidate]:
+        min_score = settings.scenario_similarity_heuristic_min_score
         scored: list[SimilarityCandidate] = []
         for scenario in published:
-            other = _combined_text(
-                title=scenario.public_title or scenario.title,
-                description=scenario.public_description or scenario.description,
+            other_title = scenario.public_title or scenario.title
+            other_description = scenario.public_description or scenario.description
+            score = _heuristic_pair_score(
+                left_title=title,
+                left_description=description,
+                right_title=other_title,
+                right_description=other_description,
             )
-            score = _heuristic_score(query_text, other)
-            if score >= _HEURISTIC_MIN_SCORE:
+            if score >= min_score:
                 scored.append(
                     SimilarityCandidate(
                         scenario_id=scenario.id or "",
-                        title=scenario.public_title or scenario.title,
+                        title=other_title,
                         score=round(score, 4),
                         public_path=_public_path_for(scenario),
                     )
@@ -174,10 +198,11 @@ class ScenarioSimilarityService:
         corpus: list[tuple[ScenarioModel, str]],
         vectors: list[list[float]],
     ) -> list[SimilarityCandidate]:
+        min_score = settings.scenario_similarity_embedding_min_score
         scored: list[SimilarityCandidate] = []
         for (scenario, _), vec in zip(corpus, vectors, strict=True):
             score = _cosine(query_vec, vec)
-            if score >= _EMBEDDING_MIN_SCORE:
+            if score >= min_score:
                 scored.append(
                     SimilarityCandidate(
                         scenario_id=scenario.id or "",

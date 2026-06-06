@@ -630,6 +630,7 @@ class ScenariosRepository:
         q: str | None = None,
         q_matching_author_user_ids: list[str] | None = None,
         category_ids: list[str] | None = None,
+        state: ScenarioState | None = None,
     ) -> list[ScenarioModel]:
         """Scenarios where the user is author or listed as collaborator."""
         participation = {
@@ -638,6 +639,9 @@ class ScenariosRepository:
                 {"collaborators.user_id": user_id},
             ]
         }
+        extra_clauses: list[dict[str, Any]] = [participation]
+        if state is not None:
+            extra_clauses.append({"state": state.value})
         query = self._build_list_query(
             base={"deleted_at": None},
             q=q,
@@ -645,7 +649,7 @@ class ScenariosRepository:
             category_ids=category_ids,
             include_draft_fields=True,
             include_author_university_in_text_search=False,
-            extra_clauses=[participation],
+            extra_clauses=extra_clauses,
         )
         return await self._find_sorted(query, sort_field="updated_at", sort_direction=-1)
 

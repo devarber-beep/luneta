@@ -65,5 +65,9 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o-mini"
     ai_suggestion_generations_per_hour: int = 5
 
+    scenario_similarity_heuristic_min_score: float = 0.88
+    scenario_similarity_embedding_min_score: float = 0.88
+    scenario_similarity_min_shared_tokens: int = 6
+
 
 settings = Settings()
