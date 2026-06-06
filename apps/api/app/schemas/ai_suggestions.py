@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 AiSuggestionScope = Literal["title", "description_full", "description_paragraph"]
 AiSuggestionKind = Literal["clarity", "structure", "safety", "rewrite"]
+AiSuggestionEmptyReason = Literal["none", "model_empty", "filtered"]
 
 
 class AiSuggestionItemResponse(BaseModel):
@@ -31,6 +32,8 @@ class AiSuggestionGenerateResponse(BaseModel):
     items: list[AiSuggestionItemResponse]
     provider: str
     raw_items_received: int = 0
+    empty_reason: AiSuggestionEmptyReason = "none"
+    items_filtered_out: int = 0
 
 
 class AiSuggestionActionRequest(BaseModel):

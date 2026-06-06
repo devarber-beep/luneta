@@ -1,7 +1,8 @@
-"""Ephemeral AI improvement suggestions for scenario authors (OpenAI)."""
+"""Ephemeral AI improvement suggestions for scenario authors."""
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -20,6 +21,7 @@ from app.repositories.audit_events import AuditEventsRepository
 from app.repositories.ai_suggestion_decisions import AiSuggestionDecisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.schemas.ai_suggestions import (
+    AiSuggestionEmptyReason,
     AiSuggestionGenerateResponse,
     AiSuggestionItemResponse,
     AiSuggestionKind,
@@ -36,29 +38,19 @@ from app.services.gemini_client import (
 from app.services.sensitive_data_check import format_finding_labels, scan_scenario_for_sensitive_data
 from app.settings import settings
 
+logger = logging.getLogger(__name__)
+
 _MAX_ITEMS = 5
 _VALID_SCOPES = frozenset({"title", "description_full", "description_paragraph"})
 _VALID_KINDS = frozenset({"clarity", "structure", "safety", "rewrite"})
-_SCOPE_ALIASES: dict[str, str] = {
-    "description": "description_full",
-    "full_description": "description_full",
-    "desc": "description_full",
-    "paragraph": "description_paragraph",
-    "description_paragraph": "description_paragraph",
-    "descriptionparagraph": "description_paragraph",
-    "title_field": "title",
-}
-_KIND_ALIASES: dict[str, str] = {
-    "clear": "clarity",
-    "clarify": "clarity",
-    "structural": "structure",
-    "safe": "safety",
-    "rewrite_suggestion": "rewrite",
-    "reword": "rewrite",
+_CAMEL_TO_SNAKE: dict[str, str] = {
+    "paragraphIndex": "paragraph_index",
+    "currentExcerpt": "current_excerpt",
+    "proposedText": "proposed_text",
 }
 
 
-def _detect_content_language(*, title: str, description: str) -> str:
+def _detect_content_language_heuristic(*, title: str, description: str) -> str:
     sample = f"{title}\n{description}".lower()
     spanish_markers = (
         " el ",
@@ -74,6 +66,26 @@ def _detect_content_language(*, title: str, description: str) -> str:
     )
     hits = sum(1 for marker in spanish_markers if marker in f" {sample} ")
     return "es" if hits >= 2 else "en"
+
+
+def _detect_content_language(*, title: str, description: str) -> str:
+    sample = f"{title}\n{description}".strip()
+    if len(sample) < 25:
+        return _detect_content_language_heuristic(title=title, description=description)
+    try:
+        from langdetect import LangDetectException, detect_langs
+
+        ranked = detect_langs(sample)
+        if not ranked:
+            return _detect_content_language_heuristic(title=title, description=description)
+        top = ranked[0]
+        if top.lang in ("es", "ca", "gl") and top.prob >= 0.80:
+            return "es"
+        if top.lang == "es":
+            return "es"
+        return "en"
+    except LangDetectException:
+        return _detect_content_language_heuristic(title=title, description=description)
 
 
 def _language_instruction(lang: str) -> str:
@@ -155,13 +167,42 @@ def _resolve_excerpt(
     return None
 
 
+def _strip_json_fence(text: str) -> str:
+    trimmed = text.strip()
+    if not trimmed.startswith("```"):
+        return trimmed
+    trimmed = re.sub(r"^```(?:json)?\s*", "", trimmed, flags=re.IGNORECASE)
+    return re.sub(r"\s*```$", "", trimmed).strip()
+
+
+def _flatten_llm_items(parsed: Any) -> list[dict[str, Any]]:
+    if isinstance(parsed, list):
+        return [row for row in parsed if isinstance(row, dict)]
+    if not isinstance(parsed, dict):
+        return []
+    candidate = parsed.get("items")
+    if isinstance(candidate, list):
+        return [row for row in candidate if isinstance(row, dict)]
+    if all(key in parsed for key in ("scope", "kind", "proposed_text", "rationale")):
+        return [parsed]
+    return []
+
+
+def _normalize_raw_item_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    out = dict(raw)
+    for camel, snake in _CAMEL_TO_SNAKE.items():
+        if camel in out and snake not in out:
+            out[snake] = out[camel]
+    return out
+
+
 def _coerce_scope(raw: object) -> str | None:
     if not isinstance(raw, str):
         return None
     key = raw.strip().lower().replace("-", "_").replace(" ", "_")
     if key in _VALID_SCOPES:
         return key
-    return _SCOPE_ALIASES.get(key)
+    return None
 
 
 def _coerce_kind(raw: object) -> str | None:
@@ -170,7 +211,7 @@ def _coerce_kind(raw: object) -> str | None:
     key = raw.strip().lower().replace("-", "_").replace(" ", "_")
     if key in _VALID_KINDS:
         return key
-    return _KIND_ALIASES.get(key)
+    return None
 
 
 def _coerce_paragraph_index(
@@ -231,41 +272,23 @@ def _normalize_item(
     *,
     scenario: ScenarioModel,
 ) -> AiSuggestionItemResponse | None:
-    paragraph_raw = raw.get("paragraph_index", raw.get("paragraph"))
+    raw = _normalize_raw_item_keys(raw)
     scope = _coerce_scope(raw.get("scope"))
-    if scope is None and paragraph_raw is not None:
-        scope = "description_paragraph"
-    if scope == "description_full" and paragraph_raw is not None:
-        if _coerce_paragraph_index(paragraph_raw, scenario=scenario) is not None:
-            scope = "description_paragraph"
-    has_proposed = bool(
-        raw.get("proposed_text") or raw.get("suggestion") or raw.get("replacement")
-    )
-    has_rationale = bool(
-        raw.get("rationale") or raw.get("reason") or raw.get("explanation")
-    )
-    kind = _coerce_kind(raw.get("kind")) or ("clarity" if has_proposed and has_rationale else None)
+    kind = _coerce_kind(raw.get("kind"))
     if scope is None or kind is None:
         return None
-    excerpt = str(
-        raw.get("current_excerpt")
-        or raw.get("excerpt")
-        or raw.get("original_text")
-        or ""
-    ).strip()
-    proposed = str(
-        raw.get("proposed_text") or raw.get("suggestion") or raw.get("replacement") or ""
-    ).strip()
-    rationale = str(
-        raw.get("rationale") or raw.get("reason") or raw.get("explanation") or ""
-    ).strip()
+    excerpt = str(raw.get("current_excerpt") or "").strip()
+    proposed = str(raw.get("proposed_text") or "").strip()
+    rationale = str(raw.get("rationale") or "").strip()
     if not proposed or not rationale:
         return None
     paragraph_index: int | None = None
     if scope == "description_paragraph":
-        paragraph_index = _coerce_paragraph_index(paragraph_raw, scenario=scenario)
+        paragraph_index = _coerce_paragraph_index(raw.get("paragraph_index"), scenario=scenario)
         if paragraph_index is None:
             return None
+    elif raw.get("paragraph_index") is not None:
+        return None
     resolved_excerpt = None
     if excerpt:
         resolved_excerpt = _resolve_excerpt(
@@ -336,7 +359,7 @@ class AiSuggestionService:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=(
-                    f"AI suggestion limit reached ({limit} generations per hour). "
+                    f"You have reached the limit of {limit} AI suggestion generations per hour. "
                     "Try again later."
                 ),
             )
@@ -392,7 +415,7 @@ class AiSuggestionService:
                 },
             )
 
-        items, raw_count = await self._call_llm(scenario=effective)
+        items, raw_count, empty_reason, items_filtered_out = await self._call_llm(scenario=effective)
         llm_model = _active_chat_model()
         request_id = str(uuid.uuid4())
         await self._audit.record(
@@ -415,6 +438,8 @@ class AiSuggestionService:
             items=items,
             provider=llm_model,
             raw_items_received=raw_count,
+            empty_reason=empty_reason,
+            items_filtered_out=items_filtered_out,
         )
 
     async def record_applied(
@@ -534,7 +559,9 @@ class AiSuggestionService:
             },
         )
 
-    async def _call_llm(self, *, scenario: ScenarioModel) -> tuple[list[AiSuggestionItemResponse], int]:
+    async def _call_llm(
+        self, *, scenario: ScenarioModel
+    ) -> tuple[list[AiSuggestionItemResponse], int, AiSuggestionEmptyReason, int]:
         paragraphs = split_paragraphs(scenario.description)
         lang = _detect_content_language(title=scenario.title, description=scenario.description)
         paragraph_payload = [
@@ -542,15 +569,36 @@ class AiSuggestionService:
         ]
         system = (
             "You help scenario authors improve educational research scenario drafts. "
-            "Return JSON only. Suggest concrete text improvements; do not invent facts. "
+            "Return JSON only: one object with key items (array). "
+            "Do not wrap JSON in markdown fences. Do not use camelCase or alternate key names. "
+            "Suggest concrete text improvements; do not invent facts. "
             "Never include emails, phone numbers, personal names, or addresses in proposed_text. "
             f"{_language_instruction(lang)} "
-            f"Return at most {_MAX_ITEMS} suggestions."
+            f"Return at most {_MAX_ITEMS} suggestions. "
+            "Each item must use exactly these snake_case keys and no others: "
+            "scope (title|description_full|description_paragraph), "
+            "kind (clarity|structure|safety|rewrite), "
+            "paragraph_index (integer, required only when scope is description_paragraph), "
+            "current_excerpt, proposed_text, rationale. "
+            "current_excerpt must be copied verbatim from the draft (exact substring). "
+            "If you cannot quote a verbatim excerpt, omit that suggestion."
         )
         user_content = json.dumps(
             {
                 "title": scenario.title,
                 "description_paragraphs": paragraph_payload,
+                "output_schema": {
+                    "items": [
+                        {
+                            "scope": "description_paragraph",
+                            "kind": "clarity",
+                            "paragraph_index": 0,
+                            "current_excerpt": "<verbatim substring from paragraph 0>",
+                            "proposed_text": "<replacement for that excerpt>",
+                            "rationale": "<short explanation>",
+                        }
+                    ]
+                },
                 "rules": {
                     "max_items": _MAX_ITEMS,
                     "scopes": [
@@ -563,7 +611,7 @@ class AiSuggestionService:
                         "Copy verbatim from the draft: exact characters from title or "
                         "description (or one paragraph), no paraphrasing."
                     ),
-                    "proposed_text": "Replacement text for that excerpt.",
+                    "proposed_text": "Replacement text for that excerpt only.",
                     "rationale": "Short explanation why this helps.",
                 },
             },
@@ -571,7 +619,8 @@ class AiSuggestionService:
         )
         user_prompt = (
             "Analyze this scenario draft and return "
-            '{"items":[...]} with improvement suggestions.\n' + user_content
+            '{"items":[...]} using only the snake_case keys from output_schema.\n'
+            + user_content
         )
         try:
             if is_gemini_provider():
@@ -581,6 +630,7 @@ class AiSuggestionService:
         except HTTPException:
             raise
         except GeminiApiError as exc:
+            logger.warning("AI suggestion Gemini call failed: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=str(exc),
@@ -591,32 +641,41 @@ class AiSuggestionService:
                 detail=f"AI suggestion service failed: {exc}",
             ) from exc
         try:
-            parsed = json.loads(raw_text)
+            parsed = json.loads(_strip_json_fence(raw_text))
         except json.JSONDecodeError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="AI returned invalid JSON",
             ) from exc
 
-        raw_items: list[Any] = []
-        if isinstance(parsed, dict):
-            candidate = parsed.get("items") or parsed.get("suggestions")
-            if isinstance(candidate, list):
-                raw_items = candidate
-        elif isinstance(parsed, list):
-            raw_items = parsed
-
-        raw_count = len(raw_items) if isinstance(raw_items, list) else 0
+        raw_items = _flatten_llm_items(parsed)
+        raw_count = len(raw_items)
         items: list[AiSuggestionItemResponse] = []
         for raw in raw_items[: _MAX_ITEMS * 2]:
-            if not isinstance(raw, dict):
-                continue
             item = _normalize_item(raw, scenario=scenario)
             if item is not None:
                 items.append(item)
+            else:
+                logger.warning(
+                    "Dropped AI suggestion item (keys=%s)",
+                    sorted(raw.keys()),
+                )
             if len(items) >= _MAX_ITEMS:
                 break
-        return items, raw_count
+        if raw_count > 0 and not items:
+            logger.warning(
+                "Gemini returned %s item(s) but none passed normalization",
+                raw_count,
+            )
+        empty_reason: AiSuggestionEmptyReason = "none"
+        items_filtered_out = 0
+        if not items:
+            if raw_count == 0:
+                empty_reason = "model_empty"
+            else:
+                empty_reason = "filtered"
+                items_filtered_out = raw_count
+        return items, raw_count, empty_reason, items_filtered_out
 
     async def _call_openai_chat(self, *, system: str, user: str) -> str:
         from openai import AsyncOpenAI

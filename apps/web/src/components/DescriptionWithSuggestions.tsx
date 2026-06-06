@@ -6,18 +6,10 @@ import {
   rejectScenarioSuggestion,
   type SuggestionItem,
 } from "../api";
+import { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 import { getToken } from "../session";
 
-const PARAGRAPH_SEPARATOR = "\n\n";
-
-export function splitDescriptionParagraphs(description: string): string[] {
-  const text = (description || "").trim();
-  if (!text) return [];
-  if (text.includes(PARAGRAPH_SEPARATOR)) {
-    return text.split(PARAGRAPH_SEPARATOR).filter((p) => p.trim());
-  }
-  return [text];
-}
+export { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 
 type Props = {
   scenarioId: string;

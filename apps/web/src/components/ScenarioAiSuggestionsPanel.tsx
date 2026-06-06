@@ -8,6 +8,14 @@ import {
   type AiSuggestionItem,
 } from "../api";
 import { applyAiSuggestionToDraft } from "./applyAiSuggestion";
+import {
+  aiApplySuccessMessage,
+  aiDiscardSuccessMessage,
+  aiGenerateEmptyMessage,
+  aiGenerateSuccessMessage,
+  aiRegenerateConfirmMessage,
+} from "./aiSuggestionMessages";
+import type { AiGenerateEmptyReason } from "../api";
 
 const panelStyle = {
   marginBottom: "1.25rem",
@@ -59,9 +67,7 @@ export function ScenarioAiSuggestionsPanel({
 
   const onGenerate = async () => {
     if (items.length > 0) {
-      const ok = window.confirm(
-        "Generate new AI suggestions? The current list will be replaced.",
-      );
+      const ok = window.confirm(aiRegenerateConfirmMessage());
       if (!ok) return;
     }
     setLoading(true);
@@ -73,14 +79,15 @@ export function ScenarioAiSuggestionsPanel({
       setRequestId(res.request_id);
       setItems(res.items);
       if (res.items.length === 0) {
-        const raw = res.raw_items_received ?? 0;
         onStatusMessage(
-          raw > 0
-            ? "The AI returned suggestions we could not use (invalid scope or empty fields). Try again or add more detail."
-            : "No AI suggestions were returned. Add more detail to the title or description and try again.",
+          aiGenerateEmptyMessage(
+            res.empty_reason ?? (res.raw_items_received ? "filtered" : "model_empty"),
+            res.raw_items_received ?? 0,
+            res.items_filtered_out ?? 0,
+          ),
         );
       } else {
-        onStatusMessage(`Generated ${res.items.length} AI suggestion(s).`);
+        onStatusMessage(aiGenerateSuccessMessage(res.items.length));
       }
     } catch (error) {
       if (error instanceof ContentPolicyError) {
@@ -114,15 +121,12 @@ export function ScenarioAiSuggestionsPanel({
         await recordAiSuggestionApplyFailed(token, scenarioId, item.id, actionPayload);
       }
       setItems((prev) => prev.filter((row) => row.id !== item.id));
-      if (!result.excerptFound) {
-        onStatusMessage(
-          "Applied to the form (excerpt was not found verbatim — full replacement used). Save draft to persist.",
-        );
-      } else {
-        onStatusMessage("Applied to the form. Save draft to persist your changes.");
-      }
+      onStatusMessage(aiApplySuccessMessage(result.excerptFound));
     } catch (error) {
-      onStatusMessage((error as Error).message);
+      onStatusMessage(
+        `Could not record this action on the server: ${(error as Error).message}. ` +
+          "Your form may still have been updated — save the draft if you want to keep it.",
+      );
     }
   };
 
@@ -139,8 +143,9 @@ export function ScenarioAiSuggestionsPanel({
         rationale: item.rationale,
       });
       setItems((prev) => prev.filter((row) => row.id !== item.id));
+      onStatusMessage(aiDiscardSuccessMessage());
     } catch (error) {
-      onStatusMessage((error as Error).message);
+      onStatusMessage(`Could not discard this suggestion: ${(error as Error).message}`);
     }
   };
 
@@ -167,17 +172,19 @@ export function ScenarioAiSuggestionsPanel({
         </button>
       </div>
       <p style={{ margin: "0.5rem 0 0", fontSize: "0.88rem", color: "#444", lineHeight: 1.45 }}>
-        Optional assistance for the scenario owner. These are not reviewer suggestions. Apply copies
-        text into the form; use Save draft to persist.
+        Optional AI help for the scenario owner (not reviewer suggestions). Up to 5 suggestions per
+        batch; up to 5 generations per hour. Apply copies text into the form only — use Save draft
+        to persist.
       </p>
       {pendingSaveHint ? (
         <p style={{ margin: "0.5rem 0 0", fontSize: "0.88rem", color: "#b06000", fontWeight: 600 }}>
-          You have unapplied changes in the form — click Save draft to persist.
+          You have applied AI changes in the form that are not saved yet — click Save draft to
+          persist them.
         </p>
       ) : null}
       {items.length === 0 ? (
         <p style={{ margin: "0.65rem 0 0", fontSize: "0.85rem", color: "#666" }}>
-          No pending AI suggestions.
+          No pending AI suggestions. Click Suggest improvements to request a batch.
         </p>
       ) : (
         <ul style={{ listStyle: "none", margin: "0.5rem 0 0", padding: 0 }}>

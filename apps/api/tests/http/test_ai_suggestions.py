@@ -135,10 +135,10 @@ async def test_rate_limit_non_admin(api_client, fake_db, monkeypatch) -> None:
     assert third.status_code == 429
 
 
-def _gemini_alias_payload() -> str:
+def _gemini_legacy_keys_payload() -> str:
     return json.dumps(
         {
-            "suggestions": [
+            "items": [
                 {
                     "scope": "description",
                     "kind": "clear",
@@ -157,7 +157,7 @@ def _gemini_alias_payload() -> str:
 
 
 @pytest.mark.asyncio
-async def test_generate_accepts_gemini_field_aliases(api_client, fake_db, monkeypatch) -> None:
+async def test_generate_rejects_legacy_field_names(api_client, fake_db, monkeypatch) -> None:
     _patch_gemini(monkeypatch)
     headers = await _signup_investigator(
         api_client, fake_db, email="ai-sug-alias@luneta.dev", token="ai-sug-alias"
@@ -171,7 +171,58 @@ async def test_generate_accepts_gemini_field_aliases(api_client, fake_db, monkey
 
     with patch(
         "app.services.ai_suggestion_service.generate_json",
-        new=AsyncMock(return_value=_gemini_alias_payload()),
+        new=AsyncMock(return_value=_gemini_legacy_keys_payload()),
+    ):
+        gen = await api_client.post(f"/scenarios/{sid}/ai-suggestions/generate", headers=headers)
+
+    assert gen.status_code == 200
+    body = gen.json()
+    assert body["raw_items_received"] == 2
+    assert body["items"] == []
+    assert body["empty_reason"] == "filtered"
+    assert body["items_filtered_out"] == 2
+
+
+def _gemini_camel_case_payload() -> str:
+    return json.dumps(
+        {
+            "items": [
+                {
+                    "scope": "title",
+                    "kind": "clarity",
+                    "currentExcerpt": "Contact study",
+                    "proposedText": "Classroom observation study",
+                    "rationale": "Clearer purpose.",
+                },
+                {
+                    "scope": "description_paragraph",
+                    "kind": "structure",
+                    "paragraphIndex": 0,
+                    "currentExcerpt": "A classroom observation study.",
+                    "proposedText": "An observational study in primary classrooms.",
+                    "rationale": "Adds setting detail.",
+                },
+            ]
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_accepts_gemini_camel_case_keys(api_client, fake_db, monkeypatch) -> None:
+    _patch_gemini(monkeypatch)
+    headers = await _signup_investigator(
+        api_client, fake_db, email="ai-sug-camel@luneta.dev", token="ai-sug-camel"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Contact study", "description": "A classroom observation study."},
+        headers=headers,
+    )
+    sid = create.json()["id"]
+
+    with patch(
+        "app.services.ai_suggestion_service.generate_json",
+        new=AsyncMock(return_value=_gemini_camel_case_payload()),
     ):
         gen = await api_client.post(f"/scenarios/{sid}/ai-suggestions/generate", headers=headers)
 
@@ -179,8 +230,59 @@ async def test_generate_accepts_gemini_field_aliases(api_client, fake_db, monkey
     body = gen.json()
     assert body["raw_items_received"] == 2
     assert len(body["items"]) == 2
-    scopes = {item["scope"] for item in body["items"]}
-    assert scopes == {"description_full", "description_paragraph"}
+    assert body["empty_reason"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_generate_empty_model_returns_model_empty(api_client, fake_db, monkeypatch) -> None:
+    _patch_gemini(monkeypatch)
+    headers = await _signup_investigator(
+        api_client, fake_db, email="ai-sug-empty@luneta.dev", token="ai-sug-empty"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Contact study", "description": "A classroom observation study."},
+        headers=headers,
+    )
+    sid = create.json()["id"]
+
+    with patch(
+        "app.services.ai_suggestion_service.generate_json",
+        new=AsyncMock(return_value='{"items": []}'),
+    ):
+        gen = await api_client.post(f"/scenarios/{sid}/ai-suggestions/generate", headers=headers)
+
+    assert gen.status_code == 200
+    body = gen.json()
+    assert body["items"] == []
+    assert body["empty_reason"] == "model_empty"
+    assert body["raw_items_received"] == 0
+
+
+@pytest.mark.asyncio
+async def test_generate_filtered_returns_filtered_reason(api_client, fake_db, monkeypatch) -> None:
+    _patch_gemini(monkeypatch)
+    headers = await _signup_investigator(
+        api_client, fake_db, email="ai-sug-filt@luneta.dev", token="ai-sug-filt"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Contact study", "description": "A classroom observation study."},
+        headers=headers,
+    )
+    sid = create.json()["id"]
+
+    with patch(
+        "app.services.ai_suggestion_service.generate_json",
+        new=AsyncMock(return_value='{"items": [{"scope": "invalid", "kind": "nope"}]}'),
+    ):
+        gen = await api_client.post(f"/scenarios/{sid}/ai-suggestions/generate", headers=headers)
+
+    assert gen.status_code == 200
+    body = gen.json()
+    assert body["items"] == []
+    assert body["empty_reason"] == "filtered"
+    assert body["items_filtered_out"] == 1
 
 
 @pytest.mark.asyncio

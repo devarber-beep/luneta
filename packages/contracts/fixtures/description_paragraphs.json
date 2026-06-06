@@ -1,0 +1,34 @@
+{
+  "paragraph_separator": "\n\n",
+  "split_cases": [
+    { "description": "", "expected": [] },
+    { "description": "   ", "expected": [] },
+    { "description": "One block only.", "expected": ["One block only."] },
+    {
+      "description": "First\n\nSecond\n\nThird",
+      "expected": ["First", "Second", "Third"]
+    },
+    {
+      "description": "First\n\n\n\nSecond",
+      "expected": ["First", "Second"]
+    },
+    {
+      "description": "Only one block without blank lines.",
+      "expected": ["Only one block without blank lines."]
+    }
+  ],
+  "replace_cases": [
+    {
+      "description": "Intro\n\nBody",
+      "paragraph_index": 1,
+      "new_text": "New body",
+      "expected": "Intro\n\nNew body"
+    },
+    {
+      "description": "Only one",
+      "paragraph_index": 1,
+      "new_text": "x",
+      "expect_error": true
+    }
+  ]
+}

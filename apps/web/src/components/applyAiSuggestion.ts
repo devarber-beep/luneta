@@ -1,19 +1,8 @@
 import type { AiSuggestionItem } from "../api";
-
-const PARAGRAPH_SEPARATOR = "\n\n";
-
-function splitParagraphs(description: string): string[] {
-  const text = description.trim();
-  if (!text) return [];
-  if (text.includes(PARAGRAPH_SEPARATOR)) {
-    return text.split(PARAGRAPH_SEPARATOR).filter((p) => p.trim());
-  }
-  return [text];
-}
-
-function joinParagraphs(parts: string[]): string {
-  return parts.join(PARAGRAPH_SEPARATOR);
-}
+import {
+  joinDescriptionParagraphs,
+  splitDescriptionParagraphs,
+} from "../domain/descriptionParagraphs";
 
 export function replaceExcerpt(current: string, excerpt: string, proposed: string): string {
   const field = current ?? "";
@@ -59,7 +48,7 @@ export function applyAiSuggestionToDraft(
     return { description: next, excerptFound };
   }
 
-  const parts = splitParagraphs(draft.description);
+  const parts = splitDescriptionParagraphs(draft.description);
   const idx = item.paragraph_index ?? -1;
   if (idx < 0 || idx >= parts.length) {
     return { excerptFound: false };
@@ -71,5 +60,5 @@ export function applyAiSuggestionToDraft(
     paragraph.includes(item.current_excerpt) ||
     paragraph.trim() === item.current_excerpt.trim();
   parts[idx] = nextParagraph;
-  return { description: joinParagraphs(parts), excerptFound };
+  return { description: joinDescriptionParagraphs(parts), excerptFound };
 }

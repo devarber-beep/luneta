@@ -395,6 +395,7 @@ export async function checkScenarioSimilarity(
 
 export type AiSuggestionScope = "title" | "description_full" | "description_paragraph";
 export type AiSuggestionKind = "clarity" | "structure" | "safety" | "rewrite";
+export type AiGenerateEmptyReason = "none" | "model_empty" | "filtered";
 
 export type AiSuggestionItem = {
   id: string;
@@ -420,7 +421,14 @@ export async function generateAiSuggestions(
   token: string,
   scenarioId: string,
   payload?: { title?: string; description?: string },
-): Promise<{ request_id: string; items: AiSuggestionItem[]; provider: string; raw_items_received?: number }> {
+): Promise<{
+  request_id: string;
+  items: AiSuggestionItem[];
+  provider: string;
+  raw_items_received?: number;
+  empty_reason?: AiGenerateEmptyReason;
+  items_filtered_out?: number;
+}> {
   return request(`/scenarios/${scenarioId}/ai-suggestions/generate`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },

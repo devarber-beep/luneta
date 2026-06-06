@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_embedding_model: str = "text-embedding-3-small"
     openai_chat_model: str = "gpt-4o-mini"
-    ai_suggestion_generations_per_hour: int = 2
+    ai_suggestion_generations_per_hour: int = 5
 
 
 settings = Settings()
