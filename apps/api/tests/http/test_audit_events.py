@@ -16,7 +16,7 @@ async def test_admin_create_investigator_writes_audit_event(api_client, fake_db)
     token = login.json()["access_token"]
     created = await api_client.post(
         "/admin/users/investigators",
-        json={"email": "auditinv@luneta.dev", "nickname": "auditinv"},
+        json={"email": "auditinv@luneta.dev", "first_name": "Audit", "last_name": "Inv"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert created.status_code == 201

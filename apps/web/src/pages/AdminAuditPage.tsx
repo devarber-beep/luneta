@@ -25,10 +25,10 @@ function formatPayload(value: Record<string, unknown> | null): string {
 }
 
 function actorLabel(row: AdminAuditEvent): string {
-  const nick = row.actor_nickname?.trim();
+  const name = row.actor_display_name?.trim();
   const email = row.actor_email_normalized;
-  if (nick && email) return `${nick} (${email})`;
-  if (nick) return nick;
+  if (name && email) return `${name} (${email})`;
+  if (name) return name;
   if (email) return email;
   return row.actor_user_id;
 }

@@ -9,7 +9,8 @@ from app.domain.enums import UserAccountStatus, UserRole
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    nickname: str = Field(min_length=2, max_length=40)
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(min_length=1, max_length=60)
 
 
 class SignupResponse(BaseModel):
@@ -43,9 +44,8 @@ class LoginResponse(BaseModel):
 
 
 class ProfilePatchRequest(BaseModel):
-    nickname: str | None = Field(default=None, min_length=2, max_length=40)
-    first_name: str | None = Field(default=None, max_length=60)
-    last_name: str | None = Field(default=None, max_length=60)
+    first_name: str | None = Field(default=None, min_length=1, max_length=60)
+    last_name: str | None = Field(default=None, min_length=1, max_length=60)
     organization: str | None = Field(default=None, max_length=200)
     university: str | None = Field(default=None, max_length=200)
     biography: str | None = Field(default=None, max_length=4000)
@@ -77,9 +77,9 @@ class MeResponse(BaseModel):
     account_status: UserAccountStatus
     email_verified_at: datetime | None = None
     must_change_password: bool = False
-    nickname: str
-    first_name: str | None = None
-    last_name: str | None = None
+    first_name: str
+    last_name: str
+    display_name: str
     organization: str | None = None
     university: str | None = None
     biography: str | None = None

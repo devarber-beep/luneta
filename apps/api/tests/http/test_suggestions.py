@@ -12,7 +12,7 @@ async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, tok
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value=token):
         await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": email.split("@")[0]},
+            json={"email": email, "password": "Password123!", "first_name": email.split("@")[0].capitalize(), "last_name": "User"},
         )
         await api_client.post("/auth/verify-email", json={"token": token})
     await fake_db["users"].update_one({"email_normalized": email}, {"$set": {"role": role}})

@@ -67,7 +67,8 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
             json={
                 "email": "author@luneta.dev",
                 "password": "Password123!",
-                "nickname": "author",
+                "first_name": "Author",
+                "last_name": "User",
             },
         )
         assert signup_author.status_code == 200
@@ -92,7 +93,7 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
 
     patch_profile = await api_client.patch(
         "/auth/me",
-        json={"nickname": "author", "first_name": "Test", "last_name": "Author"},
+        json={"first_name": "Test", "last_name": "Author"},
         headers=author_headers,
     )
     assert patch_profile.status_code == 200
@@ -205,7 +206,8 @@ async def test_vertical_slice_http_happy_path(api_client, fake_db):
             json={
                 "email": "reviewer@luneta.dev",
                 "password": "Password123!",
-                "nickname": "reviewer",
+                "first_name": "Reviewer",
+                "last_name": "User",
             },
         )
         assert signup_reviewer.status_code == 200

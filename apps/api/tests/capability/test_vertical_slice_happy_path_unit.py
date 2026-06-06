@@ -20,7 +20,17 @@ class _FakeScenariosRepo:
     async def ensure_indexes(self) -> None:
         return None
 
-    async def create(self, *, title: str, description: str, author_user_id: str) -> ScenarioModel:
+    async def create(
+        self,
+        *,
+        title: str,
+        description: str,
+        author_user_id: str,
+        author_display_name: str | None = None,
+        author_display_name_normalized: str | None = None,
+        author_university: str | None = None,
+        author_university_normalized: str | None = None,
+    ) -> ScenarioModel:
         now = datetime.now(UTC)
         self.scenario = ScenarioModel(
             _id=str(self.id_seq),
@@ -205,8 +215,10 @@ def _author() -> UserModel:
         password_updated_at=now,
         role=UserRole.INVESTIGATOR,
         email_verified_at=now,
-        nickname="author",
-        nickname_normalized="author",
+        first_name="Author",
+        last_name="User",
+        display_name="Author User",
+        display_name_normalized="author user",
         created_at=now,
         updated_at=now,
     )
@@ -221,8 +233,10 @@ def _reviewer() -> UserModel:
         password_updated_at=now,
         role=UserRole.REVIEWER,
         email_verified_at=now,
-        nickname="reviewer",
-        nickname_normalized="reviewer",
+        first_name="Reviewer",
+        last_name="User",
+        display_name="Reviewer User",
+        display_name_normalized="reviewer user",
         created_at=now,
         updated_at=now,
     )

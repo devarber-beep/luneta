@@ -93,6 +93,8 @@ class ScenarioService:
             title=title,
             description=desc,
             author_user_id=current_user.id or "",
+            author_display_name=current_user.display_name,
+            author_display_name_normalized=current_user.display_name_normalized,
             author_university=current_user.university,
             author_university_normalized=current_user.university_normalized,
         )
@@ -127,14 +129,14 @@ class ScenarioService:
         q: str | None = None,
     ) -> list[ScenarioModel]:
         await self._scenarios_repo.ensure_indexes()
-        author_ids_from_nickname: list[str] | None = None
+        author_ids_from_name: list[str] | None = None
         trimmed_q = (q or "").strip()
         if trimmed_q:
-            author_ids_from_nickname = await self._users_repo.list_ids_matching_nickname(trimmed_q)
+            author_ids_from_name = await self._users_repo.list_ids_matching_display_name(trimmed_q)
         return await self._scenarios_repo.list_for_participating_user(
             user_id=current_user.id or "",
             q=q,
-            q_matching_author_user_ids=author_ids_from_nickname or None,
+            q_matching_author_user_ids=author_ids_from_name or None,
         )
 
     async def get_scenario_if_readable(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:

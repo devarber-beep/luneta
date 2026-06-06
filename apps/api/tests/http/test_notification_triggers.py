@@ -15,7 +15,7 @@ async def _signup_and_promote(api_client, fake_db, *, email: str, role: str, tok
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value=token):
         await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": email.split("@")[0]},
+            json={"email": email, "password": "Password123!", "first_name": email.split("@")[0].capitalize(), "last_name": "User"},
         )
         await api_client.post("/auth/verify-email", json={"token": token})
     await fake_db["users"].update_one({"email_normalized": email}, {"$set": {"role": role}})
@@ -319,7 +319,7 @@ async def test_notification_investigator_invited(api_client, fake_db) -> None:
     with patch("app.services.admin_user_service.secrets.token_urlsafe", return_value="fixed-invite-pass"):
         created = await api_client.post(
             "/admin/users/investigators",
-            json={"email": "notif-inv@luneta.dev", "nickname": "notifinv"},
+            json={"email": "notif-inv@luneta.dev", "first_name": "Notif", "last_name": "Inv"},
             headers=admin_h,
         )
     assert created.status_code == 201
@@ -337,7 +337,7 @@ async def test_notification_admin_role_and_account_status(api_client, fake_db) -
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="notif-target-tok"):
         signup = await api_client.post(
             "/auth/signup",
-            json={"email": "notif-target@luneta.dev", "password": "Password123!", "nickname": "nftarget"},
+            json={"email": "notif-target@luneta.dev", "password": "Password123!", "first_name": "Nftarget", "last_name": "User"},
         )
         uid = signup.json()["user_id"]
         await api_client.post("/auth/verify-email", json={"token": "notif-target-tok"})

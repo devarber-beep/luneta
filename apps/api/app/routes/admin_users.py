@@ -71,7 +71,6 @@ async def admin_create_investigator(
     user = await _admin_user_service(db).create_investigator_account(
         actor=actor,
         email=str(payload.email),
-        nickname=payload.nickname,
         first_name=payload.first_name,
         last_name=payload.last_name,
     )
@@ -161,7 +160,7 @@ async def admin_list_users_summary(
     return [
         AdminUserSummaryResponse(
             user_id=u.id or "",
-            nickname=u.nickname,
+            display_name=u.display_name,
             email_normalized=u.email_normalized,
             role=u.role,
         )

@@ -1,13 +1,15 @@
-import { type CSSProperties, type FormEvent, type ReactElement, useEffect, useState } from "react";
+import { type ChangeEvent, type CSSProperties, type FormEvent, type ReactElement, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   changeMyPassword,
+  deleteMyAvatar,
   deleteScenario,
   getScenario,
   listMyScenarios,
   login,
   me,
   patchMyProfile,
+  uploadMyAvatar,
   listScenarioSuggestions,
   publicScenario,
   signup,
@@ -76,21 +78,24 @@ function HomePage() {
 function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [message, setMessage] = useState("");
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    const nick = nickname.trim();
-    if (nick.length < 2) {
-      setMessage("Nickname must be at least 2 characters.");
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn || !ln) {
+      setMessage("First and last name are required.");
       return;
     }
     try {
       const response = await signup({
         email,
         password,
-        nickname: nick,
+        first_name: fn,
+        last_name: ln,
       });
       setMessage(`User created: ${response.user_id}. Check logs for the verification token.`);
     } catch (error) {
@@ -104,7 +109,8 @@ function SignupPage() {
       <form onSubmit={onSubmit} style={{ display: "grid", gap: "0.75rem", maxWidth: "420px" }}>
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" type="password" />
-        <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="nickname" />
+        <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="first name" required />
+        <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="last name" required />
         <button type="submit">Create account</button>
       </form>
       <p>{message}</p>
@@ -197,16 +203,16 @@ function RequireAuth({ children }: { children: ReactElement }) {
 
 function MyProfilePage() {
   const token = useToken();
-  const [nickname, setNickname] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [university, setUniversity] = useState("");
   const [readOnlyEmail, setReadOnlyEmail] = useState("");
   const [readOnlyRole, setReadOnlyRole] = useState("");
   const [verified, setVerified] = useState(false);
   const [verifiedAt, setVerifiedAt] = useState<string | null>(null);
   const [lastLoginAt, setLastLoginAt] = useState<string | null>(null);
-  const [avatarInfo, setAvatarInfo] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -215,20 +221,16 @@ function MyProfilePage() {
   const load = async () => {
     if (!token) return;
     const profile = await me(token);
-    setNickname(profile.nickname);
-    setFirstName(profile.first_name ?? "");
-    setLastName(profile.last_name ?? "");
+    setFirstName(profile.first_name);
+    setLastName(profile.last_name);
+    setDisplayName(profile.display_name);
     setUniversity(profile.university ?? "");
     setReadOnlyEmail(profile.email_normalized);
     setReadOnlyRole(profile.role);
     setVerified(profile.email_verified_at != null);
     setVerifiedAt(profile.email_verified_at);
     setLastLoginAt(profile.last_login_at);
-    setAvatarInfo(
-      profile.avatar
-        ? `${profile.avatar.bucket} / ${profile.avatar.object_key} (${profile.avatar.content_type})`
-        : null,
-    );
+    setAvatarUrl(profile.avatar_url);
   };
 
   useEffect(() => {
@@ -238,19 +240,45 @@ function MyProfilePage() {
   const onSaveProfile = async (event: FormEvent) => {
     event.preventDefault();
     if (!token) return;
-    const nick = nickname.trim();
-    if (nick.length < 2) {
-      setMessage("Nickname must be at least 2 characters.");
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    if (!fn || !ln) {
+      setMessage("First and last name are required.");
       return;
     }
     try {
       await patchMyProfile(token, {
-        nickname: nick,
-        first_name: firstName.trim() || null,
-        last_name: lastName.trim() || null,
+        first_name: fn,
+        last_name: ln,
         university: university.trim() || null,
       });
       setMessage("Profile saved.");
+      await load();
+    } catch (error) {
+      setMessage((error as Error).message);
+    }
+  };
+
+  const onAvatarSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!token) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      await uploadMyAvatar(token, file);
+      setMessage("Photo updated.");
+      await load();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const onRemoveAvatar = async () => {
+    if (!token) return;
+    try {
+      await deleteMyAvatar(token);
+      setMessage("Photo removed.");
       await load();
     } catch (error) {
       setMessage((error as Error).message);
@@ -300,23 +328,55 @@ function MyProfilePage() {
           {lastLoginAt ? new Date(lastLoginAt).toLocaleString() : "—"}
         </p>
         <p style={{ margin: "0.25rem 0" }}>
-          <strong>Avatar (storage):</strong> {avatarInfo ?? "None"}
+          <strong>Display name:</strong> {displayName || "—"}
         </p>
+        <div style={{ margin: "0.75rem 0", display: "flex", alignItems: "center", gap: "1rem" }}>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt="Profile"
+              style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background: "#ddd",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#666",
+                fontSize: "0.85rem",
+              }}
+            >
+              No photo
+            </div>
+          )}
+          <div style={{ display: "grid", gap: "0.35rem" }}>
+            <label style={{ cursor: "pointer", color: "#06c" }}>
+              Upload photo
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarSelected} hidden />
+            </label>
+            {avatarUrl ? (
+              <button type="button" onClick={onRemoveAvatar} style={{ width: "fit-content" }}>
+                Remove photo
+              </button>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <form onSubmit={onSaveProfile} style={{ display: "grid", gap: "0.75rem", maxWidth: "420px", marginBottom: "2rem" }}>
         <h3 style={{ margin: 0 }}>Profile details</h3>
         <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Nickname</span>
-          <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="nickname" required minLength={2} />
-        </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
           <span>First name</span>
-          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="optional" />
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="first name" required />
         </label>
         <label style={{ display: "grid", gap: "0.25rem" }}>
           <span>Last name</span>
-          <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="optional" />
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="last name" required />
         </label>
         <label style={{ display: "grid", gap: "0.25rem" }}>
           <span>University</span>
@@ -496,9 +556,9 @@ function PublicScenarioPage() {
   const role = useRole();
   const [scenarioId, setScenarioId] = useState("");
   const [authorUserId, setAuthorUserId] = useState("");
-  const [authorNickname, setAuthorNickname] = useState("");
+  const [authorDisplayName, setAuthorDisplayName] = useState("");
   const [authorUniversity, setAuthorUniversity] = useState<string | null>(null);
-  const [collaborators, setCollaborators] = useState<Array<{ user_id: string; nickname: string }>>([]);
+  const [collaborators, setCollaborators] = useState<Array<{ user_id: string; display_name: string }>>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -545,7 +605,7 @@ function PublicScenarioPage() {
       .then(async (data) => {
         setScenarioId(data.id);
         setAuthorUserId(data.author_user_id);
-        setAuthorNickname(data.author_nickname);
+        setAuthorDisplayName(data.author_display_name);
         setAuthorUniversity(data.author_university ?? null);
         setCollaborators(data.collaborators ?? []);
         setTitle(data.title);
@@ -582,7 +642,7 @@ function PublicScenarioPage() {
       {publishedAt ? <p style={{ color: "#666" }}>Published: {new Date(publishedAt).toLocaleString()}</p> : null}
       <section style={{ marginBottom: "1rem", fontSize: "0.95rem", color: "#444" }}>
         <p style={{ margin: "0.25rem 0" }}>
-          <strong>Owner:</strong> {authorNickname || authorUserId}
+          <strong>Owner:</strong> {authorDisplayName || authorUserId}
           {authorUniversity ? ` · ${authorUniversity}` : ""}
         </p>
         {collaborators.length > 0 ? (
@@ -590,7 +650,7 @@ function PublicScenarioPage() {
             <strong>Collaborators:</strong>
             <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
               {collaborators.map((c) => (
-                <li key={c.user_id}>{c.nickname}</li>
+                <li key={c.user_id}>{c.display_name}</li>
               ))}
             </ul>
           </div>

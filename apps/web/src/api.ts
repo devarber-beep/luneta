@@ -159,7 +159,8 @@ export async function readApiError(response: Response): Promise<Error> {
 export type SignupPayload = {
   email: string;
   password: string;
-  nickname: string;
+  first_name: string;
+  last_name: string;
 };
 
 export type ScenarioResponse = {
@@ -256,9 +257,9 @@ export type MeProfile = {
   account_status: string;
   email_verified_at: string | null;
   must_change_password: boolean;
-  nickname: string;
-  first_name: string | null;
-  last_name: string | null;
+  first_name: string;
+  last_name: string;
+  display_name: string;
   organization: string | null;
   university: string | null;
   biography: string | null;
@@ -281,9 +282,8 @@ export async function me(token: string): Promise<MeProfile> {
 }
 
 export type ProfilePatchPayload = {
-  nickname?: string;
-  first_name?: string | null;
-  last_name?: string | null;
+  first_name?: string;
+  last_name?: string;
   organization?: string | null;
   university?: string | null;
   biography?: string | null;
@@ -614,7 +614,7 @@ export type PublicScenarioListItem = {
   published_at: string;
   public_path: string;
   author_user_id: string;
-  author_nickname: string;
+  author_display_name: string;
   author_university?: string | null;
 };
 
@@ -685,13 +685,13 @@ export async function listPublicScenarios(): Promise<PublicScenarioListItem[]> {
 
 export type PublicScenarioParticipant = {
   user_id: string;
-  nickname: string;
+  display_name: string;
 };
 
 export async function publicScenario(slug: string): Promise<{
   id: string;
   author_user_id: string;
-  author_nickname: string;
+  author_display_name: string;
   author_university?: string | null;
   title: string;
   description: string;
@@ -926,7 +926,7 @@ export type EvaluationItem = {
   id: string;
   scenario_id: string;
   evaluator_user_id: string;
-  evaluator_nickname?: string | null;
+  evaluator_display_name?: string | null;
   risk_score: number;
   benefit_score: number;
   detected_ethical_risk_ids: string[];

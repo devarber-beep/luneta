@@ -17,14 +17,18 @@ from app.models.user import UserModel
 
 def _user(*, user_id: str, role: UserRole) -> UserModel:
     now = datetime.now(UTC)
+    fn = user_id[:8]
+    display = f"{fn} User"
     return UserModel(
         id=user_id,
         email_normalized=f"{user_id}@test.dev",
         role=role,
         account_status=UserAccountStatus.ACTIVE,
         email_verified_at=now,
-        nickname=user_id,
-        nickname_normalized=user_id,
+        first_name=fn,
+        last_name="User",
+        display_name=display,
+        display_name_normalized=display.lower(),
         password_hash="x",
         password_updated_at=now,
         created_at=now,

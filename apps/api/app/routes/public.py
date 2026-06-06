@@ -26,13 +26,18 @@ from app.storage.minio_storage import MinioScenarioStorage
 router = APIRouter()
 
 
+def _author_display_name_for_scenario(*, scenario) -> str:
+    if scenario.author_display_name:
+        return scenario.author_display_name
+    return scenario.author_user_id
+
+
 async def _participants_for_scenario(
     *,
     scenario,
     users_repo: UsersRepository,
 ) -> tuple[str, list[PublicScenarioParticipant]]:
-    author = await users_repo.get_by_id(scenario.author_user_id)
-    author_nickname = author.nickname if author is not None else scenario.author_user_id
+    author_display_name = _author_display_name_for_scenario(scenario=scenario)
     collaborators: list[PublicScenarioParticipant] = []
     for collab in scenario.collaborators:
         if collab.role != CollaboratorRole.COLLABORATOR:
@@ -41,10 +46,10 @@ async def _participants_for_scenario(
         collaborators.append(
             PublicScenarioParticipant(
                 user_id=collab.user_id,
-                nickname=user.nickname if user is not None else collab.user_id,
+                display_name=user.display_name if user is not None else collab.user_id,
             )
         )
-    return author_nickname, collaborators
+    return author_display_name, collaborators
 
 
 async def _catalog_labels_for_scenario(*, scenario, db: AsyncIOMotorDatabase) -> tuple[list[PublicCatalogLabel], list[PublicCatalogLabel]]:
@@ -66,12 +71,9 @@ async def _catalog_labels_for_scenario(*, scenario, db: AsyncIOMotorDatabase) ->
 async def _list_items_for_scenarios(
     *,
     scenarios,
-    users_repo: UsersRepository,
 ) -> list[PublicScenarioListItem]:
     items: list[PublicScenarioListItem] = []
     for scenario in scenarios:
-        author = await users_repo.get_by_id(scenario.author_user_id)
-        author_nickname = author.nickname if author is not None else scenario.author_user_id
         items.append(
             PublicScenarioListItem(
                 id=scenario.id or "",
@@ -79,7 +81,7 @@ async def _list_items_for_scenarios(
                 published_at=scenario.published_at or scenario.updated_at,
                 public_path=f"/public/{scenario.public_slug}",
                 author_user_id=scenario.author_user_id,
-                author_nickname=author_nickname,
+                author_display_name=_author_display_name_for_scenario(scenario=scenario),
                 author_university=scenario.author_university,
             )
         )
@@ -124,14 +126,14 @@ async def search_public_scenarios(
 ) -> PublicScenarioSearchResponse:
     users_repo = UsersRepository(db)
     trimmed_q = (q or "").strip()
-    author_ids_from_nickname: list[str] = []
+    author_ids_from_name: list[str] = []
     if trimmed_q:
-        author_ids_from_nickname = await users_repo.list_ids_matching_nickname(trimmed_q)
+        author_ids_from_name = await users_repo.list_ids_matching_display_name(trimmed_q)
 
     repo = ScenariosRepository(db)
     scenarios, total = await repo.search_publicly_visible(
         q=q,
-        q_matching_author_user_ids=author_ids_from_nickname or None,
+        q_matching_author_user_ids=author_ids_from_name or None,
         author_user_id=author_user_id,
         published_from=published_from,
         published_to=published_to,
@@ -140,7 +142,7 @@ async def search_public_scenarios(
         page=page,
         page_size=page_size,
     )
-    items = await _list_items_for_scenarios(scenarios=scenarios, users_repo=users_repo)
+    items = await _list_items_for_scenarios(scenarios=scenarios)
     return PublicScenarioSearchResponse(items=items, total=total, page=page, page_size=page_size)
 
 
@@ -171,7 +173,7 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
         )
         for asset in sorted(scenario.inline_assets, key=lambda x: x.order)
     ]
-    author_nickname, collaborators = await _participants_for_scenario(
+    author_display_name, collaborators = await _participants_for_scenario(
         scenario=scenario,
         users_repo=users_repo,
     )
@@ -179,7 +181,7 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
     return PublicScenarioResponse(
         id=scenario.id or "",
         author_user_id=scenario.author_user_id,
-        author_nickname=author_nickname,
+        author_display_name=author_display_name,
         author_university=scenario.author_university,
         title=scenario.public_title or scenario.title,
         description=scenario.public_description or scenario.description,

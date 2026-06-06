@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 class AuditEventItem(BaseModel):
     id: str
     actor_user_id: str
-    actor_nickname: str | None = None
+    actor_display_name: str | None = None
     actor_email_normalized: str | None = None
     actor_role: str
     action_type: str

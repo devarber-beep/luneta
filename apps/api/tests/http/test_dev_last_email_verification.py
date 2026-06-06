@@ -32,7 +32,8 @@ async def test_signup_persists_registered_role(api_client, fake_db) -> None:
             json={
                 "email": "regonly@luneta.dev",
                 "password": "Password123!",
-                "nickname": "regonly",
+                "first_name": "Regonly",
+                "last_name": "User",
             },
         )
     assert r.status_code == 200
@@ -53,7 +54,8 @@ async def test_dev_last_email_verification_returns_last_signup_token(api_client)
             json={
                 "email": "snap@luneta.dev",
                 "password": "Password123!",
-                "nickname": "snap",
+                "first_name": "Snap",
+                "last_name": "User",
             },
         )
         assert signup.status_code == 200

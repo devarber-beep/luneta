@@ -41,7 +41,7 @@ export function AdminAssignmentsPage() {
       .catch((e: Error) => setMessage(e.message));
   }, [selectedReviewerId, token]);
 
-  const investigatorName = (id: string) => investigators.find((i) => i.user_id === id)?.nickname ?? id;
+  const investigatorName = (id: string) => investigators.find((i) => i.user_id === id)?.display_name ?? id;
 
   const onAssign = async (investigatorId: string) => {
     try {
@@ -80,7 +80,7 @@ export function AdminAssignmentsPage() {
         <select value={selectedReviewerId} onChange={(e) => setSelectedReviewerId(e.target.value)}>
           {reviewers.map((r) => (
             <option key={r.user_id} value={r.user_id}>
-              {r.nickname} ({r.email_normalized})
+              {r.display_name} ({r.email_normalized})
             </option>
           ))}
         </select>
@@ -107,7 +107,7 @@ export function AdminAssignmentsPage() {
         <ul style={{ paddingLeft: "1.25rem" }}>
           {unassigned.map((inv) => (
             <li key={inv.user_id} style={{ marginBottom: "0.35rem" }}>
-              {inv.nickname}{" "}
+              {inv.display_name}{" "}
               <button type="button" onClick={() => void onAssign(inv.user_id)}>
                 Assign
               </button>

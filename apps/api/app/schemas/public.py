@@ -13,7 +13,7 @@ class PublicScenarioListItem(BaseModel):
     published_at: datetime
     public_path: str
     author_user_id: str
-    author_nickname: str
+    author_display_name: str
     author_university: str | None = None
 
 
@@ -34,7 +34,7 @@ class PublicScenarioAsset(BaseModel):
 
 class PublicScenarioParticipant(BaseModel):
     user_id: str
-    nickname: str
+    display_name: str
 
 
 class PublicCatalogLabel(BaseModel):
@@ -49,7 +49,7 @@ class PublicCatalogListResponse(BaseModel):
 class PublicScenarioResponse(BaseModel):
     id: str
     author_user_id: str
-    author_nickname: str
+    author_display_name: str
     author_university: str | None = None
     title: str
     description: str

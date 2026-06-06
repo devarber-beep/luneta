@@ -100,7 +100,7 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           <li key={s.id} style={{ marginBottom: "0.65rem" }}>
             <Link to={s.public_path}>{s.title}</Link>
             <div style={{ fontSize: "0.85rem", color: "#555" }}>
-              {s.author_nickname}
+              {s.author_display_name}
               {s.author_university ? ` · ${s.author_university}` : ""} · {new Date(s.published_at).toLocaleDateString()}
             </div>
           </li>

@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 
 
 from app.core.security import hash_password
+from app.core.user_display_name import parse_person_names
 
 from app.domain.enums import AuditActionType, AuditSubjectType, UserAccountStatus, UserRole
 
@@ -74,11 +75,9 @@ class AdminUserService:
 
         email: str,
 
-        nickname: str,
+        first_name: str,
 
-        first_name: str | None,
-
-        last_name: str | None,
+        last_name: str,
 
     ) -> UserModel:
 
@@ -86,11 +85,13 @@ class AdminUserService:
 
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-        nick = nickname.strip()
+        try:
 
-        if await self._users_repo.get_by_nickname(nick) is not None:
+            fn, ln, _, _ = parse_person_names(first_name=first_name, last_name=last_name)
 
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Nickname already registered")
+        except ValueError as exc:
+
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 
@@ -104,11 +105,9 @@ class AdminUserService:
 
             role=UserRole.INVESTIGATOR,
 
-            nickname=nick,
+            first_name=fn,
 
-            first_name=first_name,
-
-            last_name=last_name,
+            last_name=ln,
 
             must_change_password=True,
 

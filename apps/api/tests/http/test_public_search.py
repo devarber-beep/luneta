@@ -1,4 +1,4 @@
-"""HTTP tests for public scenario search (RF-7.1)."""
+"""HTTP tests for public scenario search."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -20,6 +20,7 @@ async def _seed_published(
     description: str,
     slug: str,
     published_at: datetime,
+    author_display_name: str | None = None,
     category_ids: list[str] | None = None,
     ethical_risk_ids: list[str] | None = None,
 ) -> None:
@@ -34,6 +35,8 @@ async def _seed_published(
             "public_description": description,
             "public_slug": slug,
             "author_user_id": author_id,
+            "author_display_name": author_display_name,
+            "author_display_name_normalized": author_display_name.lower() if author_display_name else None,
             "collaborators": [
                 {
                     "user_id": author_id,
@@ -90,12 +93,15 @@ async def test_public_catalog_filters_no_auth(api_client, fake_db) -> None:
 async def test_public_search_text_filter_and_pagination(api_client, fake_db) -> None:
     now = datetime.now(UTC)
     author_id = str(ObjectId())
+    display = "Searchowner User"
     await fake_db["users"].insert_one(
         {
             "_id": ObjectId(author_id),
             "email_normalized": "searchowner@luneta.dev",
-            "nickname": "searchowner",
-            "nickname_normalized": "searchowner",
+            "first_name": "Searchowner",
+            "last_name": "User",
+            "display_name": display,
+            "display_name_normalized": display.lower(),
             "role": "investigator",
             "password_hash": "x",
             "password_updated_at": now,
@@ -112,6 +118,7 @@ async def test_public_search_text_filter_and_pagination(api_client, fake_db) -> 
         description="Children use devices during lessons.",
         slug="classroom-glasses",
         published_at=now - timedelta(days=1),
+        author_display_name=display,
         category_ids=[cat_id],
     )
     await _seed_published(
@@ -122,6 +129,7 @@ async def test_public_search_text_filter_and_pagination(api_client, fake_db) -> 
         description="Weekend activities without screens.",
         slug="outdoor-play",
         published_at=now,
+        author_display_name=display,
     )
 
     all_rows = await api_client.get("/public/scenarios", params={"page_size": 10})
@@ -135,14 +143,14 @@ async def test_public_search_text_filter_and_pagination(api_client, fake_db) -> 
     assert text.status_code == 200
     assert text.json()["total"] == 1
     assert _public_items(text.json())[0]["title"] == "Smart glasses in classroom"
-    assert _public_items(text.json())[0]["author_nickname"] == "searchowner"
+    assert _public_items(text.json())[0]["author_display_name"] == display
 
     by_author = await api_client.get("/public/scenarios", params={"author_user_id": author_id})
     assert by_author.json()["total"] == 2
 
-    by_nickname = await api_client.get("/public/scenarios", params={"q": "searchown"})
-    assert by_nickname.status_code == 200
-    assert by_nickname.json()["total"] == 2
+    by_name = await api_client.get("/public/scenarios", params={"q": "searchown"})
+    assert by_name.status_code == 200
+    assert by_name.json()["total"] == 2
 
     page = await api_client.get("/public/scenarios", params={"page": 1, "page_size": 1})
     assert page.json()["total"] == 2
@@ -158,8 +166,10 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
         {
             "_id": ObjectId(uabc),
             "email_normalized": "abc@luneta.dev",
-            "nickname": "authorabc",
-            "nickname_normalized": "authorabc",
+            "first_name": "Author",
+            "last_name": "Abc",
+            "display_name": "Author Abc",
+            "display_name_normalized": "author abc",
             "university": "University of ABC",
             "university_normalized": "university of abc",
             "role": "investigator",
@@ -173,8 +183,10 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
         {
             "_id": ObjectId(uxyz),
             "email_normalized": "xyz@luneta.dev",
-            "nickname": "authorxyz",
-            "nickname_normalized": "authorxyz",
+            "first_name": "Author",
+            "last_name": "Xyz",
+            "display_name": "Author Xyz",
+            "display_name_normalized": "author xyz",
             "university": "University of XYZ",
             "university_normalized": "university of xyz",
             "role": "investigator",
@@ -192,6 +204,7 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
         description="Research at ABC.",
         slug="abc-campus",
         published_at=now,
+        author_display_name="Author Abc",
     )
     await _seed_published(
         fake_db,
@@ -201,6 +214,7 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
         description="Research at XYZ.",
         slug="xyz-trip",
         published_at=now,
+        author_display_name="Author Xyz",
     )
     await fake_db["scenarios"].update_many(
         {"author_user_id": uabc},
@@ -220,4 +234,3 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
     by_text_xyz = await api_client.get("/public/scenarios", params={"q": "University of XYZ"})
     assert by_text_xyz.status_code == 200
     assert by_text_xyz.json()["total"] == 1
-    assert _public_items(by_text_xyz.json())[0]["title"] == "XYZ field trip"

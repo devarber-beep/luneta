@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+from bson import ObjectId
+
 import pytest
 
 
@@ -15,7 +17,8 @@ async def test_http_reviewer_cannot_publish_own_scenario(api_client, fake_db) ->
             json={
                 "email": "selfrev@luneta.dev",
                 "password": "Password123!",
-                "nickname": "selfrev",
+                "first_name": "Selfrev",
+                "last_name": "User",
             },
         )
         assert signup.status_code == 200
@@ -86,8 +89,10 @@ async def test_http_reviewer_cannot_publish_own_scenario(api_client, fake_db) ->
     assert meta.status_code == 200
     sub = await api_client.post(f"/scenarios/{sid}/submit-review", headers=headers)
     assert sub.status_code == 200
-    start = await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=headers)
-    assert start.status_code == 200
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"state": "in_review", "review_started_at": datetime.now(UTC)}},
+    )
     pub = await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=headers)
     assert pub.status_code == 403
 

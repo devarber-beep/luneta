@@ -25,7 +25,7 @@ class EvaluationResponse(BaseModel):
     id: str
     scenario_id: str
     evaluator_user_id: str
-    evaluator_nickname: str | None = None
+    evaluator_display_name: str | None = None
     risk_score: float
     benefit_score: float
     detected_ethical_risk_ids: list[str]

@@ -38,6 +38,8 @@ class ScenariosRepository:
         title: str,
         description: str,
         author_user_id: str,
+        author_display_name: str | None = None,
+        author_display_name_normalized: str | None = None,
         author_university: str | None = None,
         author_university_normalized: str | None = None,
     ) -> ScenarioModel:
@@ -51,6 +53,8 @@ class ScenariosRepository:
             "ethical_risk_ids": [],
             "usage_context": {},
             "author_user_id": author_user_id,
+            "author_display_name": author_display_name,
+            "author_display_name_normalized": author_display_name_normalized,
             "author_university": author_university,
             "author_university_normalized": author_university_normalized,
             "collaborators": [
@@ -104,6 +108,25 @@ class ScenariosRepository:
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return ScenarioModel.model_validate(doc)
+
+    async def sync_author_display_name_for_author(
+        self,
+        *,
+        author_user_id: str,
+        author_display_name: str,
+        author_display_name_normalized: str,
+    ) -> int:
+        result = await self._collection.update_many(
+            {"author_user_id": author_user_id},
+            {
+                "$set": {
+                    "author_display_name": author_display_name,
+                    "author_display_name_normalized": author_display_name_normalized,
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
+        return int(result.modified_count)
 
     async def sync_author_university_for_author(
         self,
@@ -695,6 +718,7 @@ class ScenariosRepository:
         text_or.append({"summary": {"$regex": pattern, "$options": "i"}})
         if include_author_university_in_text_search:
             text_or.append({"author_university": {"$regex": pattern, "$options": "i"}})
+        text_or.append({"author_display_name": {"$regex": pattern, "$options": "i"}})
         tokens = self._search_tokens(trimmed_q)
         if tokens:
             text_or.append({"keywords_normalized": {"$in": tokens}})

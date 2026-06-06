@@ -143,7 +143,7 @@ export function ScenarioEvaluationInsights({
             {details.map((ev) => (
               <li key={ev.id} style={{ marginBottom: "0.85rem" }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-                  <strong>{ev.evaluator_nickname ?? ev.evaluator_user_id}</strong>
+                  <strong>{ev.evaluator_display_name ?? ev.evaluator_user_id}</strong>
                   {ev.visibility === "hidden" ? (
                     <span style={{ fontSize: "0.85rem", color: "#888" }}>(hidden)</span>
                   ) : null}

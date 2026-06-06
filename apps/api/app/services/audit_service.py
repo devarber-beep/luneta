@@ -133,7 +133,7 @@ class AuditQueryService:
                 {
                     "id": event.id or "",
                     "actor_user_id": event.actor_user_id,
-                    "actor_nickname": actor.nickname if actor else None,
+                    "actor_display_name": actor.display_name if actor else None,
                     "actor_email_normalized": actor.email_normalized if actor else None,
                     "actor_role": event.actor_role.value,
                     "action_type": event.action_type.value,

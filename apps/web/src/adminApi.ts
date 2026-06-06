@@ -11,7 +11,7 @@ export type AdminCatalogEntry = CatalogEntry & {
 
 export type AdminUserSummary = {
   user_id: string;
-  nickname: string;
+  display_name: string;
   email_normalized: string;
   role: string;
 };
@@ -136,7 +136,7 @@ export type AuditCatalogOption = { value: string; label: string };
 export type AdminAuditEvent = {
   id: string;
   actor_user_id: string;
-  actor_nickname: string | null;
+  actor_display_name: string | null;
   actor_email_normalized: string | null;
   actor_role: string;
   action_type: string;

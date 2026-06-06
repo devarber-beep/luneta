@@ -8,9 +8,8 @@ from app.domain.enums import UserAccountStatus, UserRole
 
 class AdminCreateInvestigatorRequest(BaseModel):
     email: EmailStr
-    nickname: str = Field(min_length=2, max_length=40)
-    first_name: str | None = Field(default=None, max_length=60)
-    last_name: str | None = Field(default=None, max_length=60)
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(min_length=1, max_length=60)
 
 
 class AdminCreateInvestigatorResponse(BaseModel):
@@ -48,6 +47,6 @@ class ReviewerInvestigatorIdsResponse(BaseModel):
 
 class AdminUserSummaryResponse(BaseModel):
     user_id: str
-    nickname: str
+    display_name: str
     email_normalized: EmailStr
     role: UserRole

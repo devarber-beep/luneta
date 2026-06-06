@@ -17,7 +17,7 @@ async def test_login_includes_must_change_password_flag(api_client, fake_db) -> 
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-login-token"):
         signup = await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": "mcplogin"},
+            json={"email": email, "password": "Password123!", "first_name": "Mcplogin", "last_name": "User"},
         )
         assert signup.status_code == 200
         await api_client.post("/auth/verify-email", json={"token": "mcp-login-token"})
@@ -45,7 +45,7 @@ async def test_must_change_password_allows_me_and_password_change_blocks_scenari
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-gate-token"):
         signup = await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": "mcpgate"},
+            json={"email": email, "password": "Password123!", "first_name": "Mcpgate", "last_name": "User"},
         )
         assert signup.status_code == 200
         await api_client.post("/auth/verify-email", json={"token": "mcp-gate-token"})
@@ -106,7 +106,7 @@ async def test_profile_patch_organization_after_password_ok(api_client) -> None:
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-prof-token"):
         await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": "mcpprof"},
+            json={"email": email, "password": "Password123!", "first_name": "Mcpprof", "last_name": "User"},
         )
         await api_client.post("/auth/verify-email", json={"token": "mcp-prof-token"})
 
@@ -130,7 +130,7 @@ async def test_avatar_upload_uses_injected_storage(api_client) -> None:
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-av-token"):
         await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": "mcpavatar"},
+            json={"email": email, "password": "Password123!", "first_name": "Mcpavatar", "last_name": "User"},
         )
         await api_client.post("/auth/verify-email", json={"token": "mcp-av-token"})
 
@@ -155,7 +155,7 @@ async def test_disabled_account_cannot_login(api_client, fake_db) -> None:
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-dis-token"):
         await api_client.post(
             "/auth/signup",
-            json={"email": email, "password": "Password123!", "nickname": "mcpdis"},
+            json={"email": email, "password": "Password123!", "first_name": "Mcpdis", "last_name": "User"},
         )
         await api_client.post("/auth/verify-email", json={"token": "mcp-dis-token"})
 

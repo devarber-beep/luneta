@@ -13,7 +13,7 @@ from tests.conftest import user_doc
 async def test_patch_profile_university_syncs_author_scenarios(api_client, fake_db) -> None:
     now = datetime.now(UTC)
     inserted = await fake_db["users"].insert_one(
-        user_doc(email="uniowner@luneta.dev", role="investigator", nickname="uniowner", verified=True)
+        user_doc(email="uniowner@luneta.dev", role="investigator", first_name="Uniowner", last_name="User", verified=True)
     )
     user_id = str(inserted.inserted_id)
     scenario_id = str(ObjectId())

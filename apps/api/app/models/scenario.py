@@ -54,6 +54,8 @@ class ScenarioModel(BaseModel):
     ethical_risk_ids: list[str] = Field(default_factory=list)
     usage_context: ScenarioUsageContextModel | None = None
     author_user_id: str
+    author_display_name: str | None = None
+    author_display_name_normalized: str | None = None
     author_university: str | None = None
     author_university_normalized: str | None = None
     collaborators: list[ScenarioCollaboratorModel] = Field(default_factory=list)

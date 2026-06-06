@@ -206,16 +206,16 @@ class EvaluationService:
         include_evaluator_identity: bool,
     ) -> dict:
         labels = await self._labels_for_risk_ids(evaluation.detected_ethical_risk_ids)
-        evaluator_nickname: str | None = None
+        evaluator_display_name: str | None = None
         if include_evaluator_identity:
             evaluator = await self._users_repo.get_by_id(evaluation.evaluator_user_id)
             if evaluator is not None:
-                evaluator_nickname = evaluator.nickname
+                evaluator_display_name = evaluator.display_name
         return {
             "id": evaluation.id or "",
             "scenario_id": evaluation.scenario_id,
             "evaluator_user_id": evaluation.evaluator_user_id if include_evaluator_identity else "",
-            "evaluator_nickname": evaluator_nickname,
+            "evaluator_display_name": evaluator_display_name,
             "risk_score": evaluation.risk_score,
             "benefit_score": evaluation.benefit_score,
             "detected_ethical_risk_ids": evaluation.detected_ethical_risk_ids,

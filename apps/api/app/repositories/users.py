@@ -8,6 +8,7 @@ from typing import Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.user_display_name import parse_person_names
 from app.domain.enums import UserAccountStatus, UserRole
 from app.models.user import UserModel
 
@@ -18,8 +19,7 @@ class UsersRepository:
 
     async def ensure_indexes(self) -> None:
         await self._collection.create_index("email_normalized", unique=True)
-        await self._collection.create_index("nickname", unique=True)
-        await self._collection.create_index("nickname_normalized", unique=True)
+        await self._collection.create_index("display_name_normalized")
 
     async def create(
         self,
@@ -27,14 +27,13 @@ class UsersRepository:
         email: str,
         password_hash: str,
         role: UserRole,
-        nickname: str,
-        first_name: str | None = None,
-        last_name: str | None = None,
+        first_name: str,
+        last_name: str,
         must_change_password: bool = False,
     ) -> UserModel:
         now = datetime.now(UTC)
         email_normalized = email.strip().lower()
-        nickname_normalized = nickname.strip().lower()
+        fn, ln, display, display_norm = parse_person_names(first_name=first_name, last_name=last_name)
         doc = {
             "email_normalized": email_normalized,
             "password_hash": password_hash,
@@ -42,10 +41,10 @@ class UsersRepository:
             "role": role.value,
             "account_status": UserAccountStatus.ACTIVE.value,
             "email_verified_at": None,
-            "nickname": nickname,
-            "nickname_normalized": nickname_normalized,
-            "first_name": first_name,
-            "last_name": last_name,
+            "first_name": fn,
+            "last_name": ln,
+            "display_name": display,
+            "display_name_normalized": display_norm,
             "organization": None,
             "university": None,
             "university_normalized": None,
@@ -65,13 +64,14 @@ class UsersRepository:
         *,
         email: str,
         password_hash: str,
-        nickname: str,
+        first_name: str,
+        last_name: str,
         role: UserRole,
     ) -> UserModel:
         """Bootstrap dev/local user: verified, active, no mandatory password change."""
         now = datetime.now(UTC)
         email_normalized = email.strip().lower()
-        nickname_normalized = nickname.strip().lower()
+        fn, ln, display, display_norm = parse_person_names(first_name=first_name, last_name=last_name)
         doc = {
             "email_normalized": email_normalized,
             "password_hash": password_hash,
@@ -79,10 +79,10 @@ class UsersRepository:
             "role": role.value,
             "account_status": UserAccountStatus.ACTIVE.value,
             "email_verified_at": now,
-            "nickname": nickname.strip(),
-            "nickname_normalized": nickname_normalized,
-            "first_name": None,
-            "last_name": None,
+            "first_name": fn,
+            "last_name": ln,
+            "display_name": display,
+            "display_name_normalized": display_norm,
             "organization": None,
             "university": None,
             "university_normalized": None,
@@ -102,13 +102,15 @@ class UsersRepository:
         *,
         email: str,
         password_hash: str,
-        nickname: str,
+        first_name: str,
+        last_name: str,
     ) -> UserModel:
         """Bootstrap first admin (verified, active, no mandatory password change)."""
         return await self.create_bootstrap_account(
             email=email,
             password_hash=password_hash,
-            nickname=nickname,
+            first_name=first_name,
+            last_name=last_name,
             role=UserRole.ADMIN,
         )
 
@@ -117,21 +119,18 @@ class UsersRepository:
         doc = await self._collection.find_one({"email_normalized": normalized})
         return self._to_model(doc)
 
-    async def get_by_nickname(self, nickname: str) -> UserModel | None:
-        normalized = nickname.strip().lower()
-        doc = await self._collection.find_one({"nickname_normalized": normalized})
-        return self._to_model(doc)
-
-    async def list_ids_matching_nickname(self, q: str) -> list[str]:
-        """User ids whose nickname matches the search text (case-insensitive substring)."""
+    async def list_ids_matching_display_name(self, q: str) -> list[str]:
+        """User ids whose name matches the search text (case-insensitive substring)."""
         trimmed = q.strip()
         if not trimmed:
             return []
         pattern = re.escape(trimmed)
         query = {
             "$or": [
-                {"nickname": {"$regex": pattern, "$options": "i"}},
-                {"nickname_normalized": {"$regex": pattern, "$options": "i"}},
+                {"first_name": {"$regex": pattern, "$options": "i"}},
+                {"last_name": {"$regex": pattern, "$options": "i"}},
+                {"display_name": {"$regex": pattern, "$options": "i"}},
+                {"display_name_normalized": {"$regex": pattern, "$options": "i"}},
             ]
         }
         ids: list[str] = []
@@ -146,7 +145,7 @@ class UsersRepository:
         if not roles:
             return []
         role_values = [r.value for r in roles]
-        cursor = self._collection.find({"role": {"$in": role_values}}).sort("nickname_normalized", 1)
+        cursor = self._collection.find({"role": {"$in": role_values}}).sort("display_name_normalized", 1)
         out: list[UserModel] = []
         async for doc in cursor:
             model = self._to_model(doc)
@@ -177,7 +176,7 @@ class UsersRepository:
 
     async def map_display_names(self, user_ids: list[str]) -> dict[str, str]:
         users = await self.get_by_ids(user_ids)
-        return {uid: u.nickname for uid, u in users.items()}
+        return {uid: u.display_name for uid, u in users.items()}
 
     async def list_verified_emails_by_role(self, role: str) -> list[str]:
         return await self.list_verified_emails_by_roles([role])

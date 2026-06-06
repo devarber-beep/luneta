@@ -30,12 +30,16 @@ def user_doc(
     password_plain: str = "UserPass123!",
     account_status: str = "active",
     verified: bool = True,
-    nickname: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
 ) -> dict:
     """Build a user document for in-memory or integration HTTP tests."""
     now = datetime.now(UTC)
     normalized = email.strip().lower()
-    nick = nickname or normalized.split("@")[0][:10] or "user"
+    local = normalized.split("@")[0][:10] or "user"
+    fn = first_name or local.capitalize()
+    ln = last_name or "User"
+    display = f"{fn} {ln}"
     return {
         "email_normalized": normalized,
         "password_hash": hash_password(password_plain),
@@ -43,10 +47,10 @@ def user_doc(
         "role": role,
         "account_status": account_status,
         "email_verified_at": now if verified else None,
-        "nickname": nick,
-        "nickname_normalized": nick.lower(),
-        "first_name": None,
-        "last_name": None,
+        "first_name": fn,
+        "last_name": ln,
+        "display_name": display,
+        "display_name_normalized": display.lower(),
         "organization": None,
         "university": None,
         "university_normalized": None,
@@ -57,6 +61,20 @@ def user_doc(
         "created_at": now,
         "updated_at": now,
     }
+
+
+def signup_body(
+    *,
+    email: str,
+    password: str = "Password123!",
+    first_name: str | None = None,
+    last_name: str | None = None,
+) -> dict[str, str]:
+    """JSON body for POST /auth/signup in HTTP tests."""
+    local = email.strip().lower().split("@")[0]
+    fn = first_name or local.capitalize()
+    ln = last_name or "User"
+    return {"email": email, "password": password, "first_name": fn, "last_name": ln}
 
 
 def use_real_mongo() -> bool:
@@ -331,6 +349,9 @@ class FakeCollection:
                             buckets[key] = {"_id": key}
                         for out_key, spec in group.items():
                             if out_key == "_id" or not isinstance(spec, dict):
+                                continue
+                            if "$sum" in spec:
+                                buckets[key][out_key] = buckets[key].get(out_key, 0) + 1
                                 continue
                             if "$first" in spec:
                                 src = spec["$first"]

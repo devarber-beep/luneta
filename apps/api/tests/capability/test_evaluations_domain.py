@@ -42,6 +42,7 @@ def _scenario(*, author_id: str = "author-1", state: ScenarioState = ScenarioSta
 
 def _user(*, uid: str, role: UserRole) -> UserModel:
     now = datetime.now(UTC)
+    display = f"{uid} User"
     return UserModel(
         _id=uid,
         email_normalized=f"{uid}@luneta.dev",
@@ -49,8 +50,10 @@ def _user(*, uid: str, role: UserRole) -> UserModel:
         password_updated_at=now,
         role=role,
         email_verified_at=now,
-        nickname=uid,
-        nickname_normalized=uid,
+        first_name=uid,
+        last_name="User",
+        display_name=display,
+        display_name_normalized=display.lower(),
         created_at=now,
         updated_at=now,
     )

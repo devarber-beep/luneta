@@ -61,7 +61,8 @@ async def signup(payload: SignupRequest, db: AsyncIOMotorDatabase = Depends(get_
     user = await auth_service.signup(
         email=payload.email,
         password=payload.password,
-        nickname=payload.nickname,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
     )
     verification_token = await email_verification_service.issue_token(
         user_id=user.id or "", email=str(user.email_normalized)

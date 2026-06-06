@@ -17,7 +17,7 @@ async def test_admin_create_investigator_returns_201(api_client, fake_db) -> Non
     token = login.json()["access_token"]
     created = await api_client.post(
         "/admin/users/investigators",
-        json={"email": "invcreate@luneta.dev", "nickname": "invcreate"},
+        json={"email": "invcreate@luneta.dev", "first_name": "Invcreate", "last_name": "User"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert created.status_code == 201
@@ -35,7 +35,7 @@ async def test_admin_create_investigator_returns_201(api_client, fake_db) -> Non
 @pytest.mark.asyncio
 async def test_non_admin_cannot_create_investigator(api_client, fake_db) -> None:
     await fake_db["users"].insert_one(
-        user_doc(email="revonly@luneta.dev", role="reviewer", password_plain="RevPass123!", nickname="revonly")
+        user_doc(email="revonly@luneta.dev", role="reviewer", password_plain="RevPass123!", first_name="Revonly", last_name="User")
     )
     login = await api_client.post(
         "/auth/login",
@@ -45,7 +45,7 @@ async def test_non_admin_cannot_create_investigator(api_client, fake_db) -> None
     token = login.json()["access_token"]
     blocked = await api_client.post(
         "/admin/users/investigators",
-        json={"email": "invcreate2@luneta.dev", "nickname": "invcreate2"},
+        json={"email": "invcreate2@luneta.dev", "first_name": "Invcreate2", "last_name": "User"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert blocked.status_code == 403
@@ -62,7 +62,8 @@ async def test_admin_promote_registered_to_investigator(api_client, fake_db) -> 
             json={
                 "email": "regprom@luneta.dev",
                 "password": "Password123!",
-                "nickname": "regprom",
+                "first_name": "Regprom",
+                "last_name": "User",
             },
         )
         assert signup.status_code == 200
@@ -91,7 +92,7 @@ async def test_admin_promote_registered_to_investigator(api_client, fake_db) -> 
 async def test_admin_promote_investigator_to_reviewer(api_client, fake_db) -> None:
     await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
     await fake_db["users"].insert_one(
-        user_doc(email="invrev@luneta.dev", role="investigator", password_plain="Password123!", nickname="invrev")
+        user_doc(email="invrev@luneta.dev", role="investigator", password_plain="Password123!", first_name="Invrev", last_name="User")
     )
     inv = await fake_db["users"].find_one({"email_normalized": "invrev@luneta.dev"})
     assert inv is not None
@@ -122,7 +123,8 @@ async def test_admin_deactivate_blocks_login(api_client, fake_db) -> None:
             json={
                 "email": "todeact@luneta.dev",
                 "password": "Password123!",
-                "nickname": "todeact",
+                "first_name": "Todeact",
+                "last_name": "User",
             },
         )
         uid = signup.json()["user_id"]

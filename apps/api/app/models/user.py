@@ -29,10 +29,10 @@ class UserModel(BaseModel):
     role: UserRole
     account_status: UserAccountStatus = UserAccountStatus.ACTIVE
     email_verified_at: datetime | None = None
-    nickname: str = Field(min_length=2, max_length=40)
-    nickname_normalized: str
-    first_name: str | None = Field(default=None, max_length=60)
-    last_name: str | None = Field(default=None, max_length=60)
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(min_length=1, max_length=60)
+    display_name: str = Field(min_length=1, max_length=121)
+    display_name_normalized: str = Field(min_length=1, max_length=121)
     organization: str | None = Field(default=None, max_length=200)
     university: str | None = Field(default=None, max_length=200)
     university_normalized: str | None = Field(default=None, max_length=200)

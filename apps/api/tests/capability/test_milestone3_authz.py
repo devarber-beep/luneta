@@ -19,6 +19,8 @@ from app.models.user import UserModel
 
 def _user(*, user_id: str, role: UserRole) -> UserModel:
     now = datetime.now(UTC)
+    fn = user_id[:8]
+    display = f"{fn} User"
     return UserModel(
         _id=user_id,
         email_normalized=f"{user_id}@test.dev",
@@ -26,8 +28,10 @@ def _user(*, user_id: str, role: UserRole) -> UserModel:
         password_updated_at=now,
         role=role,
         email_verified_at=now,
-        nickname=user_id[:8],
-        nickname_normalized=user_id[:8],
+        first_name=fn,
+        last_name="User",
+        display_name=display,
+        display_name_normalized=display.lower(),
         created_at=now,
         updated_at=now,
     )

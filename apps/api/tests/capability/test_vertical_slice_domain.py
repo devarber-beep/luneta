@@ -56,8 +56,8 @@ def test_valid_transitions() -> None:
     assert is_valid_transition(ScenarioState.PUBLISHED, ScenarioState.QUEUED)
 
 
-def test_invalid_transition_from_published_to_draft() -> None:
-    assert not is_valid_transition(ScenarioState.PUBLISHED, ScenarioState.DRAFT)
+def test_invalid_transition_from_published_to_in_review() -> None:
+    assert not is_valid_transition(ScenarioState.PUBLISHED, ScenarioState.IN_REVIEW)
 
 
 def test_owner_or_collaborator_can_edit_only_draft_or_applying() -> None:
@@ -142,8 +142,10 @@ def test_reviewer_cannot_publish_own_submission() -> None:
         email_normalized="r@example.com",
         password_hash="x",
         password_updated_at=now,
-        nickname="reviewer",
-        nickname_normalized="reviewer",
+        first_name="Reviewer",
+        last_name="User",
+        display_name="Reviewer User",
+        display_name_normalized="reviewer user",
         role=UserRole.REVIEWER,
         account_status=UserAccountStatus.ACTIVE,
         email_verified_at=now,
@@ -171,8 +173,10 @@ def test_reviewer_read_in_portfolio_states() -> None:
         email_normalized="r@example.com",
         password_hash="x",
         password_updated_at=now,
-        nickname="reviewer",
-        nickname_normalized="reviewer",
+        first_name="Reviewer",
+        last_name="User",
+        display_name="Reviewer User",
+        display_name_normalized="reviewer user",
         role=UserRole.REVIEWER,
         account_status=UserAccountStatus.ACTIVE,
         email_verified_at=now,

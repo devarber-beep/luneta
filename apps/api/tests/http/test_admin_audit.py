@@ -75,7 +75,7 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
     assert body["total"] == 2
     assert len(body["items"]) == 2
     assert body["items"][0]["action_type"] == "scenario_published"
-    assert body["items"][0]["actor_nickname"] == admin["nickname"]
+    assert body["items"][0]["actor_display_name"] == admin["display_name"]
 
     by_subject = await api_client.get(
         "/admin/audit-events",
@@ -133,7 +133,8 @@ async def _signup_investigator_headers(api_client, fake_db) -> dict[str, str]:
             json={
                 "email": "inv-audit-patch@luneta.dev",
                 "password": "Password123!",
-                "nickname": "invpatch",
+                "first_name": "Invpatch",
+                "last_name": "User",
             },
         )
         await api_client.post("/auth/verify-email", json={"token": "audit-patch"})
@@ -162,7 +163,7 @@ async def test_create_investigator_writes_listable_audit_event(api_client, fake_
 
     created = await api_client.post(
         "/admin/users/investigators",
-        json={"email": "listed-inv@luneta.dev", "nickname": "listedinv"},
+        json={"email": "listed-inv@luneta.dev", "first_name": "Listed", "last_name": "Inv"},
         headers=headers,
     )
     assert created.status_code == 201
