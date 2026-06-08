@@ -9,6 +9,12 @@ import {
 } from "../api";
 import { CatalogFilterDropdown } from "./CatalogFilterDropdown";
 import { ScenarioSearchField } from "./ScenarioSearchField";
+import {
+  emptyUsageContextSearchFilters,
+  UsageContextSearchFilters,
+  usageContextSearchParams,
+  type UsageContextSearchFilterState,
+} from "./UsageContextSearchFilters";
 
 type Props = {
   heading?: string;
@@ -28,6 +34,7 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
   const [ethicalRisks, setEthicalRisks] = useState<PublicCatalogEntry[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [selectedRiskIds, setSelectedRiskIds] = useState<string[]>([]);
+  const [usageFilters, setUsageFilters] = useState<UsageContextSearchFilterState>(emptyUsageContextSearchFilters);
 
   useEffect(() => {
     fetchPublicSearchCategories()
@@ -46,6 +53,7 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
       page_size: pageSize,
       category_id: selectedCategoryIds.length ? selectedCategoryIds : undefined,
       ethical_risk_id: selectedRiskIds.length ? selectedRiskIds : undefined,
+      ...usageContextSearchParams(usageFilters),
     })
       .then((result) => {
         setItems(result.items);
@@ -54,7 +62,7 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [submittedQ, page, selectedCategoryIds, selectedRiskIds]);
+  }, [submittedQ, page, selectedCategoryIds, selectedRiskIds, usageFilters]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -89,6 +97,13 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           onChange={(ids) => {
             setPage(1);
             setSelectedRiskIds(ids);
+          }}
+        />
+        <UsageContextSearchFilters
+          value={usageFilters}
+          onChange={(next) => {
+            setPage(1);
+            setUsageFilters(next);
           }}
         />
       </div>

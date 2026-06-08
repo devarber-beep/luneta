@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
+from app.domain.ethical_field_types import DurationFrequencyOption, YesNoAnswer
 from app.domain.enums import CollaboratorRole
 from app.repositories.ethical_risks import EthicalRisksRepository
 from app.repositories.scenario_classification import ScenarioClassificationRepository
@@ -120,6 +121,14 @@ async def search_public_scenarios(
     published_to: datetime | None = Query(default=None),
     category_id: list[str] = Query(default=[]),
     ethical_risk_id: list[str] = Query(default=[]),
+    children_age_min: int | None = Query(default=None, ge=0, le=17),
+    children_age_max: int | None = Query(default=None, ge=0, le=17),
+    physically_present: YesNoAnswer | None = Query(default=None),
+    online_present: YesNoAnswer | None = Query(default=None),
+    execution_place_affects_scenario: YesNoAnswer | None = Query(default=None),
+    special_circumstances: YesNoAnswer | None = Query(default=None),
+    consent_in_place: YesNoAnswer | None = Query(default=None),
+    duration_frequency: DurationFrequencyOption | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -139,6 +148,14 @@ async def search_public_scenarios(
         published_to=published_to,
         category_ids=category_id or None,
         ethical_risk_ids=ethical_risk_id or None,
+        children_age_min=children_age_min,
+        children_age_max=children_age_max,
+        physically_present=physically_present,
+        online_present=online_present,
+        execution_place_affects_scenario=execution_place_affects_scenario,
+        special_circumstances=special_circumstances,
+        consent_in_place=consent_in_place,
+        duration_frequency=duration_frequency,
         page=page,
         page_size=page_size,
     )

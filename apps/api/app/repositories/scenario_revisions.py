@@ -45,3 +45,10 @@ class ScenarioRevisionsRepository:
         result = await self._collection.insert_one(doc)
         doc["_id"] = str(result.inserted_id)
         return ScenarioRevisionModel.model_validate(doc)
+
+    async def list_for_scenario(self, *, scenario_id: str) -> list[ScenarioRevisionModel]:
+        cursor = self._collection.find({"scenario_id": scenario_id}).sort("revision_number", -1)
+        rows = await cursor.to_list(length=200)
+        for row in rows:
+            row["_id"] = str(row["_id"])
+        return [ScenarioRevisionModel.model_validate(row) for row in rows]

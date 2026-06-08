@@ -80,25 +80,24 @@ def test_owner_can_read_summary_and_comments_not_detail() -> None:
     assert not can_read_evaluation_detail(user=owner, scenario=scenario)
 
 
-def test_admin_can_read_detail() -> None:
+def test_admin_can_read_detail_and_summary() -> None:
     scenario = _scenario()
     admin = _user(uid="admin-1", role=UserRole.ADMIN)
     assert can_read_evaluation_detail(user=admin, scenario=scenario)
+    assert can_read_evaluation_summary(user=admin, scenario=scenario)
     assert not can_read_evaluation_comments(user=admin, scenario=scenario)
 
 
-def test_reviewer_can_read_summary_not_detail() -> None:
+def test_evaluators_can_read_summary_not_detail_or_comments() -> None:
     scenario = _scenario(author_id="author-1")
     reviewer = _user(uid="rev-1", role=UserRole.REVIEWER)
+    registered = _user(uid="reg-1", role=UserRole.REGISTERED)
     assert can_read_evaluation_summary(user=reviewer, scenario=scenario)
+    assert can_read_evaluation_summary(user=registered, scenario=scenario)
+    assert not can_read_evaluation_comments(user=reviewer, scenario=scenario)
+    assert not can_read_evaluation_comments(user=registered, scenario=scenario)
     assert not can_read_evaluation_detail(user=reviewer, scenario=scenario)
-
-
-def test_registered_can_read_summary() -> None:
-    scenario = _scenario()
-    user = _user(uid="reg-1", role=UserRole.REGISTERED)
-    assert can_read_evaluation_summary(user=user, scenario=scenario)
-    assert not can_read_evaluation_detail(user=user, scenario=scenario)
+    assert not can_read_evaluation_detail(user=registered, scenario=scenario)
 
 
 def test_draft_not_evaluable() -> None:

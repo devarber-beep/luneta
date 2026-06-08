@@ -71,6 +71,9 @@ async def test_must_change_password_allows_me_and_password_change_blocks_scenari
     assert me.status_code == 200
     assert me.json()["must_change_password"] is True
 
+    mine_read = await api_client.get("/scenarios/mine", headers=headers)
+    assert mine_read.status_code == 200
+
     blocked = await api_client.post(
         "/scenarios",
         json={"title": "Gated", "description": "Gated scenario"},
@@ -80,7 +83,7 @@ async def test_must_change_password_allows_me_and_password_change_blocks_scenari
 
     patch_profile = await api_client.patch(
         "/auth/me",
-        json={"organization": "Lab"},
+        json={"biography": "Blocked until password change"},
         headers=headers,
     )
     assert patch_profile.status_code == 403
@@ -99,9 +102,12 @@ async def test_must_change_password_allows_me_and_password_change_blocks_scenari
     )
     assert ok.status_code == 200
 
+    mine_ok = await api_client.get("/scenarios/mine", headers=headers)
+    assert mine_ok.status_code == 200
+
 
 @pytest.mark.asyncio
-async def test_profile_patch_organization_after_password_ok(api_client) -> None:
+async def test_profile_patch_university_and_biography_after_password_ok(api_client) -> None:
     email = "mcpprof@luneta.dev"
     with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="mcp-prof-token"):
         await api_client.post(
@@ -115,12 +121,12 @@ async def test_profile_patch_organization_after_password_ok(api_client) -> None:
 
     profile_patch = await api_client.patch(
         "/auth/me",
-        json={"organization": "Institute", "biography": "Bio line"},
+        json={"university": "Open University", "biography": "Bio line"},
         headers=headers,
     )
     assert profile_patch.status_code == 200
     data = profile_patch.json()
-    assert data["organization"] == "Institute"
+    assert data["university"] == "Open University"
     assert data["biography"] == "Bio line"
 
 

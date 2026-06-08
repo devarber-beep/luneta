@@ -36,3 +36,25 @@ async def record_scenario_audit(
         previous=previous,
         current=current or None,
     )
+
+
+async def record_revision_snapshot_audit(
+    audit: AuditService | None,
+    *,
+    actor: UserModel,
+    scenario_id: str,
+    revision_number: int,
+    change_summary: str | None = None,
+) -> None:
+    if audit is None:
+        return
+    current: dict[str, Any] = {"revision_number": revision_number}
+    if change_summary:
+        current["change_summary"] = change_summary
+    await audit.record(
+        actor=actor,
+        action_type=AuditActionType.SCENARIO_REVISION_SNAPSHOT,
+        subject_type=AuditSubjectType.SCENARIO,
+        subject_id=scenario_id,
+        current=current,
+    )

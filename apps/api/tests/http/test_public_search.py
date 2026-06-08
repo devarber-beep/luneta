@@ -23,6 +23,7 @@ async def _seed_published(
     author_display_name: str | None = None,
     category_ids: list[str] | None = None,
     ethical_risk_ids: list[str] | None = None,
+    usage_context: dict | None = None,
 ) -> None:
     now = datetime.now(UTC)
     await fake_db["scenarios"].insert_one(
@@ -49,6 +50,7 @@ async def _seed_published(
             "category_ids": category_ids or [],
             "ethical_risk_ids": ethical_risk_ids or [],
             "keywords_normalized": [],
+            "usage_context": usage_context or {},
             "published_at": published_at,
             "last_state_changed_at": now,
             "created_at": now,
@@ -234,3 +236,63 @@ async def test_public_search_university_text(api_client, fake_db) -> None:
     by_text_xyz = await api_client.get("/public/scenarios", params={"q": "University of XYZ"})
     assert by_text_xyz.status_code == 200
     assert by_text_xyz.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_public_search_usage_context_filters(api_client, fake_db) -> None:
+    from tests.scenario_fixtures import COMPLETE_USAGE_CONTEXT
+
+    now = datetime.now(UTC)
+    author_id = str(ObjectId())
+    indoor_ctx = {
+        **COMPLETE_USAGE_CONTEXT,
+        "children_age_start": 6,
+        "children_age_end": 10,
+        "physically_present": "yes",
+        "online_present": "no",
+    }
+    outdoor_ctx = {
+        **COMPLETE_USAGE_CONTEXT,
+        "children_age_start": 12,
+        "children_age_end": 14,
+        "physically_present": "no",
+        "online_present": "yes",
+        "duration_frequency": "once_a_month",
+    }
+    await _seed_published(
+        fake_db,
+        scenario_id=str(ObjectId()),
+        author_id=author_id,
+        title="Indoor classroom",
+        description="Inside the school.",
+        slug="indoor-class",
+        published_at=now,
+        usage_context=indoor_ctx,
+    )
+    await _seed_published(
+        fake_db,
+        scenario_id=str(ObjectId()),
+        author_id=author_id,
+        title="Remote workshop",
+        description="Online session.",
+        slug="remote-workshop",
+        published_at=now - timedelta(hours=1),
+        usage_context=outdoor_ctx,
+    )
+
+    by_age = await api_client.get(
+        "/public/scenarios",
+        params={"children_age_min": 8, "children_age_max": 9},
+    )
+    assert by_age.status_code == 200
+    assert by_age.json()["total"] == 1
+    assert _public_items(by_age.json())[0]["title"] == "Indoor classroom"
+
+    by_physical = await api_client.get("/public/scenarios", params={"physically_present": "no"})
+    assert by_physical.status_code == 200
+    assert by_physical.json()["total"] == 1
+    assert _public_items(by_physical.json())[0]["title"] == "Remote workshop"
+
+    by_duration = await api_client.get("/public/scenarios", params={"duration_frequency": "once_a_month"})
+    assert by_duration.status_code == 200
+    assert by_duration.json()["total"] == 1

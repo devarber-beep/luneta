@@ -100,6 +100,7 @@ class AuditActionType(StrEnum):
     AI_SUGGESTION_DISCARDED = "ai_suggestion_discarded"
     SCENARIO_CREATED = "scenario_created"
     SCENARIO_CONTENT_UPDATED = "scenario_content_updated"
+    SCENARIO_REVISION_SNAPSHOT = "scenario_revision_snapshot"
     SCENARIO_SUBMITTED_FOR_REVIEW = "scenario_submitted_for_review"
     SCENARIO_PUBLISHED = "scenario_published"
     SCENARIO_CHANGES_REQUESTED = "scenario_changes_requested"

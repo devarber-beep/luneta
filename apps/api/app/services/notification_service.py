@@ -277,6 +277,7 @@ class NotificationService:
                 temporary_password=temporary_password,
                 verification_token=verification_token,
             ),
+            email_requires_verified=False,
         )
 
     async def notify_account_status_changed(
@@ -384,6 +385,7 @@ class NotificationService:
         link_path: str | None = None,
         payload: dict[str, Any] | None = None,
         email: Callable[[str], Awaitable[None]] | None = None,
+        email_requires_verified: bool = True,
     ) -> NotificationModel:
         await self._notifications.ensure_indexes()
         row = await self._notifications.create(
@@ -399,7 +401,11 @@ class NotificationService:
             payload=payload,
         )
         if email is not None:
-            await self._maybe_send_email(recipient_user_id=recipient_user_id, send=email)
+            await self._maybe_send_email(
+                recipient_user_id=recipient_user_id,
+                send=email,
+                requires_verified=email_requires_verified,
+            )
         return row
 
     async def _maybe_send_email(
@@ -407,11 +413,12 @@ class NotificationService:
         *,
         recipient_user_id: str,
         send: Callable[[str], Awaitable[None]],
+        requires_verified: bool = True,
     ) -> None:
         user = await self._users.get_by_id(recipient_user_id)
         if user is None:
             return
-        if user.email_verified_at is None:
+        if requires_verified and user.email_verified_at is None:
             return
         if user.account_status != UserAccountStatus.ACTIVE:
             return

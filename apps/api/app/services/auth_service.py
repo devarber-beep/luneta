@@ -141,9 +141,8 @@ class AuthService:
             updates["display_name"] = display
             updates["display_name_normalized"] = display_norm
 
-        for key in ("organization", "biography"):
-            if key in raw:
-                updates[key] = _optional_text(raw[key])
+        if "biography" in raw:
+            updates["biography"] = _optional_text(raw["biography"])
         if "university" in raw:
             display, normalized = parse_university_field(raw["university"])
             updates["university"] = display

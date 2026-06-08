@@ -37,6 +37,7 @@ _ACTION_LABELS: dict[str, str] = {
     AuditActionType.AI_SUGGESTION_DISCARDED.value: "AI suggestion discarded",
     AuditActionType.SCENARIO_CREATED.value: "Scenario created",
     AuditActionType.SCENARIO_CONTENT_UPDATED.value: "Scenario content updated",
+    AuditActionType.SCENARIO_REVISION_SNAPSHOT.value: "Scenario revision snapshot",
     AuditActionType.SCENARIO_SUBMITTED_FOR_REVIEW.value: "Submitted for review",
     AuditActionType.SCENARIO_PUBLISHED.value: "Scenario published",
     AuditActionType.SCENARIO_CHANGES_REQUESTED.value: "Changes requested",

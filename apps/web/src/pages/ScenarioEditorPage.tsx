@@ -8,7 +8,6 @@ import {
   deleteScenarioInlineAsset,
   getScenario,
   getScenarioAssetReadUrl,
-  checkScenarioSimilarity,
   getScenarioReviewFeedbackStatus,
   listScenarioSuggestions,
   me,
@@ -23,9 +22,10 @@ import {
   markNotSuitableScenario,
   type SensitiveFindingLocation,
   type SimilarScenarioMatch,
+  fetchPublicSearchCategories,
+  fetchPublicSearchEthicalRisks,
   type SuggestionItem,
 } from "../api";
-import { fetchActiveCategories, fetchActiveEthicalRisks } from "../adminApi";
 import { DescriptionWithSuggestions } from "../components/DescriptionWithSuggestions";
 import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsights";
 import {
@@ -85,6 +85,8 @@ export function ScenarioEditorPage({
   const [usageContext, setUsageContext] = useState<UsageContextFormState>(emptyUsageContextForm);
   const [catalogCategories, setCatalogCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [ethicalOptions, setEthicalOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [state, setState] = useState(isCreate ? "draft" : "");
   const [coverAsset, setCoverAsset] = useState<{ asset_id: string; alt_text?: string | null } | null>(null);
   const [inlineAssets, setInlineAssets] = useState<Array<{ asset_id: string; order: number; alt_text?: string | null }>>([]);
@@ -267,17 +269,32 @@ export function ScenarioEditorPage({
   }, [scenarioId, reviewerInReview, state]);
 
   useEffect(() => {
+    let cancelled = false;
+    setCatalogLoading(true);
+    Promise.all([fetchPublicSearchCategories(), fetchPublicSearchEthicalRisks()])
+      .then(([categories, risks]) => {
+        if (cancelled) return;
+        setCatalogCategories(categories.items);
+        setEthicalOptions(risks.items);
+        setCatalogError("");
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setCatalogError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const token = getToken();
     if (!token) return;
     me(token)
       .then((profile) => setMyUserId(profile.user_id))
       .catch(() => setMyUserId(null));
-    fetchActiveCategories(token)
-      .then((c) => setCatalogCategories(c.items))
-      .catch((e: Error) => setMessage(e.message));
-    fetchActiveEthicalRisks(token)
-      .then((r) => setEthicalOptions(r.items))
-      .catch((e: Error) => setMessage(e.message));
     if (!isCreate && routeId) {
       setScenarioId(routeId);
       load(routeId).catch((e: Error) => setMessage(e.message));
@@ -352,14 +369,10 @@ export function ScenarioEditorPage({
         updated.cover_image?.asset_id ?? null,
         (updated.inline_assets ?? []).map((a) => a.asset_id),
       );
-      const similarity = await checkScenarioSimilarity(token, {
-        title: title.trim(),
-        description: description.trim(),
-        exclude_scenario_id: id,
-      });
-      setSaveSimilarityMatches(similarity.candidates);
+      const advisoryCandidates = updated.similarity_advisory?.candidates ?? [];
+      setSaveSimilarityMatches(advisoryCandidates);
       setBlockingError(false);
-      if (similarity.candidates.length > 0) {
+      if (advisoryCandidates.length > 0) {
         setMessage(
           `Saved. Revision #${updated.current_revision_number}\nWarning: this scenario looks similar to published scenario(s). Review before submitting.`,
         );
@@ -787,6 +800,13 @@ export function ScenarioEditorPage({
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Categories</h3>
+          {catalogLoading ? <p style={{ color: "#666", marginTop: 0 }}>Loading categories…</p> : null}
+          {catalogError ? <p style={{ color: "crimson", marginTop: 0 }}>{catalogError}</p> : null}
+          {!catalogLoading && !catalogError && catalogCategories.length === 0 ? (
+            <p style={{ color: "#666", marginTop: 0 }}>
+              No categories are available. An admin must add active entries in the catalog.
+            </p>
+          ) : null}
           {catalogCategories.map((c) => (
             <label key={c.id} style={{ display: "block", marginBottom: "0.25rem" }}>
               <input
@@ -806,6 +826,13 @@ export function ScenarioEditorPage({
 
         <section style={sectionStyle}>
           <h3 style={{ marginTop: 0 }}>Ethical risks</h3>
+          {catalogLoading ? <p style={{ color: "#666", marginTop: 0 }}>Loading ethical risks…</p> : null}
+          {catalogError ? <p style={{ color: "crimson", marginTop: 0 }}>{catalogError}</p> : null}
+          {!catalogLoading && !catalogError && ethicalOptions.length === 0 ? (
+            <p style={{ color: "#666", marginTop: 0 }}>
+              No ethical risks are available. An admin must add active entries in the catalog.
+            </p>
+          ) : null}
           {ethicalOptions.map((r) => (
             <label key={r.id} style={{ display: "block", marginBottom: "0.25rem" }}>
               <input

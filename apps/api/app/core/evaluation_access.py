@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.core.permissions import get_collaborator_role, is_publicly_visible
-from app.core.rbac_policy import permissions_for_user, user_has_permission
+from app.core.rbac_policy import user_has_permission
 from app.domain.authz_permissions import Permission
 from app.domain.enums import CollaboratorRole, UserRole
 from app.models.scenario import ScenarioModel
@@ -33,12 +33,16 @@ def can_read_own_evaluation(*, user: UserModel, scenario: ScenarioModel) -> bool
 
 
 def can_read_evaluation_summary(*, user: UserModel, scenario: ScenarioModel) -> bool:
-    """Aggregates for any authenticated user on a published scenario."""
+    """Aggregate scores and risk labels: owner, admin, or anyone who may evaluate this scenario."""
     if scenario.deleted_at is not None:
         return False
     if not is_publicly_visible(scenario=scenario):
         return False
-    return Permission.SCENARIO_READ_PUBLIC in permissions_for_user(user=user)
+    if _is_scenario_owner(scenario=scenario, user_id=user.id or ""):
+        return True
+    if UserRole(user.role) == UserRole.ADMIN:
+        return True
+    return can_submit_evaluation(user=user, scenario=scenario)
 
 
 def can_read_evaluation_comments(*, user: UserModel, scenario: ScenarioModel) -> bool:

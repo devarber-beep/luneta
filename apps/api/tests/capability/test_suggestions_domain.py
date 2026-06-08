@@ -167,6 +167,24 @@ def test_reviewer_cannot_suggest_on_published_they_already_reviewed() -> None:
     )
 
 
+def test_reviewer_and_investigator_same_rules_on_published() -> None:
+    published = _scenario(state=ScenarioState.PUBLISHED)
+    investigator = _user(user_id="inv1", role=UserRole.INVESTIGATOR)
+    reviewer = _user(user_id="rev2", role=UserRole.REVIEWER)
+    assert can_create_suggestion(
+        user=investigator,
+        scenario=published,
+        portfolio_investigator_ids=frozenset(),
+        reviewer_has_reviewed_scenario=False,
+    )
+    assert can_create_suggestion(
+        user=reviewer,
+        scenario=published,
+        portfolio_investigator_ids=frozenset(),
+        reviewer_has_reviewed_scenario=False,
+    )
+
+
 def test_reviewer_can_suggest_on_published_they_did_not_review() -> None:
     scenario = _scenario(state=ScenarioState.PUBLISHED, author_id="inv-author")
     reviewer = _user(user_id="rev2", role=UserRole.REVIEWER)

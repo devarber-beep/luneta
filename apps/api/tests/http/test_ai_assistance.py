@@ -90,21 +90,40 @@ async def test_submit_review_blocked_by_sensitive_email(api_client, fake_db) -> 
 
 
 @pytest.mark.asyncio
-async def test_similarity_check_finds_heuristic_match(api_client, fake_db) -> None:
+async def test_create_draft_runs_similarity_check(api_client, fake_db) -> None:
     headers = await _signup_investigator(
-        api_client, fake_db, email="similar1@luneta.dev", token="sim-1"
+        api_client, fake_db, email="similar-create@luneta.dev", token="sim-create"
     )
-    author_id = str((await fake_db["users"].find_one({"email_normalized": "similar1@luneta.dev"}))["_id"])
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "New classroom study", "description": "Observation research with students."},
+        headers=headers,
+    )
+    assert create.status_code in (200, 201)
+    sid = create.json()["id"]
+    audit = await fake_db["audit_events"].find_one(
+        {"action_type": "scenario_similarity_check_run", "subject_id": sid}
+    )
+    assert audit is not None
+    assert "provider" in audit["current"]
+
+
+@pytest.mark.asyncio
+async def test_patch_returns_similarity_advisory_without_blocking_save(api_client, fake_db) -> None:
+    headers = await _signup_investigator(
+        api_client, fake_db, email="similar-patch@luneta.dev", token="sim-patch"
+    )
+    author_id = str((await fake_db["users"].find_one({"email_normalized": "similar-patch@luneta.dev"}))["_id"])
     now = datetime.now(UTC)
     await fake_db["scenarios"].insert_one(
         {
             "_id": ObjectId(),
-            "slug": "published-base",
+            "slug": "published-base-patch",
             "title": "Classroom smart glasses pilot",
             "description": "Students wear smart glasses during lessons for observation research.",
             "public_title": "Classroom smart glasses pilot",
             "public_description": "Students wear smart glasses during lessons for observation research.",
-            "public_slug": "classroom-smart-glasses",
+            "public_slug": "classroom-smart-glasses-patch",
             "author_user_id": author_id,
             "collaborators": [],
             "state": "published",
@@ -117,22 +136,33 @@ async def test_similarity_check_finds_heuristic_match(api_client, fake_db) -> No
             "updated_at": now,
         }
     )
-    check = await api_client.post(
-        "/scenarios/similarity-check",
-        headers=headers,
+    create = await api_client.post(
+        "/scenarios",
         json={
             "title": "Classroom smart glasses pilot copy",
             "description": "Students wear smart glasses during lessons for observation research in class.",
         },
+        headers=headers,
     )
-    assert check.status_code == 200
-    body = check.json()
-    assert body["provider"] in ("heuristic", "openai_embeddings", "gemini_embeddings")
-    assert len(body["candidates"]) >= 1
+    assert create.status_code in (200, 201)
+    body = create.json()
+    assert body.get("similarity_advisory") is not None
+    assert len(body["similarity_advisory"]["candidates"]) >= 1
+
+    sid = body["id"]
+    patch = await api_client.patch(
+        f"/scenarios/{sid}",
+        json={"summary": "Still similar after save."},
+        headers=headers,
+    )
+    assert patch.status_code == 200
+    patch_body = patch.json()
+    assert patch_body.get("similarity_advisory") is not None
+    assert len(patch_body["similarity_advisory"]["candidates"]) >= 1
 
 
 @pytest.mark.asyncio
-async def test_similarity_check_ignores_generic_unrelated_scenarios(api_client, fake_db) -> None:
+async def test_create_returns_empty_similarity_advisory_for_unrelated_content(api_client, fake_db) -> None:
     headers = await _signup_investigator(
         api_client, fake_db, email="similar2@luneta.dev", token="sim-2"
     )
@@ -159,16 +189,18 @@ async def test_similarity_check_ignores_generic_unrelated_scenarios(api_client, 
             "updated_at": now,
         }
     )
-    check = await api_client.post(
-        "/scenarios/similarity-check",
+    create = await api_client.post(
+        "/scenarios",
         headers=headers,
         json={
             "title": "Smart glasses field study",
             "description": "Children wear devices while teachers observe learning outcomes in another school.",
         },
     )
-    assert check.status_code == 200
-    assert check.json()["candidates"] == []
+    assert create.status_code in (200, 201)
+    advisory = create.json().get("similarity_advisory")
+    assert advisory is not None
+    assert advisory["candidates"] == []
 
 
 

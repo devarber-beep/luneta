@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
@@ -151,21 +151,27 @@ async def admin_set_account_status(
 @router.get("/users/summary", response_model=list[AdminUserSummaryResponse])
 async def admin_list_users_summary(
     role: UserRole | None = None,
+    q: str | None = Query(default=None, max_length=200),
+    include_disabled: bool = Query(default=False),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _: UserModel = Depends(require_permission(Permission.USER_ADMIN_READ_ANY_PROFILE)),
 ) -> list[AdminUserSummaryResponse]:
     repo = UsersRepository(db)
-    roles = [role] if role is not None else [UserRole.REVIEWER, UserRole.INVESTIGATOR]
-    users = await repo.list_by_roles(roles)
+    roles = [role] if role is not None else list(UserRole)
+    users = await repo.list_for_admin_summary(
+        roles=roles,
+        q=q,
+        include_disabled=include_disabled,
+    )
     return [
         AdminUserSummaryResponse(
             user_id=u.id or "",
             display_name=u.display_name,
             email_normalized=u.email_normalized,
-            role=u.role,
+            role=UserRole(u.role),
+            account_status=UserAccountStatus(u.account_status),
         )
         for u in users
-        if u.account_status == UserAccountStatus.ACTIVE
     ]
 
 

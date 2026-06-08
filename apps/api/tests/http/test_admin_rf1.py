@@ -113,6 +113,69 @@ async def test_admin_promote_investigator_to_reviewer(api_client, fake_db) -> No
 
 
 @pytest.mark.asyncio
+async def test_admin_demote_reviewer_to_investigator(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    await fake_db["users"].insert_one(
+        user_doc(email="revdem@luneta.dev", role="reviewer", password_plain="Password123!", first_name="Revdem", last_name="User")
+    )
+    rev = await fake_db["users"].find_one({"email_normalized": "revdem@luneta.dev"})
+    assert rev is not None
+    rid = str(rev["_id"])
+
+    admin_login = await api_client.post(
+        "/auth/login",
+        json={"email": "admrf1@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = admin_login.json()["access_token"]
+    patch_role = await api_client.patch(
+        f"/admin/users/{rid}/role",
+        json={"role": "investigator"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert patch_role.status_code == 200
+    assert patch_role.json()["role"] == "investigator"
+
+
+@pytest.mark.asyncio
+async def test_admin_list_users_summary_includes_registered(api_client, fake_db) -> None:
+    from unittest.mock import patch
+
+    await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    with patch("app.services.email_verification_service.secrets.token_urlsafe", return_value="list-reg-token"):
+        signup = await api_client.post(
+            "/auth/signup",
+            json={
+                "email": "listreg@luneta.dev",
+                "password": "Password123!",
+                "first_name": "Listreg",
+                "last_name": "User",
+            },
+        )
+        assert signup.status_code == 200
+        await api_client.post("/auth/verify-email", json={"token": "list-reg-token"})
+
+    admin_login = await api_client.post(
+        "/auth/login",
+        json={"email": "admrf1@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = admin_login.json()["access_token"]
+    listed = await api_client.get("/admin/users/summary", headers={"Authorization": f"Bearer {token}"})
+    assert listed.status_code == 200
+    emails = {row["email_normalized"] for row in listed.json()}
+    assert "listreg@luneta.dev" in emails
+
+    by_q = await api_client.get(
+        "/admin/users/summary",
+        params={"q": "listreg"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert by_q.status_code == 200
+    assert len(by_q.json()) == 1
+    assert by_q.json()[0]["role"] == "registered"
+    assert by_q.json()[0]["account_status"] == "active"
+
+
+@pytest.mark.asyncio
 async def test_admin_deactivate_blocks_login(api_client, fake_db) -> None:
     from unittest.mock import patch
 

@@ -351,15 +351,15 @@ async def test_vertical_slice_happy_path_unit() -> None:
         title="Mi escenario",
         description="Scenario description for review",
     )
-    assert created.state == ScenarioState.DRAFT
+    assert created.scenario.state == ScenarioState.DRAFT
 
     edited = await scenario_service.patch_draft(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=author,
         title="Mi escenario editado",
         description="Scenario description for review (edited)",
     )
-    assert edited.current_revision_number == 2
+    assert edited.scenario.current_revision_number == 2
 
     assert scenarios_repo.scenario is not None
     ready = scenarios_repo.scenario.model_dump()
@@ -385,7 +385,7 @@ async def test_vertical_slice_happy_path_unit() -> None:
     scenarios_repo.scenario = ScenarioModel.model_validate(ready)
 
     submitted = await scenario_service.submit_review(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=author,
     )
     assert submitted.state == ScenarioState.QUEUED
@@ -395,38 +395,38 @@ async def test_vertical_slice_happy_path_unit() -> None:
     assert queue[0].title == "Mi escenario editado"
 
     in_review, _ = await workflow_service.start_review(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=reviewer,
     )
     assert in_review.state == ScenarioState.IN_REVIEW
 
     published, _ = await workflow_service.publish(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=reviewer,
     )
     assert published.state == ScenarioState.PUBLISHED
 
     rev_after_publish = published.current_revision_number
     patched_live = await scenario_service.patch_draft(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=author,
         title="Titulo tras publicar",
         description="Descripcion tras publicar",
     )
-    assert patched_live.title == "Titulo tras publicar"
-    assert patched_live.current_revision_number == rev_after_publish + 1
-    assert patched_live.state == ScenarioState.PUBLISHED
+    assert patched_live.scenario.title == "Titulo tras publicar"
+    assert patched_live.scenario.current_revision_number == rev_after_publish + 1
+    assert patched_live.scenario.state == ScenarioState.PUBLISHED
 
     resubmitted = await scenario_service.submit_review(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=author,
     )
     assert resubmitted.state == ScenarioState.QUEUED
 
-    await workflow_service.start_review(scenario_id=created.id or "", current_user=reviewer)
+    await workflow_service.start_review(scenario_id=created.scenario.id or "", current_user=reviewer)
 
     republished, _ = await workflow_service.publish(
-        scenario_id=created.id or "",
+        scenario_id=created.scenario.id or "",
         current_user=reviewer,
     )
     assert republished.state == ScenarioState.PUBLISHED

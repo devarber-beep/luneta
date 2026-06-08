@@ -1,6 +1,7 @@
 """Content-policy checks for sensitive data and scenario similarity."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
@@ -72,6 +73,12 @@ def _sensitive_detail(
     }
 
 
+@dataclass(frozen=True)
+class SimilarityAdvisory:
+    provider: str
+    candidates: list[SimilarityCandidate]
+
+
 def _similarity_detail(
     *,
     action: Literal["save", "submit_review"],
@@ -110,9 +117,9 @@ async def enforce_content_policies(
     title: str | None = None,
     description: str | None = None,
     summary: str | None = None,
-) -> None:
+) -> SimilarityAdvisory | None:
     if not should_run_content_checks(scenario):
-        return
+        return None
 
     effective = effective_scenario(
         scenario,
@@ -153,3 +160,7 @@ async def enforce_content_policies(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_similarity_detail(action=action, candidates=similarity_result.candidates),
         )
+    return SimilarityAdvisory(
+        provider=similarity_result.provider,
+        candidates=similarity_result.candidates,
+    )

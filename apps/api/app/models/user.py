@@ -33,7 +33,6 @@ class UserModel(BaseModel):
     last_name: str = Field(min_length=1, max_length=60)
     display_name: str = Field(min_length=1, max_length=121)
     display_name_normalized: str = Field(min_length=1, max_length=121)
-    organization: str | None = Field(default=None, max_length=200)
     university: str | None = Field(default=None, max_length=200)
     university_normalized: str | None = Field(default=None, max_length=200)
     biography: str | None = Field(default=None, max_length=4000)

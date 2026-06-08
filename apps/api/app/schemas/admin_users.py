@@ -18,15 +18,15 @@ class AdminCreateInvestigatorResponse(BaseModel):
 
 
 class AdminSetUserRoleRequest(BaseModel):
-    """Allowed transitions: registered → investigator; investigator → reviewer."""
+    """Assignable roles: registered, investigator, reviewer (not admin)."""
 
     role: UserRole
 
     @field_validator("role")
     @classmethod
-    def only_investigator_or_reviewer(cls, v: UserRole) -> UserRole:
-        if v not in (UserRole.INVESTIGATOR, UserRole.REVIEWER):
-            raise ValueError("role must be investigator or reviewer")
+    def assignable_role(cls, v: UserRole) -> UserRole:
+        if v not in (UserRole.REGISTERED, UserRole.INVESTIGATOR, UserRole.REVIEWER):
+            raise ValueError("role must be registered, investigator, or reviewer")
         return v
 
 
@@ -50,3 +50,4 @@ class AdminUserSummaryResponse(BaseModel):
     display_name: str
     email_normalized: EmailStr
     role: UserRole
+    account_status: UserAccountStatus

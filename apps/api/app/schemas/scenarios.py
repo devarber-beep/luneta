@@ -105,6 +105,7 @@ class ScenarioResponse(BaseModel):
     live_public_description: str | None = None
     can_create_suggestion: bool = False
     my_participation_role: ScenarioParticipationRole | None = None
+    similarity_advisory: SimilarityAdvisoryResponse | None = None
 
 
 class SubmitReviewResponse(BaseModel):
@@ -138,12 +139,6 @@ class ScenarioAssetReadUrlResponse(BaseModel):
     expires_in_seconds: int
 
 
-class SimilarityCheckRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
-    description: str = Field(min_length=1, max_length=2000)
-    exclude_scenario_id: str | None = None
-
-
 class SimilarityCandidateResponse(BaseModel):
     scenario_id: str
     title: str
@@ -151,6 +146,22 @@ class SimilarityCandidateResponse(BaseModel):
     public_path: str | None = None
 
 
-class SimilarityCheckResponse(BaseModel):
+class SimilarityAdvisoryResponse(BaseModel):
     provider: str
-    candidates: list[SimilarityCandidateResponse]
+    candidates: list[SimilarityCandidateResponse] = Field(default_factory=list)
+
+
+class ScenarioRevisionListItem(BaseModel):
+    revision_number: int
+    title: str
+    description: str
+    state_snapshot: ScenarioState
+    created_at: datetime
+    created_by_user_id: str
+    accepted_suggestion_id: str | None = None
+    change_summary: str | None = None
+
+
+class ScenarioRevisionsResponse(BaseModel):
+    scenario_id: str
+    items: list[ScenarioRevisionListItem]

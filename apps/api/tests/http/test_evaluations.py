@@ -160,8 +160,12 @@ async def test_registered_submits_evaluation_owner_sees_summary(api_client, fake
 
     reg_summary = await api_client.get(f"/scenarios/{sid}/evaluations/summary", headers=reg_h)
     assert reg_summary.status_code == 200
-    assert reg_summary.json().get("comments") in (None, [])
-    assert reg_summary.json()["evaluation_count"] == 1
+    reg_body = reg_summary.json()
+    assert reg_body["evaluation_count"] == 1
+    assert reg_body["average_risk_score"] == 7.5
+    assert reg_body["average_benefit_score"] == 4.0
+    assert "Privacy risk" in reg_body["detected_ethical_risk_labels"]
+    assert reg_body.get("comments", []) == []
 
     reg_detail = await api_client.get(f"/scenarios/{sid}/evaluations", headers=reg_h)
     assert reg_detail.status_code == 403

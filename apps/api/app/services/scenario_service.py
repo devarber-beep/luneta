@@ -1,6 +1,7 @@
 """Scenario service for draft/edit/submit flow."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -29,14 +30,21 @@ from app.repositories.scenario_classification import ScenarioClassificationRepos
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
-from app.services.audit_helpers import record_scenario_audit
+from app.models.scenario_revision import ScenarioRevisionModel
+from app.services.audit_helpers import record_revision_snapshot_audit, record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
 from app.services.notification_service import NotificationService
-from app.services.content_policy import enforce_content_policies
+from app.services.content_policy import SimilarityAdvisory, enforce_content_policies
 from app.services.scenario_similarity_service import ScenarioSimilarityService
-from app.services.scenario_submit_validation import ensure_ready_for_submit
+from app.services.scenario_submit_validation import ensure_ready_for_submit, resolve_catalog_ids_for_save
 from app.storage.minio_storage import MinioScenarioStorage
+
+
+@dataclass(frozen=True)
+class ScenarioSaveResult:
+    scenario: ScenarioModel
+    similarity_advisory: SimilarityAdvisory | None = None
 
 
 class ScenarioService:
@@ -77,7 +85,7 @@ class ScenarioService:
         current_user: UserModel,
         title: str,
         description: str,
-    ) -> ScenarioModel:
+    ) -> ScenarioSaveResult:
         await self._scenarios_repo.ensure_indexes()
         await self._revisions_repo.ensure_indexes()
         await self._review_events_repo.ensure_indexes()
@@ -106,6 +114,12 @@ class ScenarioService:
             state_snapshot=scenario.state,
             created_by_user_id=current_user.id or "",
         )
+        await record_revision_snapshot_audit(
+            self._audit,
+            actor=current_user,
+            scenario_id=scenario.id or "",
+            revision_number=scenario.current_revision_number,
+        )
         await self._review_events_repo.create(
             scenario_id=scenario.id or "",
             event_type=ReviewEventType.CREATE_DRAFT,
@@ -120,7 +134,16 @@ class ScenarioService:
             scenario_id=scenario.id or "",
             to_state=scenario.state,
         )
-        return scenario
+        advisory: SimilarityAdvisory | None = None
+        if self._similarity is not None:
+            advisory = await enforce_content_policies(
+                scenario=scenario,
+                current_user=current_user,
+                audit=self._audit,
+                similarity=self._similarity,
+                action="save",
+            )
+        return ScenarioSaveResult(scenario=scenario, similarity_advisory=advisory)
 
     async def list_my_scenarios(
         self,
@@ -153,6 +176,15 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return scenario
 
+    async def list_revisions(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+    ) -> list[ScenarioRevisionModel]:
+        await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
+        return await self._revisions_repo.list_for_scenario(scenario_id=scenario_id)
+
     async def patch_draft(
         self,
         *,
@@ -167,7 +199,7 @@ class ScenarioService:
         ethical_risk_ids: list[str] | None = None,
         usage_context: ScenarioUsageContextModel | None = None,
         sensitive_data_involved: bool | None = None,
-    ) -> ScenarioModel:
+    ) -> ScenarioSaveResult:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -186,8 +218,17 @@ class ScenarioService:
                 detail="Description cannot be empty",
             )
 
+        category_ids, ethical_risk_ids = await resolve_catalog_ids_for_save(
+            scenario=scenario,
+            category_ids=category_ids,
+            ethical_risk_ids=ethical_risk_ids,
+            classification_repo=self._classification_repo,
+            ethical_repo=self._ethical_repo,
+        )
+
+        advisory: SimilarityAdvisory | None = None
         if self._similarity is not None:
-            await enforce_content_policies(
+            advisory = await enforce_content_policies(
                 scenario=scenario,
                 current_user=current_user,
                 audit=self._audit,
@@ -224,6 +265,12 @@ class ScenarioService:
             description=bumped.description,
             state_snapshot=bumped.state,
             created_by_user_id=actor_user_id,
+        )
+        await record_revision_snapshot_audit(
+            self._audit,
+            actor=current_user,
+            scenario_id=bumped.id or "",
+            revision_number=bumped.current_revision_number,
         )
         event_type = (
             ReviewEventType.UPDATE_IN_REVIEW
@@ -270,7 +317,7 @@ class ScenarioService:
                 "review_event_type": event_type.value,
             },
         )
-        return bumped
+        return ScenarioSaveResult(scenario=bumped, similarity_advisory=advisory)
 
     async def upload_cover_image(
         self,
@@ -429,6 +476,27 @@ class ScenarioService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No changes to submit for republication",
                 )
+
+        category_ids, ethical_risk_ids = await resolve_catalog_ids_for_save(
+            scenario=scenario,
+            category_ids=None,
+            ethical_risk_ids=None,
+            classification_repo=self._classification_repo,
+            ethical_repo=self._ethical_repo,
+        )
+        if category_ids is not None or ethical_risk_ids is not None:
+            stripped = await self._scenarios_repo.update_draft_content(
+                scenario_id=scenario_id,
+                title=None,
+                description=None,
+                summary=None,
+                categories=None,
+                tags=None,
+                category_ids=category_ids,
+                ethical_risk_ids=ethical_risk_ids,
+            )
+            if stripped is not None:
+                scenario = stripped
 
         await ensure_ready_for_submit(
             scenario=scenario,

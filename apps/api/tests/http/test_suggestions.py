@@ -829,6 +829,91 @@ async def test_reviewer_published_suggestion_blocked_if_they_reviewed(api_client
         json={"scope": "scenario", "kind": "comment", "paragraph_index": None, "body": "Fresh eyes"},
     )
     assert allowed.status_code == 201
+    after_create = await api_client.get(f"/scenarios/{sid}", headers=owner_h)
+    assert after_create.json()["state"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_published_accept_adds_collaborator(api_client, fake_db) -> None:
+    owner_h = await _signup_and_promote(
+        api_client, fake_db, email="sugown7c@luneta.dev", role="investigator", token="sug-own7c-tok"
+    )
+    publishing_rev_h = await _signup_and_promote(
+        api_client, fake_db, email="sugrev7c@luneta.dev", role="reviewer", token="sug-rev7c-tok"
+    )
+    other_rev_h = await _signup_and_promote(
+        api_client, fake_db, email="sugrev7d@luneta.dev", role="reviewer", token="sug-rev7d-tok"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Peer review pub", "description": "Opening.\n\nClosing."},
+        headers=owner_h,
+    )
+    sid = create.json()["id"]
+    now = datetime.now(UTC)
+    owner_doc = await fake_db["users"].find_one({"email_normalized": "sugown7c@luneta.dev"})
+    pub_rev_doc = await fake_db["users"].find_one({"email_normalized": "sugrev7c@luneta.dev"})
+    await fake_db["reviewer_assignments"].insert_one(
+        {
+            "reviewer_user_id": str(pub_rev_doc["_id"]),
+            "investigator_user_id": str(owner_doc["_id"]),
+            "created_at": now,
+        }
+    )
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "sug7c-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "sug7c-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=publishing_rev_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=publishing_rev_h)
+    sug = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=other_rev_h,
+        json={
+            "scope": "paragraph",
+            "kind": "alternative_text",
+            "paragraph_index": 0,
+            "body": "Reviewer suggested opening.",
+        },
+    )
+    assert sug.status_code == 201
+    assert (await api_client.get(f"/scenarios/{sid}", headers=owner_h)).json()["state"] == "published"
+    accept = await api_client.post(
+        f"/scenarios/{sid}/suggestions/{sug.json()['id']}/accept",
+        headers=owner_h,
+    )
+    assert accept.status_code == 200
+    scenario = accept.json()["scenario"]
+    assert scenario["state"] == "draft"
+    other_rev_doc = await fake_db["users"].find_one({"email_normalized": "sugrev7d@luneta.dev"})
+    collab_ids = [c["user_id"] for c in scenario["collaborators"]]
+    assert str(other_rev_doc["_id"]) in collab_ids
 
 
 @pytest.mark.asyncio

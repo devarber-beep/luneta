@@ -14,6 +14,7 @@ export type AdminUserSummary = {
   display_name: string;
   email_normalized: string;
   role: string;
+  account_status: "active" | "disabled";
 };
 
 function authHeaders(token: string) {
@@ -74,9 +75,63 @@ export async function patchAdminEthicalRisk(
   });
 }
 
-export async function listAdminUsers(token: string, role?: string): Promise<AdminUserSummary[]> {
-  const q = role ? `?role=${encodeURIComponent(role)}` : "";
-  return request(`/admin/users/summary${q}`, { headers: authHeaders(token) });
+export async function createAdminInvestigator(
+  token: string,
+  payload: { email: string; first_name: string; last_name: string },
+): Promise<{ user_id: string; email_normalized: string }> {
+  return request("/admin/users/investigators", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload),
+  });
+}
+
+export type ListAdminUsersParams = {
+  role?: string;
+  q?: string;
+  include_disabled?: boolean;
+};
+
+export async function listAdminUsers(
+  token: string,
+  params: ListAdminUsersParams = {},
+): Promise<AdminUserSummary[]> {
+  const search = new URLSearchParams();
+  if (params.role) {
+    search.set("role", params.role);
+  }
+  if (params.q?.trim()) {
+    search.set("q", params.q.trim());
+  }
+  if (params.include_disabled) {
+    search.set("include_disabled", "true");
+  }
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return request(`/admin/users/summary${suffix}`, { headers: authHeaders(token) });
+}
+
+export async function patchAdminUserRole(
+  token: string,
+  userId: string,
+  role: "registered" | "investigator" | "reviewer",
+): Promise<{ user_id: string; role: string; account_status: string }> {
+  return request(`/admin/users/${userId}/role`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function patchAdminUserAccountStatus(
+  token: string,
+  userId: string,
+  account_status: "active" | "disabled",
+): Promise<{ user_id: string; role: string; account_status: string }> {
+  return request(`/admin/users/${userId}/account-status`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ account_status }),
+  });
 }
 
 export async function listReviewerInvestigators(

@@ -109,7 +109,7 @@ export function ReviewQueuePage() {
         onSubmit={() => setSubmittedQ(searchQ.trim())}
         placeholder="Search by title, description, author or university"
       />
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem", alignItems: "flex-end" }}>
         <CatalogFilterDropdown
           label="Categories"
           emptyLabel="All categories"

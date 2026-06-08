@@ -1,8 +1,6 @@
 """Workflow routes for reviewer queue and transitions."""
 from __future__ import annotations
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -45,9 +43,6 @@ def _service(db: AsyncIOMotorDatabase) -> WorkflowService:
 
 @router.get("/review-queue", response_model=ReviewQueueResponse)
 async def review_queue(
-    author_user_id: str | None = Query(default=None),
-    submitted_from: datetime | None = Query(default=None),
-    submitted_to: datetime | None = Query(default=None),
     q: str | None = Query(default=None, max_length=200),
     category_id: list[str] = Query(default=[]),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -55,9 +50,6 @@ async def review_queue(
 ) -> ReviewQueueResponse:
     items = await _service(db).review_queue(
         current_user=current_user,
-        author_user_id=author_user_id,
-        submitted_from=submitted_from,
-        submitted_to=submitted_to,
         q=q,
         category_ids=category_id or None,
     )
@@ -66,9 +58,6 @@ async def review_queue(
 
 @router.get("/reviewed", response_model=ReviewedListResponse)
 async def reviewed_list(
-    author_user_id: str | None = Query(default=None),
-    submitted_from: datetime | None = Query(default=None),
-    submitted_to: datetime | None = Query(default=None),
     q: str | None = Query(default=None, max_length=200),
     category_id: list[str] = Query(default=[]),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -76,9 +65,6 @@ async def reviewed_list(
 ) -> ReviewedListResponse:
     items = await _service(db).reviewed_list(
         current_user=current_user,
-        author_user_id=author_user_id,
-        submitted_from=submitted_from,
-        submitted_to=submitted_to,
         q=q,
         category_ids=category_id or None,
     )

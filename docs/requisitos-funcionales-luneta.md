@@ -48,7 +48,7 @@ Persona con **cuenta verificada** que participa en la comunidad: aporta **valora
 - Todo lo del **investigador** en uso cotidiano de la plataforma.
 - **Revisar** escenarios en revisión de investigadores **a su cargo** (**RF-5**, **RF-6**).
 - **Publicar**, **devolver para cambios** o **marcar como no apto** esos escenarios.
-- **Participar en sugerencias** (**RF-4**). **No** sugerir sobre **publicaciones** que haya **revisado** (el **admin** no tiene esta restricción).
+- **Participar en sugerencias** (**RF-4**). Sobre escenarios **publicados**, solo si **no** realizó la **revisión formal** que llevó a su publicación (mismo flujo que un **investigador** ajeno; el **admin** no tiene esta restricción).
 
 ### Admin
 
@@ -68,7 +68,7 @@ Responsable de la plataforma: **identidades**, **roles**, **asignaciones** revis
 **No** son roles de la plataforma, pero juegan un papel importante en el sistema.
 
 - **Propietario:** el usuario **responsable** del escenario. Es quien **dirige** el contenido, **envía a revisión**, **acepta o rechaza** sugerencias y decide sobre **colaboradores** (**RF-3**, **RF-4**, **RF-5**).
-- **Colaborador:** un usuario que, tras una **contribución reconocida** (sugerencia **aceptada** en un escenario **publicado**), obtiene la **autoría** dentro del escenario (**RF-4**). Puede **consultar** el escenario en el listado propio (**RF-7.3**), pero **no** editar borradores ni enviar a revisión (**RF-5.2**).
+- **Colaborador:** un **investigador** o **revisor** que, tras una **contribución reconocida** (sugerencia **aceptada** en un escenario **publicado**), obtiene la **autoría** dentro del escenario (**RF-4**). Puede **consultar** el escenario en el listado propio (**RF-7.3**), pero **no** editar borradores ni enviar a revisión (**RF-5.2**).
 
 ---
 
@@ -112,7 +112,7 @@ El sistema deberá autenticar usuarios verificados y permitir gestión básica d
 - **RF-2.2.1:** El usuario podrá consultar su perfil.
 - **RF-2.2.2:** El usuario podrá actualizar los datos de su perfil.
 - **RF-2.2.3:** El usuario podrá cambiar su contraseña.
-- **RF-2.2.4:** El perfil de usuario incluirá, como mínimo, **nombre**, **organización**, **foto** y **breve biografía**.
+- **RF-2.2.4:** El perfil de usuario incluirá, como mínimo, **nombre**, **universidad** (opcional), **foto** y **breve biografía** (opcional).
 
 ### RF-2.4 Restricciones de edición de perfil
 
@@ -189,7 +189,7 @@ El sistema deberá permitir **sugerencias de cambio** sobre escenarios, como **r
 ### RF-4.1 Condiciones generales
 
 - **RF-4.1.1:** **Revisión previa a la publicación:** cuando un **borrador** es enviado a revisión, el **revisor** podrá proponer sugerencias de cambio requeridos antes de su publicación.
-- **RF-4.1.2:** **Escenario ya publicado:** un **investigador** puede proponer sugerencias de cambios sobre un escenario existente para incorporarse como **colaborador**. Esto podría pasar si se está creando un escenario y se ha visto que ya existe uno muy similar, o si se están consultando los escenarios y se desea mejorar alguno de ellos.
+- **RF-4.1.2:** **Escenario ya publicado:** un **investigador** o un **revisor** que **no** haya realizado la revisión formal que publicó el escenario puede proponer sugerencias de cambio con el **mismo flujo** (tipos de sugerencia, aceptación, borrador de trabajo y colaborador). El **revisor** que **sí** revisó y publicó el escenario **no** podrá sugerir sobre él. Esto puede ocurrir al detectar un escenario similar al que se quería crear o al consultar escenarios publicados que conviene mejorar.
 - **RF-4.1.3:** Las sugerencias **no** serán visibles en la parte **pública** del sistema.
 - **RF-4.1.4:** El estado de las sugerencias será accesible solo al **propietario**, a los **colaboradores**, al **sugerente** y a los **revisores** asignados al **autor** del escenario (cartera). El **admin** tiene **alcance global**. Los **revisores** que ya hayan realizado una **revisión formal** de ese escenario también podrán consultarlas.
 - **RF-4.1.5:** La **autoría** de cada sugerencia (identidad del **sugerente**) solo será visible para el **administrador**. El resto de roles autorizados verán el contenido y metadatos de la sugerencia (tipo, estado, rol del autor en el sistema al crearla, etc.) **sin** identificar al usuario que la envió. El **registro de actividad** conserva la trazabilidad para el **administrador** (**RF-10**).
@@ -203,9 +203,9 @@ El sistema deberá permitir **sugerencias de cambio** sobre escenarios, como **r
 
 - **RF-4.3.1:** Una sugerencia podrá estar en estado **pendiente**, **aceptada** o **rechazada**.
 - **RF-4.3.2:** Solo el **propietario** podrá aceptar o rechazar sugerencias.
-- **RF-4.3.3:** Si el **propietario** **rechaza** una sugerencia del **revisor**, el escenario **permanece** en **cambios requeridos**.
-- **RF-4.3.4:** Si el **propietario** **rechaza** una sugerencia del **investigador**, **no** se acepta como **colaborador** a ese investigador.
-- **RF-4.3.5:** Si **acepta** una sugerencia de **texto alternativo**, el texto propuesto se añade a un **nuevo borrador de trabajo** del escenario; el escenario necesita **enviarse de nuevo a revisión**. Si la sugerencia es del **revisor** en el ciclo de revisión previo a la publicación, **no** necesita ningún trámite adicional.
+- **RF-4.3.3:** Si el **propietario** **rechaza** una sugerencia del **revisor** en el **ciclo previo a la publicación**, el escenario **permanece** en **cambios requeridos**.
+- **RF-4.3.4:** Si el **propietario** **rechaza** una sugerencia sobre un escenario **publicado** (de **investigador** o de **revisor** ajeno), **no** se añade como **colaborador** a ese usuario.
+- **RF-4.3.5:** Si **acepta** una sugerencia de **texto alternativo** sobre un escenario **publicado**, se abre un **borrador de trabajo** y el texto se aplica en ese borrador; después el escenario debe **enviarse de nuevo a revisión**. Si la sugerencia es del **revisor** en el **ciclo previo a la publicación** (`en revisión` / cola), **no** se abre borrador de trabajo ni nueva revisión por esa sola aceptación.
 - **RF-4.3.6:** Si **acepta** una sugerencia de **comentario**, el **propietario** tiene que hacer los cambios en el escenario o párrafo y **enviar de nuevo a revisión**. En este caso **no** se elimina el comentario hasta que el **revisor** lo valide.
 - **RF-4.3.7:** La aceptación quedará registrada en el **historial** y en el **registro de actividad**; los cambios aceptados solo afectarán a la **versión de borrador** y no se mostrarán en el escenario público hasta completar de nuevo la **revisión** y la **publicación**.
 
@@ -239,21 +239,20 @@ El sistema deberá gestionar el flujo completo de revisión de escenarios.
 - **RF-5.3.4:** El **revisor** podrá consultar la cola de escenarios en revisión de investigadores **a su cargo**.
 - **RF-5.3.5:** El **admin** podrá consultar la misma cola, con **alcance global**.
 - **RF-5.3.6:** La cola se ordenará de **más reciente** a **más antiguo** por fecha de envío.
-- **RF-5.3.7:** La cola soportará filtrado por **propietario** y **rango de fechas**, manteniendo orden descendente.
-- **RF-5.3.8:** El sistema ofrecerá una sección de escenarios **ya revisados**.
+- **RF-5.3.7:** El sistema ofrecerá una sección de escenarios **ya revisados**.
 
 ### RF-5.4 En revisión
 
 - **RF-5.4.1:** El **revisor** **acepta** el escenario y pasa a **publicado**.
 - **RF-5.4.2:** El **revisor** puede modificar el **borrador** del escenario **mínimamente** antes de publicarlo.
 - **RF-5.4.3:** El **revisor** **rechaza** el escenario y pasa a **no apto**.
-- **RF-5.4.4:** El **revisor** realiza **sugerencias de cambio** y pasa a **cambios requeridos**.
+- **RF-5.4.4:** El **revisor** puede dejar **sugerencias de cambio** durante la revisión previa a la publicación; el escenario pasa a **cambios requeridos** cuando el revisor **solicita cambios** (acción explícita), no automáticamente al crear cada sugerencia.
 - **RF-5.4.5:** El sistema notificará al **propietario** del escenario el **resultado** de la revisión.
 
 ### RF-5.5 Cambios requeridos
 
-- **RF-5.5.1:** El escenario tiene **cambios requeridos**, que han sido indicados por el **revisor** para su publicación o que han sido sugeridos por otro **investigador** que quiere colaborar en ese escenario.
-- **RF-5.5.2:** El sistema almacenará una **nota estructurada** con esos cambios requeridos del **revisor** para el escenario.
+- **RF-5.5.1:** El estado **cambios requeridos** aplica al **ciclo de revisión previo a la publicación**, cuando el **revisor** solicita cambios al **propietario**. Las sugerencias sobre escenarios **ya publicados** **no** pasan por este estado al crearse.
+- **RF-5.5.2:** Los cambios requeridos del **revisor** en ese ciclo se expresan mediante **sugerencias** registradas en el sistema (y, opcionalmente, una nota breve al solicitar cambios).
 - **RF-5.5.3:** El sistema notificará al **propietario**.
 - **RF-5.5.4:** El **propietario** puede consultar qué escenarios tienen cambios requeridos y seleccionar uno de ellos para trabajar en esos cambios, pasando a **realizando los cambios requeridos**.
 
@@ -264,9 +263,9 @@ El sistema deberá gestionar el flujo completo de revisión de escenarios.
 
 ### RF-5.7 Publicado
 
-- **RF-5.7.1:** Cuando un escenario está **publicado**, otro **revisor** puede hacerle **sugerencias de cambio**. Estas sugerencias pueden hacerse porque se estaba creando un nuevo escenario y se ha detectado que este es similar pero requiere cambios, o porque al leer el escenario se ha detectado alguna mejora necesaria (**RF-4**; el **investigador** también puede sugerir en **publicado** para colaborar).
-- **RF-5.7.2:** Después de las sugerencias de cambio del **revisor**, el escenario pasaría a **cambios requeridos**.
-- **RF-5.7.3:** Si el **propietario** **edita** un escenario **publicado**, se crea una **copia** del escenario en estado **borrador** con la versión actualizada (**RF-3.7**).
+- **RF-5.7.1:** Cuando un escenario está **publicado**, un **investigador** ajeno o un **revisor** que **no** haya realizado su revisión formal pueden hacer **sugerencias de cambio** con el **mismo flujo** (**RF-4.1.2**). **Crear** la sugerencia **no** cambia el estado del escenario (sigue **publicado**).
+- **RF-5.7.2:** Si el **propietario** **acepta** una sugerencia sobre un escenario **publicado**, se abre un **borrador de trabajo**, se añade al sugerente como **colaborador** (investigador o revisor) y el **propietario** completa los cambios y **envía de nuevo a revisión**; la versión pública vigente no cambia hasta una nueva **publicación** (**RF-3.7**, **RF-4.3.5**).
+- **RF-5.7.3:** Si el **propietario** **edita** directamente un escenario **publicado**, se trabaja sobre la **versión de trabajo** en **borrador** sin alterar lo visible al público hasta completar de nuevo revisión y publicación (**RF-3.7**).
 
 ### RF-5.8 No apto
 
@@ -302,7 +301,7 @@ El sistema deberá gestionar el flujo completo de revisión de escenarios.
 
 - **RF-7.1.1:** El sistema permitirá **búsqueda por texto**.
 - **RF-7.1.2:** El sistema permitirá **filtrar** por **propietario**, **fecha** y **etiquetas**.
-- **RF-7.1.3:** El sistema permitirá **filtrar** por **propiedades** del escenario.
+- **RF-7.1.3:** El sistema permitirá **filtrar** por **propiedades** del escenario derivadas del **contexto de uso** (**RF-8.3**): rango de edad (solapamiento), presencia física u online, si el lugar afecta al escenario, circunstancias especiales, consentimiento y frecuencia/duración del uso.
 - **RF-7.1.4:** El orden por defecto de resultados será de **más reciente** a **más antiguo**.
 - **RF-7.1.5:** El sistema aplicará **paginación** en resultados de búsqueda.
 - **RF-7.1.6:** Todo usuario **autenticado** podrá listar escenarios **publicados** de otros investigadores (mismo catálogo de búsqueda pública que usuarios anónimos).
@@ -382,8 +381,8 @@ El sistema deberá permitir la **evaluación ética** de escenarios **publicados
 
 ### RF-8.5 Visibilidad de las evaluaciones
 
-- **RF-8.5.1:** El sistema mostrará para los **investigadores** la **media global** de la puntuación de **riesgo** y de **beneficio** del escenario y las **etiquetas de riesgo**.
-- **RF-8.5.2:** El **administrador** podrá consultar el **detalle** de cada evaluación (puntuaciones, riesgos detectados y comentario). El **propietario** verá el **resumen agregado** como el resto de usuarios (**RF-8.5.1**) y, si hay **comentarios libres** no vacíos, también esos textos; en ningún caso verá la **identidad** del evaluador ni el detalle individual de cada evaluación.
+- **RF-8.5.1:** En escenarios **publicados**, todo usuario que **pueda evaluar** el escenario (y el **propietario**) verá el **resumen agregado**: **media global** de **riesgo** y **beneficio** y **etiquetas de riesgo** citadas, **sin** identidad de evaluadores ni detalle individual.
+- **RF-8.5.2:** El **administrador** podrá consultar el **detalle** de cada evaluación (puntuaciones, riesgos detectados y comentario). El **propietario** verá el mismo **resumen agregado** (**RF-8.5.1**) y, además, los **comentarios libres** no vacíos recogidos en las evaluaciones; en ningún caso verá la **identidad** del evaluador ni el desglose por evaluación.
 - **RF-8.5.3:** Solo el **administrador** podrá ver la **identidad** del usuario evaluador.
 
 ### RF-8.6 Moderación y control
@@ -398,13 +397,13 @@ El sistema deberá permitir la **evaluación ética** de escenarios **publicados
 
 - **RF-9.1.1:** Antes de **enviar a revisión**, el sistema revisará el contenido para detectar indicios de **datos sensibles** o información **identificable**.
 - **RF-9.1.2:** Si la revisión detecta problemas, el sistema **impedirá continuar** y pedirá que se corrija el contenido de forma explícita.
-- **RF-9.1.3:** Los mensajes explicarán el motivo del bloqueo o de la advertencia **sin reproducir** en el mensaje los datos sensibles detectados.
+- **RF-9.1.3:** Los mensajes explicarán el motivo del bloqueo o de la advertencia. El texto principal **no** reproducirá los datos sensibles detectados; la API podrá incluir **extractos redactados** por campo (tipo de hallazgo y ubicación en el escenario) para orientar la corrección **sin** exponer el dato completo.
 
 ### RF-9.2 Detección de duplicados
 
-- **RF-9.2.1:** Cuando el usuario **cree** o **edite** un escenario y exista contenido suficiente para el análisis (como mínimo **título** y **descripción**), el sistema solicitará a la **IA** una comprobación de **similitud** con otros escenarios.
+- **RF-9.2.1:** Cuando el usuario **cree** o **guarde** un escenario y exista contenido suficiente para el análisis (como mínimo **título** y **descripción**), el sistema ejecutará una comprobación de **similitud** con otros escenarios (desde la **creación** y en cada guardado posterior).
 - **RF-9.2.2:** El sistema mostrará al usuario los escenarios **candidatos a ser similares**, identificados por la asistencia, con la información necesaria para decidir.
-- **RF-9.2.3:** El resultado de la detección se presentará como **sugerencia**; el usuario decidirá si continúa con un escenario nuevo, modifica el suyo o inicia otra acción (por ejemplo, sugerencias al **propietario**, **RF-4**).
+- **RF-9.2.3:** Al **guardar** el borrador, la detección **no impedirá** persistir los cambios aunque haya candidatos similares; el usuario podrá seguir editando. Al **enviar a revisión**, si hay candidatos similares, el sistema **impedirá** el envío hasta que el contenido sea claramente distinto o el usuario revise los escenarios listados (también podrá iniciar otras acciones, por ejemplo sugerencias al **propietario**, **RF-4**).
 - **RF-9.2.4:** Cada ejecución de detección quedará **registrada** (escenario analizado, resultado, fecha y hora y usuario) (**RF-10.9**).
 
 ---

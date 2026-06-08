@@ -20,7 +20,10 @@ export function AdminAssignmentsPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    Promise.all([listAdminUsers(token, "reviewer"), listAdminUsers(token, "investigator")])
+    Promise.all([
+      listAdminUsers(token, { role: "reviewer" }),
+      listAdminUsers(token, { role: "investigator" }),
+    ])
       .then(([revs, invs]) => {
         setReviewers(revs);
         setInvestigators(invs);

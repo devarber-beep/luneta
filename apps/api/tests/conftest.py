@@ -51,7 +51,6 @@ def user_doc(
         "last_name": ln,
         "display_name": display,
         "display_name_normalized": display.lower(),
-        "organization": None,
         "university": None,
         "university_normalized": None,
         "biography": None,
@@ -372,6 +371,28 @@ class FakeCollection:
         return FakeAggregateCursor(rows if rows else docs)
 
 
+def _doc_value(doc: dict[str, Any], key: str) -> Any:
+    if "." not in key:
+        return doc.get(key)
+    current: Any = doc
+    for part in key.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+    return current
+
+
+def _path_exists(doc: dict[str, Any], key: str) -> bool:
+    if "." not in key:
+        return key in doc
+    current: Any = doc
+    for part in key.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    return True
+
+
 def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
     if "$or" in query:
         branches = query["$or"]
@@ -386,7 +407,7 @@ def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
         rest = {k: v for k, v in query.items() if k != "$and"}
         return _matches(doc, rest) if rest else True
     for key, expected in query.items():
-        value = doc.get(key)
+        value = _doc_value(doc, key)
         if isinstance(expected, dict):
             if "$in" in expected:
                 allowed = expected["$in"]
@@ -423,7 +444,7 @@ def _matches(doc: dict[str, Any], query: dict[str, Any]) -> bool:
                     return False
                 continue
             if "$exists" in expected:
-                exists = key in doc
+                exists = _path_exists(doc, key)
                 if expected["$exists"] and not exists:
                     return False
                 if not expected["$exists"] and exists:

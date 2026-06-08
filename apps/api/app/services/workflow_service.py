@@ -52,9 +52,6 @@ class WorkflowService:
         self,
         *,
         current_user: UserModel,
-        author_user_id: str | None = None,
-        submitted_from: datetime | None = None,
-        submitted_to: datetime | None = None,
         q: str | None = None,
         category_ids: list[str] | None = None,
     ) -> list[ReviewQueueItem]:
@@ -64,9 +61,6 @@ class WorkflowService:
             author_ids_from_name = await self._users_repo.list_ids_matching_display_name(trimmed_q)
         scenarios = await self._scenarios_repo.list_by_states(
             states=[ScenarioState.QUEUED, ScenarioState.IN_REVIEW],
-            author_user_id=author_user_id,
-            submitted_from=submitted_from,
-            submitted_to=submitted_to,
             q=q,
             q_matching_author_user_ids=author_ids_from_name or None,
             category_ids=category_ids,
@@ -90,9 +84,6 @@ class WorkflowService:
         self,
         *,
         current_user: UserModel,
-        author_user_id: str | None = None,
-        submitted_from: datetime | None = None,
-        submitted_to: datetime | None = None,
         q: str | None = None,
         category_ids: list[str] | None = None,
     ) -> list[ReviewedScenarioItem]:
@@ -105,9 +96,6 @@ class WorkflowService:
             author_ids_from_name = await self._users_repo.list_ids_matching_display_name(trimmed_q)
         scenarios = await self._scenarios_repo.list_reviewed(
             reviewer_user_id=reviewer_filter,
-            author_user_id=author_user_id,
-            submitted_from=submitted_from,
-            submitted_to=submitted_to,
             q=q,
             q_matching_author_user_ids=author_ids_from_name or None,
             category_ids=category_ids,

@@ -130,7 +130,11 @@ class EvaluationService:
     ) -> dict:
         scenario = await self._require_scenario(scenario_id)
         if not can_read_evaluation_summary(user=current_user, scenario=scenario):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+            return await self._build_summary(
+                scenario_id=scenario_id,
+                evaluations=[],
+                include_comments=False,
+            )
         evaluations = await self._evaluations_repo.list_for_scenario(
             scenario_id=scenario_id,
             include_hidden=False,

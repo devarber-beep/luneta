@@ -89,8 +89,7 @@ export function ScenarioEvaluationInsights({
     }
     try {
       if (showSummary) {
-        const sum = await getScenarioEvaluationSummary(token, scenarioId);
-        setSummary(sum);
+        setSummary(await getScenarioEvaluationSummary(token, scenarioId));
       }
       if (showDetail) {
         const list = await listScenarioEvaluations(token, scenarioId);

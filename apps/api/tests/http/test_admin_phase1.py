@@ -39,11 +39,11 @@ async def test_admin_reads_and_patches_disabled_user_profile(api_client, fake_db
 
     patched = await api_client.patch(
         f"/admin/users/{user_id}/profile",
-        json={"organization": "Lab X"},
+        json={"university": "Lab University"},
         headers=headers,
     )
     assert patched.status_code == 200
-    assert patched.json()["organization"] == "Lab X"
+    assert patched.json()["university"] == "Lab University"
 
 
 @pytest.mark.asyncio

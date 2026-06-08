@@ -45,7 +45,6 @@ class UsersRepository:
             "last_name": ln,
             "display_name": display,
             "display_name_normalized": display_norm,
-            "organization": None,
             "university": None,
             "university_normalized": None,
             "biography": None,
@@ -83,7 +82,6 @@ class UsersRepository:
             "last_name": ln,
             "display_name": display,
             "display_name_normalized": display_norm,
-            "organization": None,
             "university": None,
             "university_normalized": None,
             "biography": None,
@@ -146,6 +144,36 @@ class UsersRepository:
             return []
         role_values = [r.value for r in roles]
         cursor = self._collection.find({"role": {"$in": role_values}}).sort("display_name_normalized", 1)
+        out: list[UserModel] = []
+        async for doc in cursor:
+            model = self._to_model(doc)
+            if model is not None:
+                out.append(model)
+        return out
+
+    async def list_for_admin_summary(
+        self,
+        *,
+        roles: list[UserRole] | None = None,
+        q: str | None = None,
+        include_disabled: bool = False,
+    ) -> list[UserModel]:
+        query: dict[str, Any] = {}
+        if roles:
+            query["role"] = {"$in": [role.value for role in roles]}
+        if not include_disabled:
+            query["account_status"] = UserAccountStatus.ACTIVE.value
+        trimmed_q = (q or "").strip()
+        if trimmed_q:
+            pattern = re.escape(trimmed_q)
+            query["$or"] = [
+                {"first_name": {"$regex": pattern, "$options": "i"}},
+                {"last_name": {"$regex": pattern, "$options": "i"}},
+                {"display_name": {"$regex": pattern, "$options": "i"}},
+                {"display_name_normalized": {"$regex": pattern, "$options": "i"}},
+                {"email_normalized": {"$regex": pattern, "$options": "i"}},
+            ]
+        cursor = self._collection.find(query).sort("display_name_normalized", 1)
         out: list[UserModel] = []
         async for doc in cursor:
             model = self._to_model(doc)

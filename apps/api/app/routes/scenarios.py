@@ -7,7 +7,12 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.permissions import get_collaborator_role, has_republication_pending
 from app.domain.enums import CollaboratorRole
 from app.db import get_db
-from app.deps.authz import require_active_user_with_permission, require_any_active_permission
+from app.deps.authz import (
+    require_active_user_with_permission,
+    require_any_active_permission,
+    require_any_permission,
+    require_permission,
+)
 from app.domain.authz_permissions import Permission
 from app.domain.enums import ScenarioState
 from app.models.user import UserModel
@@ -21,24 +26,26 @@ from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.scenarios import (
-    AddCollaboratorRequest,
     ReorderInlineAssetsRequest,
     ScenarioCreateRequest,
     ScenarioCollaboratorsResponse,
     ScenarioCollaboratorResponse,
     ScenarioPatchRequest,
     ScenarioResponse,
+    SimilarityAdvisoryResponse,
+    SimilarityCandidateResponse,
     ScenarioParticipationRole,
+    ScenarioRevisionListItem,
+    ScenarioRevisionsResponse,
     ScenarioSummaryResponse,
     ScenarioAssetReadUrlResponse,
-    SimilarityCheckRequest,
-    SimilarityCheckResponse,
-    SimilarityCandidateResponse,
     SubmitReviewResponse,
 )
 from app.services.audit_service import AuditService
 from app.services.notifications_factory import build_notification_service
 from app.services.scenario_service import ScenarioService
+from app.services.content_policy import SimilarityAdvisory
+from app.services.scenario_service import ScenarioSaveResult
 from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.suggestion_service import SuggestionService
 from app.storage.minio_storage import MinioScenarioStorage
@@ -91,7 +98,28 @@ def _my_participation_role(*, scenario, user_id: str) -> ScenarioParticipationRo
     return ScenarioParticipationRole.OWNER
 
 
-def _to_response(scenario) -> ScenarioResponse:
+def _similarity_advisory_response(advisory: SimilarityAdvisory | None) -> SimilarityAdvisoryResponse | None:
+    if advisory is None:
+        return None
+    return SimilarityAdvisoryResponse(
+        provider=advisory.provider,
+        candidates=[
+            SimilarityCandidateResponse(
+                scenario_id=c.scenario_id,
+                title=c.title,
+                score=c.score,
+                public_path=c.public_path,
+            )
+            for c in advisory.candidates
+        ],
+    )
+
+
+def _to_response(
+    scenario,
+    *,
+    similarity_advisory: SimilarityAdvisory | None = None,
+) -> ScenarioResponse:
     show_live = scenario.state == ScenarioState.IN_REVIEW or has_republication_pending(scenario=scenario)
     live_title = live_description = None
     if show_live and scenario.public_slug is not None:
@@ -152,7 +180,12 @@ def _to_response(scenario) -> ScenarioResponse:
         updated_at=scenario.updated_at,
         live_public_title=live_title,
         live_public_description=live_description,
+        similarity_advisory=_similarity_advisory_response(similarity_advisory),
     )
+
+
+def _to_response_from_save(result: ScenarioSaveResult) -> ScenarioResponse:
+    return _to_response(result.scenario, similarity_advisory=result.similarity_advisory)
 
 
 @router.post("", response_model=ScenarioResponse)
@@ -161,12 +194,12 @@ async def create_scenario(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_CREATE_DRAFT)),
 ) -> ScenarioResponse:
-    scenario = await _service(db).create_draft(
+    result = await _service(db).create_draft(
         current_user=current_user,
         title=payload.title,
         description=payload.description,
     )
-    return _to_response(scenario)
+    return _to_response_from_save(result)
 
 
 @router.get("/mine", response_model=list[ScenarioSummaryResponse])
@@ -174,7 +207,7 @@ async def list_my_scenarios(
     q: str | None = Query(default=None, max_length=200),
     state: ScenarioState | None = Query(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_READ_OWN)),
+    current_user: UserModel = Depends(require_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
     scenarios = await _service(db).list_my_scenarios(
         current_user=current_user,
@@ -196,40 +229,12 @@ async def list_my_scenarios(
     ]
 
 
-@router.post("/similarity-check", response_model=SimilarityCheckResponse)
-async def check_scenario_similarity(
-    body: SimilarityCheckRequest,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(
-        require_any_active_permission(Permission.SCENARIO_CREATE_DRAFT, Permission.SCENARIO_UPDATE_OWN)
-    ),
-) -> SimilarityCheckResponse:
-    result = await _similarity_service(db).check(
-        title=body.title,
-        description=body.description,
-        actor=current_user,
-        exclude_scenario_id=body.exclude_scenario_id,
-    )
-    return SimilarityCheckResponse(
-        provider=result.provider,
-        candidates=[
-            SimilarityCandidateResponse(
-                scenario_id=c.scenario_id,
-                title=c.title,
-                score=c.score,
-                public_path=c.public_path,
-            )
-            for c in result.candidates
-        ],
-    )
-
-
 @router.get("/{scenario_id}", response_model=ScenarioResponse)
 async def get_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(
-        require_any_active_permission(
+        require_any_permission(
             Permission.SCENARIO_READ_OWN,
             Permission.SCENARIO_READ_REVIEW_QUEUE,
             Permission.SCENARIO_READ_PUBLIC,
@@ -266,7 +271,7 @@ async def patch_scenario(
 ) -> ScenarioResponse:
     raw = payload.model_dump(exclude_unset=True)
     usage_context_raw = raw.get("usage_context")
-    scenario = await _service(db).patch_draft(
+    result = await _service(db).patch_draft(
         scenario_id=scenario_id,
         current_user=current_user,
         title=raw.get("title"),
@@ -279,7 +284,7 @@ async def patch_scenario(
         usage_context=payload.usage_context if usage_context_raw is not None else None,
         sensitive_data_involved=raw.get("sensitive_data_involved"),
     )
-    return _to_response(scenario)
+    return _to_response_from_save(result)
 
 
 @router.delete("/{scenario_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -476,33 +481,36 @@ async def list_collaborators(
     )
 
 
-@router.post("/{scenario_id}/collaborators", response_model=ScenarioResponse)
-async def add_collaborator(
+@router.get("/{scenario_id}/revisions", response_model=ScenarioRevisionsResponse)
+async def list_scenario_revisions(
     scenario_id: str,
-    payload: AddCollaboratorRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
-) -> ScenarioResponse:
-    scenario = await _service(db).add_collaborator(
+    current_user: UserModel = Depends(
+        require_any_permission(
+            Permission.SCENARIO_READ_OWN,
+            Permission.SCENARIO_READ_REVIEW_QUEUE,
+        )
+    ),
+) -> ScenarioRevisionsResponse:
+    revisions = await _service(db).list_revisions(
         scenario_id=scenario_id,
-        collaborator_user_id=payload.user_id,
         current_user=current_user,
     )
-    return _to_response(scenario)
-
-
-@router.delete("/{scenario_id}/collaborators/{user_id}", response_model=ScenarioResponse)
-async def remove_collaborator(
-    scenario_id: str,
-    user_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
-) -> ScenarioResponse:
-    scenario = await _service(db).remove_collaborator(
+    return ScenarioRevisionsResponse(
         scenario_id=scenario_id,
-        collaborator_user_id=user_id,
-        current_user=current_user,
+        items=[
+            ScenarioRevisionListItem(
+                revision_number=row.revision_number,
+                title=row.title,
+                description=row.description,
+                state_snapshot=row.state_snapshot,
+                created_at=row.created_at,
+                created_by_user_id=row.created_by_user_id,
+                accepted_suggestion_id=row.accepted_suggestion_id,
+                change_summary=row.change_summary,
+            )
+            for row in revisions
+        ],
     )
-    return _to_response(scenario)
 
 

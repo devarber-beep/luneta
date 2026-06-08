@@ -192,6 +192,10 @@ export type ScenarioResponse = {
   my_participation_role?: "owner" | "collaborator" | null;
   cover_image?: ScenarioAsset | null;
   inline_assets?: ScenarioAsset[];
+  similarity_advisory?: {
+    provider: string;
+    candidates: SimilarScenarioMatch[];
+  } | null;
 };
 
 export type ScenarioAsset = {
@@ -260,7 +264,6 @@ export type MeProfile = {
   first_name: string;
   last_name: string;
   display_name: string;
-  organization: string | null;
   university: string | null;
   biography: string | null;
   avatar: {
@@ -284,7 +287,6 @@ export async function me(token: string): Promise<MeProfile> {
 export type ProfilePatchPayload = {
   first_name?: string;
   last_name?: string;
-  organization?: string | null;
   university?: string | null;
   biography?: string | null;
 };
@@ -375,24 +377,6 @@ export async function submitReview(token: string, id: string): Promise<{ state: 
   return request(`/scenarios/${id}/submit-review`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-export type SimilarityCandidate = {
-  scenario_id: string;
-  title: string;
-  score: number;
-  public_path: string | null;
-};
-
-export async function checkScenarioSimilarity(
-  token: string,
-  payload: { title: string; description: string; exclude_scenario_id?: string },
-): Promise<{ provider: string; candidates: SimilarityCandidate[] }> {
-  return request("/scenarios/similarity-check", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
   });
 }
 
@@ -500,6 +484,11 @@ export type ScenarioListSearchParams = {
   state?: string;
 };
 
+export type ReviewQueueSearchParams = {
+  q?: string;
+  category_id?: string[];
+};
+
 function appendScenarioListSearchParams(search: URLSearchParams, params: ScenarioListSearchParams = {}) {
   if (params.q?.trim()) {
     search.set("q", params.q.trim());
@@ -512,9 +501,18 @@ function appendScenarioListSearchParams(search: URLSearchParams, params: Scenari
   }
 }
 
+function appendReviewQueueSearchParams(search: URLSearchParams, params: ReviewQueueSearchParams = {}) {
+  if (params.q?.trim()) {
+    search.set("q", params.q.trim());
+  }
+  for (const id of params.category_id ?? []) {
+    search.append("category_id", id);
+  }
+}
+
 export async function reviewQueue(
   token: string,
-  params: ScenarioListSearchParams = {},
+  params: ReviewQueueSearchParams = {},
 ): Promise<{
   items: Array<{
     scenario_id: string;
@@ -530,7 +528,7 @@ export async function reviewQueue(
   }>;
 }> {
   const search = new URLSearchParams();
-  appendScenarioListSearchParams(search, params);
+  appendReviewQueueSearchParams(search, params);
   const qs = search.toString();
   return request(`/workflow/review-queue${qs ? `?${qs}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -584,7 +582,7 @@ export async function publishScenario(token: string, id: string): Promise<Workfl
 
 export async function reviewedScenarios(
   token: string,
-  params: ScenarioListSearchParams = {},
+  params: ReviewQueueSearchParams = {},
 ): Promise<{
   items: Array<{
     scenario_id: string;
@@ -598,7 +596,7 @@ export async function reviewedScenarios(
   }>;
 }> {
   const search = new URLSearchParams();
-  appendScenarioListSearchParams(search, params);
+  appendReviewQueueSearchParams(search, params);
   const qs = search.toString();
   return request(`/workflow/reviewed${qs ? `?${qs}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -636,6 +634,14 @@ export type SearchPublicScenariosParams = {
   published_to?: string;
   category_id?: string[];
   ethical_risk_id?: string[];
+  children_age_min?: number;
+  children_age_max?: number;
+  physically_present?: "yes" | "no";
+  online_present?: "yes" | "no";
+  execution_place_affects_scenario?: "yes" | "no";
+  special_circumstances?: "yes" | "no";
+  consent_in_place?: "yes" | "no";
+  duration_frequency?: ScenarioUsageContext["duration_frequency"];
   page?: number;
   page_size?: number;
 };
@@ -671,6 +677,30 @@ export async function searchPublicScenarios(
   }
   for (const id of params.ethical_risk_id ?? []) {
     search.append("ethical_risk_id", id);
+  }
+  if (params.children_age_min != null) {
+    search.set("children_age_min", String(params.children_age_min));
+  }
+  if (params.children_age_max != null) {
+    search.set("children_age_max", String(params.children_age_max));
+  }
+  if (params.physically_present) {
+    search.set("physically_present", params.physically_present);
+  }
+  if (params.online_present) {
+    search.set("online_present", params.online_present);
+  }
+  if (params.execution_place_affects_scenario) {
+    search.set("execution_place_affects_scenario", params.execution_place_affects_scenario);
+  }
+  if (params.special_circumstances) {
+    search.set("special_circumstances", params.special_circumstances);
+  }
+  if (params.consent_in_place) {
+    search.set("consent_in_place", params.consent_in_place);
+  }
+  if (params.duration_frequency) {
+    search.set("duration_frequency", params.duration_frequency);
   }
   if (params.page != null) {
     search.set("page", String(params.page));

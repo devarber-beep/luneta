@@ -1,5 +1,14 @@
 import { type ChangeEvent, type CSSProperties, type FormEvent, type ReactElement, useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   changeMyPassword,
   deleteMyAvatar,
@@ -16,8 +25,8 @@ import {
   type SuggestionItem,
   verifyEmail,
 } from "./api";
-import { clearSession, setRole, setToken } from "./session";
-import { useRole, useToken } from "./useSession";
+import { clearSession, setMustChangePassword, setRole, setToken } from "./session";
+import { useMustChangePassword, useRole, useToken } from "./useSession";
 import { DescriptionWithSuggestions } from "./components/DescriptionWithSuggestions";
 import { ScenarioEvaluationPanel } from "./components/ScenarioEvaluationPanel";
 import { ScenarioEvaluationInsights } from "./components/ScenarioEvaluationInsights";
@@ -27,6 +36,7 @@ import { AdminCatalogPage } from "./pages/AdminCatalogPage";
 import { AdminAssignmentsPage } from "./pages/AdminAssignmentsPage";
 import { AdminEvaluationsPage } from "./pages/AdminEvaluationsPage";
 import { AdminAuditPage } from "./pages/AdminAuditPage";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { PublishedScenariosSection } from "./components/PublishedScenariosSection";
 import { ScenarioSearchField } from "./components/ScenarioSearchField";
 import { SessionToolbar } from "./components/SessionToolbar";
@@ -63,6 +73,7 @@ function HomePage() {
         {token ? <Link to="/my-profile">My profile</Link> : null}
         {token ? <Link to="/scenarios/new">New scenario</Link> : null}
         {role === "reviewer" || role === "admin" ? <Link to="/review">Review queue</Link> : null}
+        {role === "admin" ? <Link to="/admin/users">Admin users</Link> : null}
         {role === "admin" ? <Link to="/admin/catalogs">Admin catalogs</Link> : null}
         {role === "admin" ? <Link to="/admin/assignments">Assignments</Link> : null}
         {role === "admin" ? <Link to="/admin/evaluations">Moderate evaluations</Link> : null}
@@ -158,10 +169,14 @@ function LoginPage() {
     try {
       const auth = await login(email, password);
       setToken(auth.access_token);
+      setMustChangePassword(auth.must_change_password);
       const profile = await me(auth.access_token);
       setRole(profile.role);
+      setMustChangePassword(profile.must_change_password);
       setMessage(`Signed in as ${profile.role}`);
-      if (profile.role === "reviewer" || profile.role === "admin") {
+      if (profile.must_change_password) {
+        navigate("/my-profile");
+      } else if (profile.role === "reviewer" || profile.role === "admin") {
         navigate("/review");
       } else {
         navigate("/my-scenarios");
@@ -201,12 +216,30 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return children;
 }
 
+function RequireActiveSession({ children }: { children: ReactElement }) {
+  const mustChange = useMustChangePassword();
+  const location = useLocation();
+  if (!mustChange) {
+    return children;
+  }
+  const path = location.pathname;
+  if (path === "/my-profile" || path === "/my-scenarios") {
+    return children;
+  }
+  if (/^\/scenarios\/[^/]+\/view$/.test(path)) {
+    return children;
+  }
+  return <Navigate to="/my-profile" replace />;
+}
+
 function MyProfilePage() {
   const token = useToken();
+  const mustChangePassword = useMustChangePassword();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [university, setUniversity] = useState("");
+  const [biography, setBiography] = useState("");
   const [readOnlyEmail, setReadOnlyEmail] = useState("");
   const [readOnlyRole, setReadOnlyRole] = useState("");
   const [verified, setVerified] = useState(false);
@@ -225,7 +258,9 @@ function MyProfilePage() {
     setLastName(profile.last_name);
     setDisplayName(profile.display_name);
     setUniversity(profile.university ?? "");
+    setBiography(profile.biography ?? "");
     setReadOnlyEmail(profile.email_normalized);
+    setMustChangePassword(profile.must_change_password);
     setReadOnlyRole(profile.role);
     setVerified(profile.email_verified_at != null);
     setVerifiedAt(profile.email_verified_at);
@@ -251,6 +286,7 @@ function MyProfilePage() {
         first_name: fn,
         last_name: ln,
         university: university.trim() || null,
+        biography: biography.trim() || null,
       });
       setMessage("Profile saved.");
       await load();
@@ -298,10 +334,12 @@ function MyProfilePage() {
     }
     try {
       await changeMyPassword(token, { current_password: currentPassword, new_password: newPassword });
-      setMessage("Password updated.");
+      setMustChangePassword(false);
+      setMessage("Password updated. You can now create and edit scenarios.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      await load();
     } catch (error) {
       setMessage((error as Error).message);
     }
@@ -310,6 +348,26 @@ function MyProfilePage() {
   return (
     <main style={layoutStyle}>
       <h2>My profile</h2>
+
+      {mustChangePassword ? (
+        <section
+          style={{
+            marginBottom: "1rem",
+            padding: "0.85rem 1rem",
+            background: "#fff8e6",
+            border: "1px solid #f0d080",
+            borderRadius: "8px",
+            lineHeight: 1.45,
+          }}
+        >
+          <strong>Password change required</strong>
+          <p style={{ margin: "0.5rem 0 0" }}>
+            Your account uses a temporary password. Change it below before creating or editing scenarios. You can still
+            browse your scenarios in read-only mode from{" "}
+            <Link to="/my-scenarios">My scenarios</Link>.
+          </p>
+        </section>
+      ) : null}
 
       <section style={{ marginBottom: "1.5rem", padding: "0.75rem", background: "#f8f8f8", borderRadius: "6px" }}>
         <h3 style={{ marginTop: 0 }}>Account</h3>
@@ -354,20 +412,23 @@ function MyProfilePage() {
               No photo
             </div>
           )}
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <label style={{ cursor: "pointer", color: "#06c" }}>
-              Upload photo
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarSelected} hidden />
-            </label>
-            {avatarUrl ? (
-              <button type="button" onClick={onRemoveAvatar} style={{ width: "fit-content" }}>
-                Remove photo
-              </button>
-            ) : null}
-          </div>
+          {!mustChangePassword ? (
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <label style={{ cursor: "pointer", color: "#06c" }}>
+                Upload photo
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onAvatarSelected} hidden />
+              </label>
+              {avatarUrl ? (
+                <button type="button" onClick={onRemoveAvatar} style={{ width: "fit-content" }}>
+                  Remove photo
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
+      {!mustChangePassword ? (
       <form onSubmit={onSaveProfile} style={{ display: "grid", gap: "0.75rem", maxWidth: "420px", marginBottom: "2rem" }}>
         <h3 style={{ margin: 0 }}>Profile details</h3>
         <label style={{ display: "grid", gap: "0.25rem" }}>
@@ -382,8 +443,18 @@ function MyProfilePage() {
           <span>University</span>
           <input value={university} onChange={(e) => setUniversity(e.target.value)} placeholder="optional" />
         </label>
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span>Biography</span>
+          <textarea
+            value={biography}
+            onChange={(e) => setBiography(e.target.value)}
+            rows={3}
+            placeholder="optional"
+          />
+        </label>
         <button type="submit">Save profile</button>
       </form>
+      ) : null}
 
       <form onSubmit={onChangePassword} style={{ display: "grid", gap: "0.75rem", maxWidth: "420px" }}>
         <h3 style={{ margin: 0 }}>Change password</h3>
@@ -441,6 +512,7 @@ function MyProfilePage() {
 
 function MyScenariosPage() {
   const token = useToken();
+  const mustChangePassword = useMustChangePassword();
   const [searchParams, setSearchParams] = useSearchParams();
   type MyScenariosTab = "all" | "changes_required" | "applying_changes" | "published";
   const tabParam = searchParams.get("state");
@@ -567,11 +639,15 @@ function MyScenariosPage() {
               ({s.my_participation_role === "owner" ? "Owner" : "Collaborator"})
             </span>{" "}
             {s.my_participation_role === "owner" ? (
-              <Link to={`/scenarios/${s.id}/edit`}>Edit / workflow</Link>
+              mustChangePassword ? (
+                <Link to={`/scenarios/${s.id}/view`}>View</Link>
+              ) : (
+                <Link to={`/scenarios/${s.id}/edit`}>Edit / workflow</Link>
+              )
             ) : (
               <Link to={`/scenarios/${s.id}/view`}>View</Link>
             )}
-            {s.my_participation_role === "owner" && s.state === "draft" ? (
+            {s.my_participation_role === "owner" && s.state === "draft" && !mustChangePassword ? (
               <>
                 {" "}
                 <button type="button" onClick={() => onDeleteDraft(s.id, s.title)}>
@@ -828,7 +904,9 @@ export function App() {
           path="/scenarios/new"
           element={
             <RequireAuth>
-              <ScenarioEditorPage isCreate />
+              <RequireActiveSession>
+                <ScenarioEditorPage isCreate />
+              </RequireActiveSession>
             </RequireAuth>
           }
         />
@@ -836,7 +914,9 @@ export function App() {
           path="/scenarios/:id/edit"
           element={
             <RequireAuth>
-              <ScenarioEditorPage />
+              <RequireActiveSession>
+                <ScenarioEditorPage />
+              </RequireActiveSession>
             </RequireAuth>
           }
         />
@@ -852,7 +932,19 @@ export function App() {
           path="/review"
           element={
             <RequireAuth>
-              <ReviewQueuePage />
+              <RequireActiveSession>
+                <ReviewQueuePage />
+              </RequireActiveSession>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <AdminUsersPage />
+              </RequireAdmin>
             </RequireAuth>
           }
         />

@@ -34,6 +34,7 @@ from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.suggestions import SuggestionsRepository
 from app.repositories.users import UsersRepository
+from app.services.audit_helpers import record_revision_snapshot_audit, record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.notification_service import NotificationService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
@@ -357,6 +358,7 @@ class SuggestionService:
         prior_state = patched.state
         bumped = await self._scenarios_repo.bump_revision_number(scenario_id=scenario_id)
         if bumped is not None:
+            summary = f"Applied alternative text on paragraph {(suggestion.paragraph_index or 0) + 1}"
             await self._revisions_repo.create_snapshot(
                 scenario_id=scenario_id,
                 revision_number=bumped.current_revision_number,
@@ -365,7 +367,14 @@ class SuggestionService:
                 state_snapshot=bumped.state,
                 created_by_user_id=current_user.id or "",
                 accepted_suggestion_id=suggestion.id,
-                change_summary=f"Applied alternative text on paragraph {(suggestion.paragraph_index or 0) + 1}",
+                change_summary=summary,
+            )
+            await record_revision_snapshot_audit(
+                self._audit,
+                actor=current_user,
+                scenario_id=scenario_id,
+                revision_number=bumped.current_revision_number,
+                change_summary=summary,
             )
             patched = bumped
         await self._review_events_repo.create(
@@ -408,6 +417,13 @@ class SuggestionService:
             state_snapshot=bumped.state,
             created_by_user_id=actor_user.id or "",
             accepted_suggestion_id=suggestion.id,
+            change_summary=summary,
+        )
+        await record_revision_snapshot_audit(
+            self._audit,
+            actor=actor_user,
+            scenario_id=scenario_id,
+            revision_number=bumped.current_revision_number,
             change_summary=summary,
         )
         await self._review_events_repo.create(
@@ -465,11 +481,11 @@ class SuggestionService:
                         to_state=opened.state,
                     )
                     updated = opened
-            if author_role == UserRole.INVESTIGATOR:
+            if author_role in {UserRole.INVESTIGATOR, UserRole.REVIEWER}:
                 updated = await self._ensure_collaborator(
                     scenario=updated,
                     collaborator_user_id=suggestion.author_user_id,
-                    added_by_user_id=actor_user_id,
+                    actor_user=actor_user,
                 )
             return updated
 
@@ -490,7 +506,7 @@ class SuggestionService:
         *,
         scenario: ScenarioModel,
         collaborator_user_id: str,
-        added_by_user_id: str,
+        actor_user: UserModel,
     ) -> ScenarioModel:
         if collaborator_user_id == scenario.author_user_id:
             return scenario
@@ -498,13 +514,14 @@ class SuggestionService:
         for collab in collaborators:
             if collab["user_id"] == collaborator_user_id:
                 return scenario
+        actor_user_id = actor_user.id or ""
         now = datetime.now(UTC)
         collaborators.append(
             {
                 "user_id": collaborator_user_id,
                 "role": CollaboratorRole.COLLABORATOR.value,
                 "added_at": now,
-                "added_by": added_by_user_id,
+                "added_by": actor_user_id,
             }
         )
         updated = await self._scenarios_repo.replace_collaborators(
@@ -516,16 +533,23 @@ class SuggestionService:
         await self._review_events_repo.create(
             scenario_id=scenario.id or "",
             event_type=ReviewEventType.COLLABORATOR_ADDED,
-            actor_user_id=added_by_user_id,
-            actor_role=UserRole.INVESTIGATOR,
+            actor_user_id=actor_user_id,
+            actor_role=UserRole(actor_user.role),
             from_state=scenario.state,
             to_state=updated.state,
+        )
+        await record_scenario_audit(
+            self._audit,
+            actor=actor_user,
+            action_type=AuditActionType.SCENARIO_COLLABORATOR_ADDED,
+            scenario_id=scenario.id or "",
+            current_extra={"collaborator_user_id": collaborator_user_id},
         )
         if self._notifications is not None:
             await self._notifications.notify_collaborator_added(
                 collaborator_user_id=collaborator_user_id,
                 scenario=updated,
-                actor_user_id=added_by_user_id,
+                actor_user_id=actor_user_id,
             )
         return updated
 

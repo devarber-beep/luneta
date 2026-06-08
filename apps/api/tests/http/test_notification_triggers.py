@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from bson import ObjectId
@@ -288,26 +288,60 @@ async def test_notification_workflow_not_suitable_and_reopen(api_client, fake_db
 
 @pytest.mark.asyncio
 async def test_notification_collaborator_added(api_client, fake_db) -> None:
+    from bson import ObjectId
+
+    from tests.scenario_fixtures import COMPLETE_USAGE_CONTEXT
+
     owner_h = await _signup_and_promote(
         api_client, fake_db, email="notif-own4@luneta.dev", role="investigator", token="notif-own4-tok"
     )
     collab_h = await _signup_and_promote(
         api_client, fake_db, email="notif-col@luneta.dev", role="investigator", token="notif-col-tok"
     )
-    collab_id = await _user_id(fake_db, "notif-col@luneta.dev")
+    admin_h = await _signup_and_promote(
+        api_client, fake_db, email="notif-adm4@luneta.dev", role="admin", token="notif-adm4-tok"
+    )
     create = await api_client.post(
         "/scenarios",
-        json={"title": "Collab notif", "description": "Draft body."},
+        json={"title": "Collab notif", "description": "Published body."},
         headers=owner_h,
     )
     assert create.status_code == 200
     sid = create.json()["id"]
-    added = await api_client.post(
-        f"/scenarios/{sid}/collaborators",
-        headers=owner_h,
-        json={"user_id": collab_id},
+    now = datetime.now(UTC)
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "notif4-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
     )
-    assert added.status_code == 200
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "notif4-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": COMPLETE_USAGE_CONTEXT,
+        },
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=admin_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=admin_h)
+    sug = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=collab_h,
+        json={"scope": "scenario", "kind": "comment", "body": "Improve intro"},
+    )
+    assert sug.status_code == 201
+    accept = await api_client.post(
+        f"/scenarios/{sid}/suggestions/{sug.json()['id']}/accept",
+        headers=owner_h,
+    )
+    assert accept.status_code == 200
     rows = await _notifs_of_type(api_client, collab_h, "collaborator_added")
     assert len(rows) == 1
     assert rows[0]["scenario_id"] == sid
@@ -316,7 +350,14 @@ async def test_notification_collaborator_added(api_client, fake_db) -> None:
 @pytest.mark.asyncio
 async def test_notification_investigator_invited(api_client, fake_db) -> None:
     admin_h = await _admin_headers(api_client, fake_db)
-    with patch("app.services.admin_user_service.secrets.token_urlsafe", return_value="fixed-invite-pass"):
+    send_invite = AsyncMock()
+    with (
+        patch("app.services.admin_user_service.secrets.token_urlsafe", return_value="fixed-invite-pass"),
+        patch(
+            "app.services.mailer_service.MailerService.send_investigator_invite",
+            send_invite,
+        ),
+    ):
         created = await api_client.post(
             "/admin/users/investigators",
             json={"email": "notif-inv@luneta.dev", "first_name": "Notif", "last_name": "Inv"},
@@ -329,6 +370,11 @@ async def test_notification_investigator_invited(api_client, fake_db) -> None:
     )
     assert doc is not None
     assert doc["title"] == "Investigator account created"
+    send_invite.assert_awaited_once()
+    kwargs = send_invite.await_args.kwargs
+    assert kwargs["to_email"] == "notif-inv@luneta.dev"
+    assert kwargs["temporary_password"] == "fixed-invite-pass"
+    assert kwargs["verification_token"]
 
 
 @pytest.mark.asyncio

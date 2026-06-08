@@ -485,9 +485,6 @@ class ScenariosRepository:
         self,
         *,
         states: list[ScenarioState],
-        author_user_id: str | None = None,
-        submitted_from: datetime | None = None,
-        submitted_to: datetime | None = None,
         q: str | None = None,
         q_matching_author_user_ids: list[str] | None = None,
         category_ids: list[str] | None = None,
@@ -497,28 +494,17 @@ class ScenariosRepository:
                 "state": {"$in": [s.value for s in states]},
                 "deleted_at": None,
             },
-            author_user_id=author_user_id,
             q=q,
             q_matching_author_user_ids=q_matching_author_user_ids,
             category_ids=category_ids,
             include_draft_fields=True,
         )
-        if submitted_from is not None or submitted_to is not None:
-            date_clause: dict[str, Any] = {}
-            if submitted_from is not None:
-                date_clause["$gte"] = submitted_from
-            if submitted_to is not None:
-                date_clause["$lte"] = submitted_to
-            query["submitted_for_review_at"] = date_clause
         return await self._find_sorted(query, sort_field="submitted_for_review_at", sort_direction=-1)
 
     async def list_reviewed(
         self,
         *,
         reviewer_user_id: str | None = None,
-        author_user_id: str | None = None,
-        submitted_from: datetime | None = None,
-        submitted_to: datetime | None = None,
         q: str | None = None,
         q_matching_author_user_ids: list[str] | None = None,
         category_ids: list[str] | None = None,
@@ -536,16 +522,8 @@ class ScenariosRepository:
         }
         if reviewer_user_id:
             base["last_reviewed_by_user_id"] = reviewer_user_id
-        if submitted_from is not None or submitted_to is not None:
-            date_clause: dict[str, Any] = {"$ne": None}
-            if submitted_from is not None:
-                date_clause["$gte"] = submitted_from
-            if submitted_to is not None:
-                date_clause["$lte"] = submitted_to
-            base["last_reviewed_at"] = date_clause
         query = self._build_list_query(
             base=base,
-            author_user_id=author_user_id,
             q=q,
             q_matching_author_user_ids=q_matching_author_user_ids,
             category_ids=category_ids,
@@ -568,6 +546,37 @@ class ScenariosRepository:
         items, _total = await self.search_publicly_visible(page=1, page_size=10_000)
         return items
 
+    @staticmethod
+    def _usage_context_search_clauses(
+        *,
+        children_age_min: int | None = None,
+        children_age_max: int | None = None,
+        physically_present: str | None = None,
+        online_present: str | None = None,
+        execution_place_affects_scenario: str | None = None,
+        special_circumstances: str | None = None,
+        consent_in_place: str | None = None,
+        duration_frequency: str | None = None,
+    ) -> list[dict[str, Any]]:
+        clauses: list[dict[str, Any]] = []
+        if children_age_min is not None or children_age_max is not None:
+            overlap_min = children_age_min if children_age_min is not None else children_age_max
+            overlap_max = children_age_max if children_age_max is not None else children_age_min
+            if overlap_min is not None and overlap_max is not None:
+                clauses.append({"usage_context.children_age_start": {"$lte": overlap_max}})
+                clauses.append({"usage_context.children_age_end": {"$gte": overlap_min}})
+        for field, value in (
+            ("physically_present", physically_present),
+            ("online_present", online_present),
+            ("execution_place_affects_scenario", execution_place_affects_scenario),
+            ("special_circumstances", special_circumstances),
+            ("consent_in_place", consent_in_place),
+            ("duration_frequency", duration_frequency),
+        ):
+            if value is not None:
+                clauses.append({f"usage_context.{field}": value})
+        return clauses
+
     async def search_publicly_visible(
         self,
         *,
@@ -578,6 +587,14 @@ class ScenariosRepository:
         published_to: datetime | None = None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
+        children_age_min: int | None = None,
+        children_age_max: int | None = None,
+        physically_present: str | None = None,
+        online_present: str | None = None,
+        execution_place_affects_scenario: str | None = None,
+        special_circumstances: str | None = None,
+        consent_in_place: str | None = None,
+        duration_frequency: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[ScenarioModel], int]:
@@ -599,6 +616,17 @@ class ScenariosRepository:
                 query["published_at"] = {"$lte": published_to}
         if ethical_risk_ids:
             query = self._merge_query(query, {"ethical_risk_ids": {"$in": list(ethical_risk_ids)}})
+        for clause in self._usage_context_search_clauses(
+            children_age_min=children_age_min,
+            children_age_max=children_age_max,
+            physically_present=physically_present,
+            online_present=online_present,
+            execution_place_affects_scenario=execution_place_affects_scenario,
+            special_circumstances=special_circumstances,
+            consent_in_place=consent_in_place,
+            duration_frequency=duration_frequency,
+        ):
+            query = self._merge_query(query, clause)
         total = await self._collection.count_documents(query)
         skip = max(page - 1, 0) * page_size
         items: list[ScenarioModel] = []
