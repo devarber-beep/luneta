@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.permissions import get_collaborator_role, has_republication_pending
+from app.core.scenario_access import can_start_editing_working_copy
 from app.domain.enums import CollaboratorRole
 from app.db import get_db
 from app.deps.authz import (
@@ -38,6 +39,7 @@ from app.schemas.scenarios import (
     ScenarioRevisionListItem,
     ScenarioRevisionsResponse,
     ScenarioSummaryResponse,
+    StartEditingWorkingCopyResponse,
     ScenarioAssetReadUrlResponse,
     SubmitReviewResponse,
 )
@@ -206,15 +208,31 @@ async def create_scenario(
 async def list_my_scenarios(
     q: str | None = Query(default=None, max_length=200),
     state: ScenarioState | None = Query(default=None),
+    pending_suggestions: bool = Query(default=False),
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: UserModel = Depends(require_permission(Permission.SCENARIO_READ_OWN)),
 ) -> list[ScenarioSummaryResponse]:
+    scenario_ids_filter: list[str] | None = None
+    if pending_suggestions:
+        participating_ids = await ScenariosRepository(db).list_participating_user_ids(
+            user_id=current_user.id or ""
+        )
+        scenario_ids_filter = await SuggestionsRepository(db).list_scenario_ids_with_pending_post_publication(
+            scenario_ids=participating_ids
+        )
+        if not scenario_ids_filter:
+            return []
     scenarios = await _service(db).list_my_scenarios(
         current_user=current_user,
         q=q,
-        state=state,
+        state=state if not pending_suggestions else None,
+        scenario_ids=scenario_ids_filter,
     )
     uid = current_user.id or ""
+    scenario_ids = [s.id or "" for s in scenarios if s.id]
+    pending_counts = await _suggestion_service(db).pending_post_publication_counts(
+        scenario_ids=scenario_ids
+    )
     return [
         ScenarioSummaryResponse(
             id=s.id or "",
@@ -224,6 +242,7 @@ async def list_my_scenarios(
             first_published_at=s.first_published_at,
             public_path=f"/public/{s.public_slug}" if s.public_slug else None,
             my_participation_role=_my_participation_role(scenario=s, user_id=uid),
+            pending_suggestion_count=pending_counts.get(s.id or "", 0),
         )
         for s in scenarios
     ]
@@ -245,16 +264,23 @@ async def get_scenario(
         scenario_id=scenario_id,
         current_user=current_user,
     )
-    can_suggest = await _suggestion_service(db).user_can_create_suggestion(
+    sug_svc = _suggestion_service(db)
+    can_suggest = await sug_svc.user_can_create_suggestion(
         scenario_id=scenario_id,
         current_user=current_user,
     )
+    pending_count = await sug_svc.pending_post_publication_count(scenario_id=scenario_id)
     return _to_response(scenario).model_copy(
         update={
             "can_create_suggestion": can_suggest,
             "my_participation_role": _my_participation_role(
                 scenario=scenario,
                 user_id=current_user.id or "",
+            ),
+            "pending_suggestion_count": pending_count,
+            "can_start_editing_working_copy": can_start_editing_working_copy(
+                user=current_user,
+                scenario=scenario,
             ),
         }
     )
@@ -323,6 +349,22 @@ async def start_applying_changes(
         current_user=current_user,
     )
     return SubmitReviewResponse(
+        scenario_id=scenario.id or "",
+        state=scenario.state,
+    )
+
+
+@router.post("/{scenario_id}/start-editing", response_model=StartEditingWorkingCopyResponse)
+async def start_editing_working_copy(
+    scenario_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_UPDATE_OWN)),
+) -> StartEditingWorkingCopyResponse:
+    scenario = await _service(db).start_editing_working_copy(
+        scenario_id=scenario_id,
+        current_user=current_user,
+    )
+    return StartEditingWorkingCopyResponse(
         scenario_id=scenario.id or "",
         state=scenario.state,
     )

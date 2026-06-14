@@ -190,6 +190,8 @@ export type ScenarioResponse = {
   live_public_description?: string | null;
   can_create_suggestion?: boolean;
   my_participation_role?: "owner" | "collaborator" | null;
+  pending_suggestion_count?: number;
+  can_start_editing_working_copy?: boolean;
   cover_image?: ScenarioAsset | null;
   inline_assets?: ScenarioAsset[];
   similarity_advisory?: {
@@ -482,6 +484,7 @@ export type ScenarioListSearchParams = {
   q?: string;
   category_id?: string[];
   state?: string;
+  pending_suggestions?: boolean;
 };
 
 export type ReviewQueueSearchParams = {
@@ -495,6 +498,9 @@ function appendScenarioListSearchParams(search: URLSearchParams, params: Scenari
   }
   if (params.state?.trim()) {
     search.set("state", params.state.trim());
+  }
+  if (params.pending_suggestions) {
+    search.set("pending_suggestions", "true");
   }
   for (const id of params.category_id ?? []) {
     search.append("category_id", id);
@@ -605,6 +611,16 @@ export async function reviewedScenarios(
 
 export async function startApplyingChanges(token: string, id: string): Promise<{ scenario_id: string; state: string }> {
   return request(`/scenarios/${id}/start-applying-changes`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function startEditingWorkingCopy(
+  token: string,
+  id: string,
+): Promise<{ scenario_id: string; state: string }> {
+  return request(`/scenarios/${id}/start-editing`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -757,6 +773,7 @@ export type ScenarioSummary = {
   first_published_at?: string | null;
   public_path?: string | null;
   my_participation_role: "owner" | "collaborator";
+  pending_suggestion_count?: number;
 };
 
 export async function listMyScenarios(

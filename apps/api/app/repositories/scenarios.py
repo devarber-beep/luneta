@@ -651,6 +651,20 @@ class ScenariosRepository:
                 tokens.append(tok)
         return list(dict.fromkeys(tokens))
 
+    async def list_participating_user_ids(self, *, user_id: str) -> list[str]:
+        participation = {
+            "$or": [
+                {"author_user_id": user_id},
+                {"collaborators.user_id": user_id},
+            ]
+        }
+        query = self._merge_query({"deleted_at": None}, participation)
+        ids: list[str] = []
+        cursor = self._collection.find(query)
+        async for doc in cursor:
+            ids.append(str(doc["_id"]))
+        return ids
+
     async def list_for_participating_user(
         self,
         *,
@@ -659,6 +673,7 @@ class ScenariosRepository:
         q_matching_author_user_ids: list[str] | None = None,
         category_ids: list[str] | None = None,
         state: ScenarioState | None = None,
+        scenario_ids: list[str] | None = None,
     ) -> list[ScenarioModel]:
         """Scenarios where the user is author or listed as collaborator."""
         participation = {
@@ -670,6 +685,11 @@ class ScenariosRepository:
         extra_clauses: list[dict[str, Any]] = [participation]
         if state is not None:
             extra_clauses.append({"state": state.value})
+        if scenario_ids is not None:
+            object_ids = [ObjectId(sid) for sid in scenario_ids if ObjectId.is_valid(sid)]
+            if not object_ids:
+                return []
+            extra_clauses.append({"_id": {"$in": object_ids}})
         query = self._build_list_query(
             base={"deleted_at": None},
             q=q,

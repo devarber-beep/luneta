@@ -61,6 +61,20 @@ export function DescriptionWithSuggestions({
 
   const defaultParagraphKind = publishedParagraphAltTextOnly ? "alternative_text" : "comment";
 
+  const paragraphTextForIndex = (index: number) => paragraphs[index] ?? "";
+
+  const initialBodyForParagraphSuggestion = (
+    index: number,
+    kind: "comment" | "alternative_text",
+  ) => (kind === "alternative_text" ? paragraphTextForIndex(index) : "");
+
+  const openParagraphSuggestion = (index: number) => {
+    const kind = defaultParagraphKind;
+    setActiveParagraph(index);
+    setDraftKind(kind);
+    setDraftBody(initialBodyForParagraphSuggestion(index, kind));
+  };
+
   const closeComposer = () => {
     setActiveParagraph(null);
     setDraftBody("");
@@ -274,11 +288,7 @@ export function DescriptionWithSuggestions({
                     right: "0.5rem",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
                   }}
-                  onClick={() => {
-                    setActiveParagraph(index);
-                    setDraftKind(defaultParagraphKind);
-                    setDraftBody("");
-                  }}
+                  onClick={() => openParagraphSuggestion(index)}
                 >
                   Suggest
                 </button>
@@ -316,7 +326,16 @@ export function DescriptionWithSuggestions({
           allowKindChoice={activeParagraph !== "scenario" && !publishedParagraphAltTextOnly}
           busy={busy}
           onBody={setDraftBody}
-          onKind={setDraftKind}
+          onKind={(nextKind) => {
+            setDraftKind(nextKind);
+            if (typeof activeParagraph === "number") {
+              if (nextKind === "alternative_text") {
+                setDraftBody(paragraphTextForIndex(activeParagraph));
+              } else {
+                setDraftBody("");
+              }
+            }
+          }}
           onCancel={closeComposer}
           onSubmit={submitSuggestion}
         />
@@ -460,7 +479,11 @@ function Composer({
         value={body}
         onChange={(e) => onBody(e.target.value)}
         rows={4}
-        placeholder={kind === "alternative_text" ? "Proposed replacement text…" : "Your comment…"}
+        placeholder={
+          kind === "alternative_text"
+            ? "Edit the paragraph text and submit your proposed version…"
+            : "Your comment…"
+        }
         style={{ width: "100%", marginBottom: "0.5rem" }}
       />
       <div style={{ display: "flex", gap: "0.5rem" }}>

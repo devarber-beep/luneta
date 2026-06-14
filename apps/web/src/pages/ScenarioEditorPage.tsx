@@ -15,6 +15,7 @@ import {
   reorderScenarioInlineAssets,
   submitReview,
   startApplyingChanges,
+  startEditingWorkingCopy,
   uploadScenarioCover,
   uploadScenarioInline,
   publishScenario,
@@ -112,6 +113,8 @@ export function ScenarioEditorPage({
   const [canViewSuggestions, setCanViewSuggestions] = useState(false);
   const [apiCanSuggest, setApiCanSuggest] = useState(false);
   const [myParticipationRole, setMyParticipationRole] = useState<"owner" | "collaborator" | null>(null);
+  const [pendingSuggestionCount, setPendingSuggestionCount] = useState(0);
+  const [canStartEditingWorkingCopy, setCanStartEditingWorkingCopy] = useState(false);
 
   const isCollaborator = viewOnly || myParticipationRole === "collaborator";
 
@@ -193,6 +196,8 @@ export function ScenarioEditorPage({
     setState(scenario.state);
     setApiCanSuggest(scenario.can_create_suggestion ?? false);
     setMyParticipationRole(scenario.my_participation_role ?? null);
+    setPendingSuggestionCount(scenario.pending_suggestion_count ?? 0);
+    setCanStartEditingWorkingCopy(scenario.can_start_editing_working_copy ?? false);
     setCoverAsset(
       scenario.cover_image
         ? { asset_id: scenario.cover_image.asset_id, alt_text: scenario.cover_image.alt_text }
@@ -510,8 +515,70 @@ export function ScenarioEditorPage({
       {!isCreate ? (
         <p>
           State: {state}
+          {state === "published" && pendingSuggestionCount > 0 ? (
+            <span style={{ marginLeft: "0.5rem", color: "#b8860b", fontWeight: 600 }}>
+              · {pendingSuggestionCount} pending suggestion{pendingSuggestionCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
           {authorUniversity ? ` · University: ${authorUniversity}` : ""}
         </p>
+      ) : null}
+
+      {isOwner && state === "published" && pendingSuggestionCount > 0 ? (
+        <section
+          style={{
+            marginBottom: "1rem",
+            padding: "1rem 1.1rem",
+            background: "#fff8e6",
+            borderRadius: "10px",
+            border: "1px solid #f0d080",
+          }}
+        >
+          <p style={{ margin: 0, lineHeight: 1.45 }}>
+            You have {pendingSuggestionCount} pending suggestion{pendingSuggestionCount === 1 ? "" : "s"} on this
+            published scenario. The public version stays live until you review them and publish an updated version.
+          </p>
+        </section>
+      ) : null}
+
+      {isOwner && state === "published" && canStartEditingWorkingCopy ? (
+        <section
+          style={{
+            marginBottom: "1rem",
+            padding: "1rem 1.1rem",
+            background: "#f3f6fc",
+            borderRadius: "10px",
+            border: "1px solid #c5d4f7",
+          }}
+        >
+          <p style={{ margin: "0 0 0.75rem", lineHeight: 1.45 }}>
+            Open a draft working copy to apply accepted suggestions or prepare a new version. The current public
+            version remains visible until you complete review and publish again.
+          </p>
+          <button
+            type="button"
+            style={primaryReviewBtnStyle}
+            disabled={saving}
+            onClick={async () => {
+              const token = getToken();
+              if (!token || !scenarioId) return;
+              setSaving(true);
+              try {
+                const result = await startEditingWorkingCopy(token, scenarioId);
+                setState(result.state);
+                setCanStartEditingWorkingCopy(false);
+                setMessage("Draft working copy opened. You can edit and apply suggestion text.");
+                await load(scenarioId);
+              } catch (e) {
+                setMessage((e as Error).message);
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            Start editing draft
+          </button>
+        </section>
       ) : null}
 
       {isOwner && state === "changes_required" ? (

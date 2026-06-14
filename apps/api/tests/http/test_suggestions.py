@@ -362,8 +362,10 @@ async def test_investigator_alternative_text_accept_adds_collaborator(api_client
     )
     assert accept.status_code == 200
     scenario = accept.json()["scenario"]
-    assert scenario["state"] == "draft"
-    assert "Revised opening." not in scenario["description"]
+    assert scenario["state"] == "published"
+    start = await api_client.post(f"/scenarios/{sid}/start-editing", headers=owner_h)
+    assert start.status_code == 200
+    assert start.json()["state"] == "draft"
     apply = await api_client.post(
         f"/scenarios/{sid}/suggestions/{sug.json()['id']}/apply-text",
         headers=owner_h,
@@ -831,6 +833,7 @@ async def test_reviewer_published_suggestion_blocked_if_they_reviewed(api_client
     assert allowed.status_code == 201
     after_create = await api_client.get(f"/scenarios/{sid}", headers=owner_h)
     assert after_create.json()["state"] == "published"
+    assert after_create.json()["pending_suggestion_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -910,10 +913,13 @@ async def test_reviewer_published_accept_adds_collaborator(api_client, fake_db) 
     )
     assert accept.status_code == 200
     scenario = accept.json()["scenario"]
-    assert scenario["state"] == "draft"
+    assert scenario["state"] == "published"
     other_rev_doc = await fake_db["users"].find_one({"email_normalized": "sugrev7d@luneta.dev"})
     collab_ids = [c["user_id"] for c in scenario["collaborators"]]
     assert str(other_rev_doc["_id"]) in collab_ids
+    start = await api_client.post(f"/scenarios/{sid}/start-editing", headers=owner_h)
+    assert start.status_code == 200
+    assert start.json()["state"] == "draft"
 
 
 @pytest.mark.asyncio
@@ -1062,6 +1068,85 @@ async def test_suggestion_author_visible_only_to_admin(api_client, fake_db) -> N
     admin_list = await api_client.get(f"/scenarios/{sid}/suggestions", headers=admin_h)
     assert admin_list.status_code == 200
     assert admin_list.json()["items"][0]["author_user_id"] == rev_id
+
+
+@pytest.mark.asyncio
+async def test_mine_pending_suggestions_tab_filters(api_client, fake_db) -> None:
+    owner_h = await _signup_and_promote(
+        api_client, fake_db, email="minepend1@luneta.dev", role="investigator", token="mine-p1"
+    )
+    peer_h = await _signup_and_promote(
+        api_client, fake_db, email="minepend2@luneta.dev", role="investigator", token="mine-p2"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Listed pending", "description": "Body."},
+        headers=owner_h,
+    )
+    sid = create.json()["id"]
+    now = datetime.now(UTC)
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "mp-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "mp-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    admin_h = await _signup_and_promote(
+        api_client, fake_db, email="mineadm@luneta.dev", role="admin", token="mine-adm"
+    )
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=admin_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=admin_h)
+    await api_client.post(
+        "/scenarios",
+        json={"title": "No suggestions here", "description": "Other draft."},
+        headers=owner_h,
+    )
+    sug = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=peer_h,
+        json={
+            "scope": "paragraph",
+            "kind": "alternative_text",
+            "paragraph_index": 0,
+            "body": "Try this opening.",
+        },
+    )
+    assert sug.status_code == 201
+    pending_tab = await api_client.get(
+        "/scenarios/mine?pending_suggestions=true",
+        headers=owner_h,
+    )
+    assert pending_tab.status_code == 200
+    rows = pending_tab.json()
+    assert len(rows) == 1
+    assert rows[0]["id"] == sid
+    assert rows[0]["pending_suggestion_count"] == 1
+    all_rows = await api_client.get("/scenarios/mine", headers=owner_h)
+    assert len(all_rows.json()) >= 2
 
 
 

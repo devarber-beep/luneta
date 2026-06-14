@@ -81,6 +81,14 @@ class SuggestionService:
             reviewer_has_reviewed_scenario=reviewed,
         )
 
+    async def pending_post_publication_count(self, *, scenario_id: str) -> int:
+        return await self._suggestions_repo.count_pending_post_publication(scenario_id=scenario_id)
+
+    async def pending_post_publication_counts(self, *, scenario_ids: list[str]) -> dict[str, int]:
+        return await self._suggestions_repo.count_pending_post_publication_by_scenario_ids(
+            scenario_ids=scenario_ids
+        )
+
     async def list_paragraphs(self, *, scenario_id: str, current_user: UserModel) -> list[str]:
         scenario = await self._require_scenario(scenario_id)
         portfolio = await self._portfolio(current_user)
@@ -467,20 +475,6 @@ class SuggestionService:
 
         if at_creation == ScenarioState.PUBLISHED:
             updated = scenario
-            if scenario.state == ScenarioState.PUBLISHED and is_valid_transition(
-                scenario.state, ScenarioState.DRAFT
-            ):
-                opened = await self._scenarios_repo.open_working_copy_from_published(scenario_id=scenario_id)
-                if opened is not None:
-                    await self._review_events_repo.create(
-                        scenario_id=scenario_id,
-                        event_type=ReviewEventType.DRAFT_SAVED,
-                        actor_user_id=actor_user_id,
-                        actor_role=actor_role_enum,
-                        from_state=scenario.state,
-                        to_state=opened.state,
-                    )
-                    updated = opened
             if author_role in {UserRole.INVESTIGATOR, UserRole.REVIEWER}:
                 updated = await self._ensure_collaborator(
                     scenario=updated,

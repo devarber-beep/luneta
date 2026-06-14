@@ -103,6 +103,55 @@ class SuggestionsRepository:
             count += 1
         return count
 
+    async def count_pending_post_publication(self, *, scenario_id: str) -> int:
+        return await self._collection.count_documents(
+            {
+                "scenario_id": scenario_id,
+                "status": SuggestionStatus.PENDING.value,
+                "scenario_state_at_creation": ScenarioState.PUBLISHED.value,
+            }
+        )
+
+    async def list_scenario_ids_with_pending_post_publication(
+        self,
+        *,
+        scenario_ids: list[str] | None = None,
+    ) -> list[str]:
+        query: dict[str, Any] = {
+            "status": SuggestionStatus.PENDING.value,
+            "scenario_state_at_creation": ScenarioState.PUBLISHED.value,
+        }
+        if scenario_ids:
+            query["scenario_id"] = {"$in": scenario_ids}
+        found: set[str] = set()
+        cursor = self._collection.find(query, {"scenario_id": 1})
+        async for doc in cursor:
+            sid = doc.get("scenario_id")
+            if isinstance(sid, str):
+                found.add(sid)
+        return sorted(found)
+
+    async def count_pending_post_publication_by_scenario_ids(
+        self,
+        *,
+        scenario_ids: list[str],
+    ) -> dict[str, int]:
+        if not scenario_ids:
+            return {}
+        counts: dict[str, int] = {scenario_id: 0 for scenario_id in scenario_ids}
+        cursor = self._collection.find(
+            {
+                "scenario_id": {"$in": scenario_ids},
+                "status": SuggestionStatus.PENDING.value,
+                "scenario_state_at_creation": ScenarioState.PUBLISHED.value,
+            }
+        )
+        async for doc in cursor:
+            sid = doc.get("scenario_id")
+            if isinstance(sid, str):
+                counts[sid] = counts.get(sid, 0) + 1
+        return counts
+
     async def set_status(
         self,
         *,

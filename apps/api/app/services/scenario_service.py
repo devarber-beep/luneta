@@ -16,6 +16,7 @@ from app.core.scenario_access import (
     can_delete_own_draft,
     can_read_scenario,
     can_start_applying_changes_scenario,
+    can_start_editing_working_copy,
     can_submit_review,
     can_update_scenario,
 )
@@ -151,6 +152,7 @@ class ScenarioService:
         current_user: UserModel,
         q: str | None = None,
         state: ScenarioState | None = None,
+        scenario_ids: list[str] | None = None,
     ) -> list[ScenarioModel]:
         await self._scenarios_repo.ensure_indexes()
         author_ids_from_name: list[str] | None = None
@@ -162,6 +164,7 @@ class ScenarioService:
             q=q,
             q_matching_author_user_ids=author_ids_from_name or None,
             state=state,
+            scenario_ids=scenario_ids,
         )
 
     async def get_scenario_if_readable(self, *, scenario_id: str, current_user: UserModel) -> ScenarioModel:
@@ -580,6 +583,45 @@ class ScenarioService:
             actor_role=UserRole(current_user.role),
             from_state=scenario.state,
             to_state=updated.state,
+        )
+        return updated
+
+    async def start_editing_working_copy(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+    ) -> ScenarioModel:
+        scenario = await self._scenarios_repo.get_by_id(scenario_id)
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        if not can_start_editing_working_copy(user=current_user, scenario=scenario):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot start editing this scenario",
+            )
+        if not is_valid_transition(scenario.state, ScenarioState.DRAFT):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Invalid state transition")
+        updated = await self._scenarios_repo.open_working_copy_from_published(scenario_id=scenario_id)
+        if updated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
+        actor_user_id = current_user.id or ""
+        await self._review_events_repo.create(
+            scenario_id=updated.id or "",
+            event_type=ReviewEventType.DRAFT_SAVED,
+            actor_user_id=actor_user_id,
+            actor_role=UserRole(current_user.role),
+            from_state=scenario.state,
+            to_state=updated.state,
+        )
+        await record_scenario_audit(
+            self._audit,
+            actor=current_user,
+            action_type=AuditActionType.SCENARIO_CONTENT_UPDATED,
+            scenario_id=updated.id or "",
+            from_state=scenario.state,
+            to_state=updated.state,
+            current_extra={"action": "start_editing_working_copy"},
         )
         return updated
 

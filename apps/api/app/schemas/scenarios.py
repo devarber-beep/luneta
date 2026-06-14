@@ -22,6 +22,7 @@ class ScenarioSummaryResponse(BaseModel):
     first_published_at: datetime | None = None
     public_path: str | None = None
     my_participation_role: ScenarioParticipationRole
+    pending_suggestion_count: int = 0
 
 
 class ScenarioCreateRequest(BaseModel):
@@ -105,7 +106,14 @@ class ScenarioResponse(BaseModel):
     live_public_description: str | None = None
     can_create_suggestion: bool = False
     my_participation_role: ScenarioParticipationRole | None = None
+    pending_suggestion_count: int = 0
+    can_start_editing_working_copy: bool = False
     similarity_advisory: SimilarityAdvisoryResponse | None = None
+
+
+class StartEditingWorkingCopyResponse(BaseModel):
+    scenario_id: str
+    state: ScenarioState
 
 
 class SubmitReviewResponse(BaseModel):

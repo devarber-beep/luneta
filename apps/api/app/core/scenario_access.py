@@ -124,6 +124,19 @@ def can_start_applying_changes_scenario(*, user: UserModel, scenario: ScenarioMo
     return can_start_applying_changes(collaborator_role=collaborator, state=scenario.state)
 
 
+def can_start_editing_working_copy(*, user: UserModel, scenario: ScenarioModel) -> bool:
+    """Owner opens a draft working copy from a still-published scenario."""
+    if scenario.deleted_at is not None:
+        return False
+    if scenario.state != ScenarioState.PUBLISHED:
+        return False
+    if Permission.SCENARIO_UPDATE_OWN not in permissions_for_user(user=user):
+        return False
+    uid = user.id or ""
+    collaborator = get_collaborator_role(scenario=scenario, user_id=uid)
+    return can_edit_published_content(collaborator_role=collaborator)
+
+
 def _not_own_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
     return (user.id or "") != scenario.author_user_id
 

@@ -514,10 +514,13 @@ function MyScenariosPage() {
   const token = useToken();
   const mustChangePassword = useMustChangePassword();
   const [searchParams, setSearchParams] = useSearchParams();
-  type MyScenariosTab = "all" | "changes_required" | "applying_changes" | "published";
+  type MyScenariosTab = "all" | "changes_required" | "applying_changes" | "published" | "pending_suggestions";
   const tabParam = searchParams.get("state");
   const activeTab: MyScenariosTab =
-    tabParam === "changes_required" || tabParam === "applying_changes" || tabParam === "published"
+    tabParam === "changes_required" ||
+    tabParam === "applying_changes" ||
+    tabParam === "published" ||
+    tabParam === "pending_suggestions"
       ? tabParam
       : "all";
   const [items, setItems] = useState<
@@ -528,6 +531,7 @@ function MyScenariosPage() {
       first_published_at?: string | null;
       public_path?: string | null;
       my_participation_role: "owner" | "collaborator";
+      pending_suggestion_count?: number;
     }>
   >([]);
   const [searchQ, setSearchQ] = useState("");
@@ -543,7 +547,13 @@ function MyScenariosPage() {
     try {
       const rows = await listMyScenarios(token, {
         q: submittedQ || undefined,
-        state: activeTab === "all" ? undefined : activeTab,
+        state:
+          activeTab === "changes_required" ||
+          activeTab === "applying_changes" ||
+          activeTab === "published"
+            ? activeTab
+            : undefined,
+        pending_suggestions: activeTab === "pending_suggestions",
       });
       setItems(rows);
       setMessage("");
@@ -591,7 +601,9 @@ function MyScenariosPage() {
           ? "No scenarios are being updated."
           : activeTab === "published"
             ? "No published scenarios."
-            : "No scenarios are associated with your account.";
+            : activeTab === "pending_suggestions"
+              ? "No scenarios with pending suggestions."
+              : "No scenarios are associated with your account.";
 
   return (
     <main style={layoutStyle}>
@@ -620,6 +632,13 @@ function MyScenariosPage() {
         <button type="button" onClick={() => setTab("published")} disabled={activeTab === "published"}>
           Published
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("pending_suggestions")}
+          disabled={activeTab === "pending_suggestions"}
+        >
+          Pending suggestions
+        </button>
       </div>
       <ScenarioSearchField
         value={searchQ}
@@ -634,7 +653,13 @@ function MyScenariosPage() {
       <ul style={{ marginTop: "1rem", paddingLeft: "1.25rem" }}>
         {items.map((s) => (
           <li key={s.id} style={{ marginBottom: "0.5rem" }}>
-            <strong>{s.title}</strong> — {s.state}{" "}
+            <strong>{s.title}</strong> — {s.state}
+            {(s.pending_suggestion_count ?? 0) > 0 ? (
+              <span style={{ marginLeft: "0.35rem", color: "#b8860b", fontWeight: 600 }}>
+                · {s.pending_suggestion_count} pending suggestion
+                {(s.pending_suggestion_count ?? 0) === 1 ? "" : "s"}
+              </span>
+            ) : null}{" "}
             <span style={{ color: "#666", fontSize: "0.9rem" }}>
               ({s.my_participation_role === "owner" ? "Owner" : "Collaborator"})
             </span>{" "}
