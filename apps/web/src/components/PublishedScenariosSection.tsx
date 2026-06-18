@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   fetchPublicSearchCategories,
   fetchPublicSearchEthicalRisks,
@@ -8,7 +7,9 @@ import {
   type PublicScenarioListItem,
 } from "../api";
 import { CatalogFilterDropdown } from "./CatalogFilterDropdown";
+import { ScenarioCard } from "./ScenarioCard";
 import { ScenarioSearchField } from "./ScenarioSearchField";
+import { StatusMessage } from "./StatusMessage";
 import {
   emptyUsageContextSearchFilters,
   UsageContextSearchFilters,
@@ -17,16 +18,22 @@ import {
 } from "./UsageContextSearchFilters";
 
 type Props = {
-  heading?: string;
+  /** Omit or pass empty string to hide the in-section heading. */
+  sectionHeading?: string;
+  searchPlaceholder?: string;
+  pageSize?: number;
 };
 
-export function PublishedScenariosSection({ heading = "Published scenarios" }: Props) {
+export function PublishedScenariosSection({
+  sectionHeading = "Published scenarios",
+  searchPlaceholder,
+  pageSize = 6,
+}: Props) {
   const [q, setQ] = useState("");
   const [submittedQ, setSubmittedQ] = useState("");
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<PublicScenarioListItem[]>([]);
   const [total, setTotal] = useState(0);
-  const pageSize = 20;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,13 +69,13 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [submittedQ, page, selectedCategoryIds, selectedRiskIds, usageFilters]);
+  }, [submittedQ, page, pageSize, selectedCategoryIds, selectedRiskIds, usageFilters]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <section style={{ marginTop: "2rem" }}>
-      <h2>{heading}</h2>
+    <section aria-labelledby={sectionHeading ? "published-scenarios-heading" : undefined}>
+      {sectionHeading ? <h2 id="published-scenarios-heading">{sectionHeading}</h2> : null}
       <ScenarioSearchField
         value={q}
         onChange={setQ}
@@ -76,9 +83,9 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           setPage(1);
           setSubmittedQ(q.trim());
         }}
-        placeholder="Search by title, description, author or university"
+        placeholder={searchPlaceholder}
       />
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+      <div className="filter-row">
         <CatalogFilterDropdown
           label="Categories"
           emptyLabel="All categories"
@@ -107,32 +114,47 @@ export function PublishedScenariosSection({ heading = "Published scenarios" }: P
           }}
         />
       </div>
-      {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
-      {loading ? <p style={{ color: "#666" }}>Loading…</p> : null}
+      <StatusMessage message={error} variant="error" onDismiss={() => setError("")} />
+      {loading ? (
+        <p className="text-muted" role="status" aria-live="polite">
+          Loading…
+        </p>
+      ) : null}
       {!loading && !items.length ? <p>No published scenarios match your filters.</p> : null}
-      <ul style={{ paddingLeft: "1.25rem", margin: 0 }}>
+      <div className="scenario-card-grid">
         {items.map((s) => (
-          <li key={s.id} style={{ marginBottom: "0.65rem" }}>
-            <Link to={s.public_path}>{s.title}</Link>
-            <div style={{ fontSize: "0.85rem", color: "#555" }}>
-              {s.author_display_name}
-              {s.author_university ? ` · ${s.author_university}` : ""} · {new Date(s.published_at).toLocaleDateString()}
-            </div>
-          </li>
+          <ScenarioCard
+            key={s.id}
+            scenario={{
+              id: s.id,
+              title: s.title,
+              href: s.public_path,
+              coverUrl: s.cover_url,
+              coverAlt: s.cover_alt,
+              descriptionPreview: s.description_preview,
+              evaluationCount: s.evaluation_count,
+              averageRiskScore: s.average_risk_score,
+              averageBenefitScore: s.average_benefit_score,
+              meta: [
+                `${s.author_display_name}${s.author_university ? ` · ${s.author_university}` : ""}`,
+                `Published ${new Date(s.published_at).toLocaleDateString()}`,
+              ],
+            }}
+          />
         ))}
-      </ul>
+      </div>
       {total > pageSize ? (
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "1rem" }}>
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+        <nav className="pagination" aria-label="Published scenarios pagination">
+          <button type="button" className="btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
           </button>
-          <span style={{ fontSize: "0.9rem", color: "#555" }}>
+          <span className="text-muted" style={{ fontSize: "0.9rem" }}>
             Page {page} of {totalPages} ({total} results)
           </span>
-          <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <button type="button" className="btn" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </button>
-        </div>
+        </nav>
       ) : null}
     </section>
   );

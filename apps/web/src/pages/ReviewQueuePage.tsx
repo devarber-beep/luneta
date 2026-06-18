@@ -12,45 +12,33 @@ import {
   type PublicCatalogEntry,
 } from "../api";
 import { CatalogFilterDropdown } from "../components/CatalogFilterDropdown";
+import { PageLayout } from "../components/PageLayout";
+import { ScenarioCard } from "../components/ScenarioCard";
 import { ScenarioSearchField } from "../components/ScenarioSearchField";
+import { StatusMessage } from "../components/StatusMessage";
 import { getRole, getToken } from "../session";
 
-const layoutStyle = { maxWidth: "900px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+type QueueItem = Awaited<ReturnType<typeof reviewQueue>>["items"][number];
+type ReviewedItem = Awaited<ReturnType<typeof reviewedScenarios>>["items"][number];
 
-type QueueItem = {
-  scenario_id: string;
-  title: string;
-  author_user_id: string;
-  author_university?: string | null;
-  state: string;
-  has_prior_approval: boolean;
-  submitted_at?: string | null;
-  live_public_title?: string | null;
-  live_public_description?: string | null;
-  live_public_path?: string | null;
-};
+function authorMetaLine(item: { author_display_name: string; author_university?: string | null }) {
+  return `${item.author_display_name}${item.author_university ? ` · ${item.author_university}` : ""}`;
+}
 
 export function ReviewQueuePage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<"pending" | "reviewed">("pending");
   const [pending, setPending] = useState<QueueItem[]>([]);
-  const [reviewed, setReviewed] = useState<
-    Array<{
-      scenario_id: string;
-      title: string;
-      author_university?: string | null;
-      state: string;
-      last_reviewed_at: string;
-      last_review_outcome?: string | null;
-      live_public_path?: string | null;
-    }>
-  >([]);
+  const [reviewed, setReviewed] = useState<ReviewedItem[]>([]);
   const [message, setMessage] = useState("");
   const [searchQ, setSearchQ] = useState("");
   const [submittedQ, setSubmittedQ] = useState("");
   const [categories, setCategories] = useState<PublicCatalogEntry[]>([]);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [reviewedPage, setReviewedPage] = useState(1);
+  const pageSize = 6;
 
   useEffect(() => {
     fetchPublicSearchCategories()
@@ -86,6 +74,19 @@ export function ReviewQueuePage() {
     load().catch((e: Error) => setMessage(e.message));
   }, [submittedQ, selectedCategoryIds]);
 
+  useEffect(() => {
+    setPendingPage(1);
+    setReviewedPage(1);
+  }, [submittedQ, selectedCategoryIds]);
+
+  const pendingTotalPages = Math.max(1, Math.ceil(pending.length / pageSize));
+  const pendingCurrentPage = Math.min(pendingPage, pendingTotalPages);
+  const paginatedPending = pending.slice((pendingCurrentPage - 1) * pageSize, pendingCurrentPage * pageSize);
+
+  const reviewedTotalPages = Math.max(1, Math.ceil(reviewed.length / pageSize));
+  const reviewedCurrentPage = Math.min(reviewedPage, reviewedTotalPages);
+  const paginatedReviewed = reviewed.slice((reviewedCurrentPage - 1) * pageSize, reviewedCurrentPage * pageSize);
+
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
@@ -100,16 +101,9 @@ export function ReviewQueuePage() {
   const isAdmin = getRole() === "admin";
 
   return (
-    <main style={layoutStyle}>
-      <h2>Review</h2>
-      <p>Role: {getRole() ?? "—"}</p>
-      <ScenarioSearchField
-        value={searchQ}
-        onChange={setSearchQ}
-        onSubmit={() => setSubmittedQ(searchQ.trim())}
-        placeholder="Search by title, description, author or university"
-      />
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem", alignItems: "flex-end" }}>
+    <PageLayout documentTitle="Review queue" heading="Review queue">
+      <ScenarioSearchField value={searchQ} onChange={setSearchQ} onSubmit={() => setSubmittedQ(searchQ.trim())} />
+      <div className="filter-row">
         <CatalogFilterDropdown
           label="Categories"
           emptyLabel="All categories"
@@ -118,128 +112,200 @@ export function ReviewQueuePage() {
           onChange={setSelectedCategoryIds}
         />
       </div>
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-        <button type="button" onClick={() => setTab("pending")} disabled={tab === "pending"}>
+      <div className="btn-group" role="tablist" aria-label="Review lists">
+        <button type="button" className="btn" onClick={() => setTab("pending")} disabled={tab === "pending"}>
           Pending queue
         </button>
-        <button type="button" onClick={() => setTab("reviewed")} disabled={tab === "reviewed"}>
+        <button type="button" className="btn" onClick={() => setTab("reviewed")} disabled={tab === "reviewed"}>
           Already reviewed
         </button>
       </div>
-      {loading ? <p style={{ color: "#666" }}>Loading…</p> : null}
+      {loading ? (
+        <p className="text-muted" role="status" aria-live="polite">
+          Loading…
+        </p>
+      ) : null}
       {tab === "pending" ? (
-        <>
-          {pending.map((item) => (
-            <div
+        <div className="scenario-card-grid">
+          {paginatedPending.map((item) => (
+            <ScenarioCard
               key={item.scenario_id}
-              style={{ border: "1px solid #ccc", padding: "0.75rem", marginBottom: "0.75rem" }}
-            >
-              <strong>{item.title}</strong> — {item.state}
-              <br />
-              <span style={{ fontSize: "0.85rem", color: "#555" }}>
-                Owner: {item.author_user_id}
-                {item.author_university ? ` · ${item.author_university}` : ""}
-              </span>
-              {item.submitted_at ? (
-                <p style={{ fontSize: "0.85rem", margin: "0.35rem 0" }}>
-                  Submitted: {new Date(item.submitted_at).toLocaleString()}
-                </p>
-              ) : null}
-              {item.has_prior_approval && item.live_public_title ? (
-                <div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "#f9f9f9", borderRadius: "4px" }}>
-                  <strong>Live public version:</strong> {item.live_public_title}
-                  {item.live_public_description ? (
-                    <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", marginTop: "0.35rem" }}>
-                      {item.live_public_description}
-                    </pre>
-                  ) : null}
-                </div>
-              ) : null}
-              <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {item.state === "queued" ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      run(async () => {
-                        await startReviewScenario(token, item.scenario_id);
-                        navigate(`/scenarios/${item.scenario_id}/edit`);
-                      }, "Review started.")
-                    }
-                  >
-                    Start review
-                  </button>
-                ) : (
-                  <Link to={`/scenarios/${item.scenario_id}/edit`}>Open for review</Link>
-                )}
-                {item.state === "in_review" ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => run(() => publishScenario(token, item.scenario_id), "Published.")}
-                    >
-                      Publish
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const note = window.prompt("Required changes (note to author):");
-                        if (!note?.trim()) return;
-                        run(() => requestChangesScenario(token, item.scenario_id, note.trim()), "Changes requested.");
-                      }}
-                    >
-                      Request changes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const reason = window.prompt("Reason (optional):");
-                        run(
-                          () => markNotSuitableScenario(token, item.scenario_id, reason ?? undefined),
-                          "Marked not suitable.",
-                        );
-                      }}
-                    >
-                      Mark not suitable
-                    </button>
-                  </>
-                ) : null}
-                {item.live_public_path ? <Link to={item.live_public_path}>View public</Link> : null}
-              </div>
-            </div>
+              scenario={{
+                id: item.scenario_id,
+                title: item.title,
+                href: `/scenarios/${item.scenario_id}/edit`,
+                coverUrl: item.cover_url,
+                coverAlt: item.cover_alt,
+                descriptionPreview: item.description_preview,
+                badges: [
+                  { label: item.state.replaceAll("_", " "), tone: "muted" },
+                  ...(item.has_prior_approval ? [{ label: "Republication", tone: "warning" as const }] : []),
+                ],
+                meta: [
+                  authorMetaLine(item),
+                  item.submitted_at ? `Submitted ${new Date(item.submitted_at).toLocaleString()}` : "",
+                ].filter(Boolean),
+                footer: (
+                  <div className="btn-group">
+                    {item.state === "queued" ? (
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        onClick={() =>
+                          run(async () => {
+                            await startReviewScenario(token, item.scenario_id);
+                            navigate(`/scenarios/${item.scenario_id}/edit`);
+                          }, "Review started.")
+                        }
+                      >
+                        Start review
+                      </button>
+                    ) : (
+                      <Link to={`/scenarios/${item.scenario_id}/edit`} className="btn btn--primary">
+                        Open for review
+                      </Link>
+                    )}
+                    {item.state === "in_review" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => run(() => publishScenario(token, item.scenario_id), "Published.")}
+                        >
+                          Publish
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            const note = window.prompt("Required changes (note to author):");
+                            if (!note?.trim()) return;
+                            run(() => requestChangesScenario(token, item.scenario_id, note.trim()), "Changes requested.");
+                          }}
+                        >
+                          Request changes
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            const reason = window.prompt("Reason (optional):");
+                            run(
+                              () => markNotSuitableScenario(token, item.scenario_id, reason ?? undefined),
+                              "Marked not suitable.",
+                            );
+                          }}
+                        >
+                          Mark not suitable
+                        </button>
+                      </>
+                    ) : null}
+                    {item.live_public_path ? (
+                      <Link to={item.live_public_path} className="btn">
+                        View public
+                      </Link>
+                    ) : null}
+                  </div>
+                ),
+              }}
+            />
           ))}
-          {!loading && !pending.length ? <p>No pending items match your filters.</p> : null}
-        </>
+        </div>
       ) : (
-        <>
-          {reviewed.map((item) => (
-            <div
+        <div className="scenario-card-grid">
+          {paginatedReviewed.map((item) => (
+            <ScenarioCard
               key={item.scenario_id}
-              style={{ border: "1px solid #ddd", padding: "0.75rem", marginBottom: "0.75rem" }}
-            >
-              <strong>{item.title}</strong> — {item.state} ({item.last_review_outcome ?? "—"})
-              {item.author_university ? (
-                <p style={{ fontSize: "0.85rem", margin: "0.25rem 0" }}>{item.author_university}</p>
-              ) : null}
-              <p style={{ fontSize: "0.85rem" }}>Reviewed: {new Date(item.last_reviewed_at).toLocaleString()}</p>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <Link to={`/scenarios/${item.scenario_id}/edit`}>Open</Link>
-                {item.live_public_path ? <Link to={item.live_public_path}>View public</Link> : null}
-                {isAdmin && item.state === "not_suitable" ? (
-                  <button
-                    type="button"
-                    onClick={() => run(() => reopenScenario(token, item.scenario_id), "Reopened to draft.")}
-                  >
-                    Reopen (admin)
-                  </button>
-                ) : null}
-              </div>
-            </div>
+              scenario={{
+                id: item.scenario_id,
+                title: item.title,
+                href: `/scenarios/${item.scenario_id}/edit`,
+                coverUrl: item.cover_url,
+                coverAlt: item.cover_alt,
+                descriptionPreview: item.description_preview,
+                badges: [
+                  { label: item.state.replaceAll("_", " "), tone: "muted" },
+                  { label: item.last_review_outcome ?? "reviewed", tone: "default" },
+                ],
+                meta: [
+                  authorMetaLine(item),
+                  `Reviewed ${new Date(item.last_reviewed_at).toLocaleString()}`,
+                ],
+                footer: (
+                  <div className="btn-group">
+                    <Link to={`/scenarios/${item.scenario_id}/edit`} className="btn btn--primary">
+                      Open
+                    </Link>
+                    {item.live_public_path ? (
+                      <Link to={item.live_public_path} className="btn">
+                        View public
+                      </Link>
+                    ) : null}
+                    {isAdmin && item.state === "not_suitable" ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => run(() => reopenScenario(token, item.scenario_id), "Reopened to draft.")}
+                      >
+                        Reopen (admin)
+                      </button>
+                    ) : null}
+                  </div>
+                ),
+              }}
+            />
           ))}
-          {!loading && !reviewed.length ? <p>No reviewed items match your filters.</p> : null}
-        </>
+        </div>
       )}
-      {message ? <p>{message}</p> : null}
-      <Link to="/">Back</Link>
-    </main>
+      {tab === "pending" && pending.length > pageSize ? (
+        <nav className="pagination" aria-label="Pending review queue pagination">
+          <button
+            type="button"
+            className="btn"
+            disabled={pendingCurrentPage <= 1}
+            onClick={() => setPendingPage((p) => p - 1)}
+          >
+            Previous
+          </button>
+          <span className="text-muted" style={{ fontSize: "0.9rem" }}>
+            Page {pendingCurrentPage} of {pendingTotalPages} ({pending.length} results)
+          </span>
+          <button
+            type="button"
+            className="btn"
+            disabled={pendingCurrentPage >= pendingTotalPages}
+            onClick={() => setPendingPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </nav>
+      ) : null}
+      {tab === "reviewed" && reviewed.length > pageSize ? (
+        <nav className="pagination" aria-label="Reviewed scenarios pagination">
+          <button
+            type="button"
+            className="btn"
+            disabled={reviewedCurrentPage <= 1}
+            onClick={() => setReviewedPage((p) => p - 1)}
+          >
+            Previous
+          </button>
+          <span className="text-muted" style={{ fontSize: "0.9rem" }}>
+            Page {reviewedCurrentPage} of {reviewedTotalPages} ({reviewed.length} results)
+          </span>
+          <button
+            type="button"
+            className="btn"
+            disabled={reviewedCurrentPage >= reviewedTotalPages}
+            onClick={() => setReviewedPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </nav>
+      ) : null}
+      {tab === "pending" && !loading && !pending.length ? <p>No pending items match your filters.</p> : null}
+      {tab === "reviewed" && !loading && !reviewed.length ? <p>No reviewed items match your filters.</p> : null}
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+    </PageLayout>
   );
 }

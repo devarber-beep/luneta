@@ -46,3 +46,12 @@ export function aiRegenerateConfirmMessage(): string {
     "The current list will be replaced and any items you have not applied or discarded will be lost."
   );
 }
+
+export function isAiGenerateSuccessMessage(message: string): boolean {
+  return message.startsWith("Generated ") && message.includes("AI suggestion");
+}
+
+export function isAiPersistReminderMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("save draft to persist") || lower.includes("save the draft");
+}

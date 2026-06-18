@@ -1,5 +1,4 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   createAdminInvestigator,
   listAdminUsers,
@@ -8,8 +7,9 @@ import {
   type AdminUserSummary,
 } from "../adminApi";
 import { getToken } from "../session";
-
-const layoutStyle = { maxWidth: "960px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+import { PageLayout } from "../components/PageLayout";
+import { FormField } from "../components/FormField";
+import { StatusMessage } from "../components/StatusMessage";
 
 const ROLE_LABELS: Record<string, string> = {
   registered: "Registered",
@@ -116,14 +116,8 @@ export function AdminUsersPage() {
   };
 
   return (
-    <main style={layoutStyle}>
-      <h2>Admin — users</h2>
-      <p style={{ color: "#555", lineHeight: 1.45 }}>
-        Browse all accounts, change roles (promote or demote along the registered → investigator → reviewer chain), and
-        activate or deactivate users. Admin accounts cannot change role here.
-      </p>
-
-      <section style={{ marginTop: "1.5rem" }}>
+    <PageLayout documentTitle="Users" heading="">
+      <section>
         <h3 style={{ marginTop: 0 }}>All users</h3>
         <form
           onSubmit={(e) => {
@@ -134,11 +128,7 @@ export function AdminUsersPage() {
         >
           <label style={{ display: "grid", gap: "0.25rem", flex: "1 1 240px" }}>
             <span>Search by name or email</span>
-            <input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="e.g. maria@university.edu"
-            />
+            <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
           </label>
           <button type="submit">Search</button>
           <button
@@ -215,48 +205,40 @@ export function AdminUsersPage() {
         ) : null}
       </section>
 
-      <section style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid #e0e0e0" }}>
-        <h3 style={{ marginTop: 0 }}>Create investigator</h3>
-        <p style={{ color: "#555", lineHeight: 1.45, marginTop: 0 }}>
-          New investigators receive a temporary password and must verify email before editing scenarios.
-        </p>
-        <form onSubmit={onCreateInvestigator} style={{ display: "grid", gap: "0.75rem", maxWidth: "420px" }}>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>First name</span>
-            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required minLength={1} />
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Last name</span>
-            <input value={lastName} onChange={(e) => setLastName(e.target.value)} required minLength={1} />
-          </label>
-          <button type="submit" disabled={saving}>
-            {saving ? "Creating…" : "Create investigator"}
-          </button>
-        </form>
+      <section className="admin-users-create">
+        <div className="auth-card card admin-users-create__card">
+          <h3 className="admin-users-create__title">Create investigator</h3>
+          <form onSubmit={onCreateInvestigator} className="form-stack">
+            <FormField
+              label="Email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <FormField
+              label="First name"
+              required
+              minLength={1}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+            />
+            <FormField
+              label="Last name"
+              required
+              minLength={1}
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+            <button type="submit" className="btn btn--primary" disabled={saving}>
+              {saving ? "Creating…" : "Create investigator"}
+            </button>
+          </form>
+        </div>
       </section>
 
-      {message ? (
-        <p
-          style={{
-            marginTop: "1rem",
-            padding: "0.65rem",
-            borderRadius: "6px",
-            background: message.toLowerCase().includes("created") || message.toLowerCase().includes("updated")
-              ? "#e8f5e9"
-              : "#fdecea",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {message}
-        </p>
-      ) : null}
-      <p style={{ marginTop: "1.5rem" }}>
-        <Link to="/admin/assignments">Reviewer assignments</Link> · <Link to="/">Home</Link>
-      </p>
-    </main>
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+    </PageLayout>
   );
 }

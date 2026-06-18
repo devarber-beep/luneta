@@ -1,4 +1,4 @@
-import { type CSSProperties, type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ContentPolicyError,
@@ -37,35 +37,33 @@ import {
   type UsageContextFormState,
 } from "../components/ScenarioUsageContextFields";
 import { ScenarioAiSuggestionsPanel } from "../components/ScenarioAiSuggestionsPanel";
+import {
+  isAiGenerateSuccessMessage,
+  isAiPersistReminderMessage,
+} from "../components/aiSuggestionMessages";
+import { FormField } from "../components/FormField";
+import { PageLayout } from "../components/PageLayout";
+import { StatusMessage } from "../components/StatusMessage";
 import { getRole, getToken } from "../session";
 
-const layoutStyle = { maxWidth: "860px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
-const sectionStyle = {
-  marginBottom: "1.25rem",
-  padding: "1rem",
-  border: "1px solid #e0e0e0",
-  borderRadius: "8px",
-  background: "#fafafa",
-};
-
-const primaryReviewBtnStyle: CSSProperties = {
-  background: "#1a73e8",
-  color: "#fff",
-  border: "none",
-  borderRadius: "6px",
-  padding: "0.45rem 0.9rem",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const secondaryReviewBtnStyle: CSSProperties = {
-  background: "#fff",
-  color: "#5f6368",
-  border: "1px solid #dadce0",
-  borderRadius: "6px",
-  padding: "0.45rem 0.9rem",
-  cursor: "pointer",
-};
+function editorStatusFeedback(message: string, hasSimilarityWarning: boolean) {
+  if (hasSimilarityWarning) {
+    return { variant: "warning" as const, presentation: "modal" as const, title: undefined };
+  }
+  if (message === "Your changes have been saved.") {
+    return { variant: "success" as const, presentation: "modal" as const, title: "Saved successfully" };
+  }
+  if (message === "Submitted for review.") {
+    return { variant: "success" as const, presentation: "modal" as const, title: "Submitted for review" };
+  }
+  if (isAiGenerateSuccessMessage(message)) {
+    return { variant: "success" as const, presentation: "modal" as const, title: "AI suggestions ready" };
+  }
+  if (isAiPersistReminderMessage(message)) {
+    return { variant: "warning" as const, presentation: "modal" as const, title: "Save to keep changes" };
+  }
+  return { variant: undefined, presentation: "auto" as const, title: undefined };
+}
 
 export function ScenarioEditorPage({
   isCreate = false,
@@ -96,7 +94,6 @@ export function ScenarioEditorPage({
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [inlineFile, setInlineFile] = useState<File | null>(null);
   const [authorUserId, setAuthorUserId] = useState("");
-  const [authorUniversity, setAuthorUniversity] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [reviewerHasFeedback, setReviewerHasFeedback] = useState(false);
@@ -114,12 +111,11 @@ export function ScenarioEditorPage({
   const [apiCanSuggest, setApiCanSuggest] = useState(false);
   const [myParticipationRole, setMyParticipationRole] = useState<"owner" | "collaborator" | null>(null);
   const [pendingSuggestionCount, setPendingSuggestionCount] = useState(0);
-  const [canStartEditingWorkingCopy, setCanStartEditingWorkingCopy] = useState(false);
 
   const isCollaborator = viewOnly || myParticipationRole === "collaborator";
 
   const reviewerInReview =
-    (role === "reviewer" || role === "admin") && state === "in_review" && !isOwner;
+    state === "in_review" && (isAdmin || (role === "reviewer" && !isOwner));
   const locked =
     isCollaborator ||
     state === "not_suitable" ||
@@ -142,6 +138,7 @@ export function ScenarioEditorPage({
     !isCollaborator &&
     isOwner &&
     (state === "draft" || state === "published" || state === "applying_changes");
+  const hideResolvedSuggestions = state === "published";
   const loadAssetPreviews = async (sid: string, coverAssetId: string | null, inlineAssetIds: string[]) => {
     const token = getToken();
     if (!token || !sid) {
@@ -192,12 +189,10 @@ export function ScenarioEditorPage({
     setEthicalRiskIds(scenario.ethical_risk_ids ?? []);
     setUsageContext(usageContextFromScenario(scenario.usage_context));
     setAuthorUserId(scenario.author_user_id);
-    setAuthorUniversity(scenario.author_university ?? null);
     setState(scenario.state);
     setApiCanSuggest(scenario.can_create_suggestion ?? false);
     setMyParticipationRole(scenario.my_participation_role ?? null);
     setPendingSuggestionCount(scenario.pending_suggestion_count ?? 0);
-    setCanStartEditingWorkingCopy(scenario.can_start_editing_working_copy ?? false);
     setCoverAsset(
       scenario.cover_image
         ? { asset_id: scenario.cover_image.asset_id, alt_text: scenario.cover_image.alt_text }
@@ -329,6 +324,15 @@ export function ScenarioEditorPage({
     return id;
   };
 
+  const ensureWorkingCopyBeforeSave = async (token: string, id: string) => {
+    const scenario = await getScenario(token, id);
+    if (!scenario.can_start_editing_working_copy) {
+      return;
+    }
+    const result = await startEditingWorkingCopy(token, id);
+    setState(result.state);
+  };
+
   const onSave = async (event: FormEvent) => {
     event.preventDefault();
     const token = getToken();
@@ -341,6 +345,7 @@ export function ScenarioEditorPage({
     try {
       const id = await persistDraft();
       if (!id) return;
+      await ensureWorkingCopyBeforeSave(token, id);
       let updated = await patchScenario(token, id, {
         title: title.trim(),
         description: description.trim(),
@@ -379,10 +384,10 @@ export function ScenarioEditorPage({
       setBlockingError(false);
       if (advisoryCandidates.length > 0) {
         setMessage(
-          `Saved. Revision #${updated.current_revision_number}\nWarning: this scenario looks similar to published scenario(s). Review before submitting.`,
+          "Warning: this scenario looks similar to published scenario(s). Review before submitting.",
         );
       } else {
-        setMessage(`Saved. Revision #${updated.current_revision_number}`);
+        setMessage("Your changes have been saved.");
       }
     } catch (error) {
       if (error instanceof ContentPolicyError) {
@@ -410,6 +415,7 @@ export function ScenarioEditorPage({
     try {
       const id = await persistDraft();
       if (!id) return;
+      await ensureWorkingCopyBeforeSave(token, id);
       await patchScenario(token, id, {
         title: title.trim(),
         description: description.trim(),
@@ -444,6 +450,7 @@ export function ScenarioEditorPage({
     const token = getToken();
     if (!token || !scenarioId) return;
     try {
+      await ensureWorkingCopyBeforeSave(token, scenarioId);
       const updated = await deleteScenarioCoverAsset(token, scenarioId);
       setCoverAsset(null);
       setAssetPreviewCache({});
@@ -458,6 +465,7 @@ export function ScenarioEditorPage({
     const token = getToken();
     if (!token || !scenarioId) return;
     try {
+      await ensureWorkingCopyBeforeSave(token, scenarioId);
       const updated = await deleteScenarioInlineAsset(token, scenarioId, assetId);
       const sorted = (updated.inline_assets ?? [])
         .slice()
@@ -480,6 +488,7 @@ export function ScenarioEditorPage({
     const next = inlineAssets.slice();
     [next[idx], next[to]] = [next[to], next[idx]];
     try {
+      await ensureWorkingCopyBeforeSave(token, scenarioId);
       const updated = await reorderScenarioInlineAssets(
         token,
         scenarioId,
@@ -510,93 +519,42 @@ export function ScenarioEditorPage({
   };
 
   return (
-    <main style={layoutStyle}>
-      <h2>{isCreate ? "New scenario" : isCollaborator ? "View scenario" : "Edit scenario"}</h2>
+    <PageLayout
+      documentTitle={isCreate ? "New scenario" : title || "Scenario"}
+      heading={isCreate ? "New scenario" : isCollaborator ? "View scenario" : "Edit scenario"}
+      headingLevel={1}
+      className={`page-layout--scenario-editor${isCreate ? " page-layout--scenario-editor-new" : ""}`}
+    >
       {!isCreate ? (
-        <p>
-          State: {state}
+        <div className="scenario-editor__meta">
+          <span className={`scenario-editor__state scenario-editor__state--${state || "draft"}`}>
+            {(state || "draft").replaceAll("_", " ")}
+          </span>
           {state === "published" && pendingSuggestionCount > 0 ? (
-            <span style={{ marginLeft: "0.5rem", color: "#b8860b", fontWeight: 600 }}>
-              · {pendingSuggestionCount} pending suggestion{pendingSuggestionCount === 1 ? "" : "s"}
+            <span className="scenario-editor__meta-note">
+              {pendingSuggestionCount} pending suggestion{pendingSuggestionCount === 1 ? "" : "s"}
             </span>
           ) : null}
-          {authorUniversity ? ` · University: ${authorUniversity}` : ""}
-        </p>
+        </div>
       ) : null}
 
       {isOwner && state === "published" && pendingSuggestionCount > 0 ? (
-        <section
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem 1.1rem",
-            background: "#fff8e6",
-            borderRadius: "10px",
-            border: "1px solid #f0d080",
-          }}
-        >
-          <p style={{ margin: 0, lineHeight: 1.45 }}>
+        <section className="scenario-editor__callout scenario-editor__callout--warning">
+          <p>
             You have {pendingSuggestionCount} pending suggestion{pendingSuggestionCount === 1 ? "" : "s"} on this
             published scenario. The public version stays live until you review them and publish an updated version.
           </p>
         </section>
       ) : null}
 
-      {isOwner && state === "published" && canStartEditingWorkingCopy ? (
-        <section
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem 1.1rem",
-            background: "#f3f6fc",
-            borderRadius: "10px",
-            border: "1px solid #c5d4f7",
-          }}
-        >
-          <p style={{ margin: "0 0 0.75rem", lineHeight: 1.45 }}>
-            Open a draft working copy to apply accepted suggestions or prepare a new version. The current public
-            version remains visible until you complete review and publish again.
-          </p>
-          <button
-            type="button"
-            style={primaryReviewBtnStyle}
-            disabled={saving}
-            onClick={async () => {
-              const token = getToken();
-              if (!token || !scenarioId) return;
-              setSaving(true);
-              try {
-                const result = await startEditingWorkingCopy(token, scenarioId);
-                setState(result.state);
-                setCanStartEditingWorkingCopy(false);
-                setMessage("Draft working copy opened. You can edit and apply suggestion text.");
-                await load(scenarioId);
-              } catch (e) {
-                setMessage((e as Error).message);
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            Start editing draft
-          </button>
-        </section>
-      ) : null}
-
       {isOwner && state === "changes_required" ? (
-        <section
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem 1.1rem",
-            background: "#fff8e6",
-            borderRadius: "10px",
-            border: "1px solid #f0d080",
-          }}
-        >
-          <p style={{ margin: "0 0 0.75rem", lineHeight: 1.45 }}>
+        <section className="scenario-editor__callout scenario-editor__callout--warning">
+          <p>
             Reviewers have requested changes. Read their suggestions below, then start editing when you are ready.
           </p>
           <button
             type="button"
-            style={primaryReviewBtnStyle}
+            className="btn btn--primary"
             disabled={saving}
             onClick={async () => {
               const token = getToken();
@@ -620,21 +578,12 @@ export function ScenarioEditorPage({
       ) : null}
 
       {reviewerInReview ? (
-        <section
-          style={{
-            marginBottom: "1rem",
-            padding: "1rem 1.1rem",
-            background: "linear-gradient(180deg, #f0f6ff 0%, #e8f0fe 100%)",
-            borderRadius: "10px",
-            border: "1px solid #b8d4f5",
-            boxShadow: "0 1px 2px rgba(26, 115, 232, 0.08)",
-          }}
-        >
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <section className="review-banner">
+          <div className="btn-group">
             {reviewerHasFeedback ? (
               <button
                 type="button"
-                style={primaryReviewBtnStyle}
+                className="btn btn--primary"
                 onClick={() => {
                   const token = getToken();
                   if (!token || !scenarioId) return;
@@ -652,7 +601,7 @@ export function ScenarioEditorPage({
               <>
                 <button
                   type="button"
-                  style={primaryReviewBtnStyle}
+                  className="btn btn--primary"
                   onClick={async () => {
                     const token = getToken();
                     if (!token || !scenarioId) return;
@@ -669,7 +618,7 @@ export function ScenarioEditorPage({
                 </button>
                 <button
                   type="button"
-                  style={secondaryReviewBtnStyle}
+                  className="btn"
                   onClick={() => {
                     const token = getToken();
                     if (!token || !scenarioId) return;
@@ -686,7 +635,7 @@ export function ScenarioEditorPage({
                 </button>
               </>
             )}
-            <Link to="/review" style={{ marginLeft: "0.25rem", fontSize: "0.9rem" }}>
+            <Link to="/review" className="scenario-editor__banner-link">
               Back to queue
             </Link>
           </div>
@@ -694,8 +643,8 @@ export function ScenarioEditorPage({
       ) : null}
 
       {isCollaborator && useParagraphSuggestionUi ? (
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>{title}</h3>
+        <section className="card editor-section">
+          <h3 className="editor-section__title">{title}</h3>
           <DescriptionWithSuggestions
             scenarioId={scenarioId}
             description={description}
@@ -703,6 +652,7 @@ export function ScenarioEditorPage({
             canSuggest={false}
             canViewSuggestions={canViewSuggestions}
             canResolve={false}
+            hideResolvedSuggestions={hideResolvedSuggestions}
             onSuggestionSubmitted={async () => {
               if (scenarioId) await loadSuggestions(scenarioId);
             }}
@@ -711,31 +661,28 @@ export function ScenarioEditorPage({
       ) : null}
 
       {blockingError && message ? (
-        <section
-          role="alert"
-          style={{
-            marginBottom: "1rem",
-            padding: "0.85rem 1rem",
-            background: "#fdecea",
-            border: "1px solid #f5c2c0",
-            borderRadius: "8px",
-            color: "#b3261e",
-            lineHeight: 1.45,
-            fontSize: "0.95rem",
+        <StatusMessage
+          message={message}
+          variant="warning"
+          presentation="modal"
+          title={
+            sensitiveFindings.length
+              ? "Sensitive or identifiable data detected"
+              : "Very similar published scenario detected"
+          }
+          onDismiss={() => {
+            setBlockingError(false);
+            setMessage("");
+            setSensitiveFindings([]);
+            setSimilarMatches([]);
           }}
         >
-          <strong style={{ display: "block", marginBottom: "0.35rem" }}>
-            {sensitiveFindings.length
-              ? "Sensitive or identifiable data detected"
-              : "Very similar published scenario detected"}
-          </strong>
-          <p style={{ margin: "0 0 0.5rem", whiteSpace: "pre-wrap" }}>{message}</p>
           {sensitiveFindings.length ? (
-            <div style={{ marginTop: "0.65rem" }}>
-              <strong style={{ fontSize: "0.88rem" }}>Where it was found</strong>
-              <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
+            <div>
+              <strong>Where it was found</strong>
+              <ul className="text-list">
                 {sensitiveFindings.map((f, idx) => (
-                  <li key={`${f.field}-${f.finding_type}-${idx}`} style={{ marginBottom: "0.35rem" }}>
+                  <li key={`${f.field}-${f.finding_type}-${idx}`}>
                     <span style={{ fontWeight: 600 }}>{f.field_label}</span> — {f.label}
                     <div style={{ fontFamily: "monospace", fontSize: "0.82rem", marginTop: "0.15rem" }}>
                       {f.excerpt}
@@ -746,11 +693,11 @@ export function ScenarioEditorPage({
             </div>
           ) : null}
           {similarMatches.length ? (
-            <div style={{ marginTop: "0.65rem" }}>
-              <strong style={{ fontSize: "0.88rem" }}>Similar published scenario(s)</strong>
-              <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
+            <div>
+              <strong>Similar published scenario(s)</strong>
+              <ul className="text-list">
                 {similarMatches.map((c) => (
-                  <li key={c.scenario_id} style={{ marginBottom: "0.35rem" }}>
+                  <li key={c.scenario_id}>
                     {c.public_path ? (
                       <Link to={c.public_path} target="_blank" rel="noopener noreferrer">
                         {c.title}
@@ -758,20 +705,22 @@ export function ScenarioEditorPage({
                     ) : (
                       c.title
                     )}
-                    <span style={{ color: "#666", marginLeft: "0.35rem" }}>(score {c.score})</span>
+                    <span className="text-muted" style={{ marginLeft: "0.35rem" }}>
+                      (score {c.score})
+                    </span>
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
-          <span style={{ display: "block", marginTop: "0.65rem", fontSize: "0.88rem" }}>
+          <p className="text-muted" style={{ margin: "0.65rem 0 0", fontSize: "0.88rem" }}>
             Your changes were not saved. Update the text below, then save or submit again.
-          </span>
-        </section>
+          </p>
+        </StatusMessage>
       ) : null}
 
       {!isCollaborator ? (
-      <form onSubmit={onSave} style={{ display: "grid", gap: "1rem" }}>
+      <form onSubmit={onSave} className="scenario-editor__form">
         {isOwner && scenarioId && ownerCanEditDescription ? (
           <ScenarioAiSuggestionsPanel
             token={getToken() ?? ""}
@@ -791,15 +740,20 @@ export function ScenarioEditorPage({
             }}
           />
         ) : null}
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>Basics</h3>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Title</span>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={locked} required minLength={3} />
-          </label>
-          <div style={{ display: "grid", gap: "0.25rem", marginTop: "0.75rem" }}>
-            <span>Description</span>
-            {ownerCanEditDescription ? (
+        <section className="card editor-section">
+          <h3 className="editor-section__title">Basics</h3>
+          <div className="editor-section__stack">
+            <FormField
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={locked}
+              required
+              minLength={3}
+            />
+            <div className="scenario-editor__description-field">
+              <span className="scenario-editor__description-label">Description</span>
+              {ownerCanEditDescription ? (
               <DescriptionWithSuggestions
                 scenarioId={scenarioId}
                 description={description}
@@ -810,6 +764,7 @@ export function ScenarioEditorPage({
                 canEditDescription
                 onDescriptionChange={setDescription}
                 canApplyAcceptedText={canApplySuggestionText}
+                hideResolvedSuggestions={hideResolvedSuggestions}
                 onScenarioUpdated={async () => {
                   if (!scenarioId) return;
                   const token = getToken();
@@ -831,6 +786,7 @@ export function ScenarioEditorPage({
                 canSuggest={effectiveCanSuggest}
                 canViewSuggestions={canViewSuggestions}
                 canResolve={isOwner}
+                hideResolvedSuggestions={hideResolvedSuggestions}
                 onSuggestionSubmitted={async () => {
                   if (reviewerInReview) {
                     setReviewerHasFeedback(true);
@@ -857,69 +813,150 @@ export function ScenarioEditorPage({
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                rows={5}
+                rows={8}
                 disabled={locked}
                 required
+                aria-label="Description"
               />
             )}
+            </div>
           </div>
         </section>
 
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>Categories</h3>
-          {catalogLoading ? <p style={{ color: "#666", marginTop: 0 }}>Loading categories…</p> : null}
-          {catalogError ? <p style={{ color: "crimson", marginTop: 0 }}>{catalogError}</p> : null}
+        <section className="card editor-section">
+          <h3 className="editor-section__title">Images</h3>
+          <div className="scenario-editor__images-grid">
+            <div className="scenario-editor__asset-block">
+              <h4 className="scenario-editor__asset-title">Cover image</h4>
+              <label>
+                Upload cover
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={locked}
+                  className="scenario-editor__file-input"
+                  onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {coverFile ? <p className="scenario-editor__file-name">{coverFile.name}</p> : null}
+              {scenarioId && coverAsset ? (
+                <button type="button" className="btn btn--ghost" onClick={() => onDeleteCover()} disabled={locked}>
+                  Remove cover
+                </button>
+              ) : null}
+              {coverAsset && assetPreviewUrls[coverAsset.asset_id] ? (
+                <figure className="scenario-editor__asset-preview">
+                  <img src={assetPreviewUrls[coverAsset.asset_id]} alt="Cover preview" />
+                </figure>
+              ) : null}
+            </div>
+            <div className="scenario-editor__asset-block">
+              <h4 className="scenario-editor__asset-title">Inline images</h4>
+              <label>
+                Upload inline image
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={locked}
+                  className="scenario-editor__file-input"
+                  onChange={(e) => setInlineFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {inlineFile ? <p className="scenario-editor__file-name">{inlineFile.name}</p> : null}
+              {scenarioId && inlineAssets.length > 0 ? (
+                <ul className="scenario-editor__inline-list">
+                  {inlineAssets.map((asset, index) => (
+                    <li key={asset.asset_id} className="scenario-editor__inline-item">
+                      <div className="scenario-editor__inline-actions">
+                        <span>Image {index + 1}</span>
+                        <button type="button" className="btn btn--ghost" disabled={index === 0 || locked} onClick={() => moveInline(asset.asset_id, -1)}>
+                          Move up
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          disabled={index === inlineAssets.length - 1 || locked}
+                          onClick={() => moveInline(asset.asset_id, 1)}
+                        >
+                          Move down
+                        </button>
+                        <button type="button" className="btn btn--ghost" disabled={locked} onClick={() => onDeleteInline(asset.asset_id)}>
+                          Remove
+                        </button>
+                      </div>
+                      {assetPreviewUrls[asset.asset_id] ? (
+                        <img
+                          src={assetPreviewUrls[asset.asset_id]}
+                          alt={`Inline image ${index + 1}`}
+                        />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <StatusMessage message={catalogError} variant="error" onDismiss={() => setCatalogError("")} />
+
+        <section className="card editor-section">
+          <h3 className="editor-section__title">Categories</h3>
+          {catalogLoading ? <p className="text-muted" style={{ marginTop: 0 }}>Loading categories…</p> : null}
           {!catalogLoading && !catalogError && catalogCategories.length === 0 ? (
-            <p style={{ color: "#666", marginTop: 0 }}>
+            <p className="text-muted" style={{ marginTop: 0 }}>
               No categories are available. An admin must add active entries in the catalog.
             </p>
           ) : null}
-          {catalogCategories.map((c) => (
-            <label key={c.id} style={{ display: "block", marginBottom: "0.25rem" }}>
-              <input
-                type="checkbox"
-                disabled={locked}
-                checked={categoryIds.includes(c.id)}
-                onChange={(e) => {
-                  setCategoryIds((prev) =>
-                    e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id),
-                  );
-                }}
-              />{" "}
-              {c.label}
-            </label>
-          ))}
+          <div className="catalog-checklist" role="group" aria-label="Categories">
+            {catalogCategories.map((c) => (
+              <label key={c.id} className="catalog-checklist__item">
+                <input
+                  type="checkbox"
+                  disabled={locked}
+                  checked={categoryIds.includes(c.id)}
+                  onChange={(e) => {
+                    setCategoryIds((prev) =>
+                      e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id),
+                    );
+                  }}
+                />
+                <span>{c.label}</span>
+              </label>
+            ))}
+          </div>
         </section>
 
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>Ethical risks</h3>
-          {catalogLoading ? <p style={{ color: "#666", marginTop: 0 }}>Loading ethical risks…</p> : null}
-          {catalogError ? <p style={{ color: "crimson", marginTop: 0 }}>{catalogError}</p> : null}
+        <section className="card editor-section">
+          <h3 className="editor-section__title">Ethical risks</h3>
+          {catalogLoading ? <p className="text-muted" style={{ marginTop: 0 }}>Loading ethical risks…</p> : null}
           {!catalogLoading && !catalogError && ethicalOptions.length === 0 ? (
-            <p style={{ color: "#666", marginTop: 0 }}>
+            <p className="text-muted" style={{ marginTop: 0 }}>
               No ethical risks are available. An admin must add active entries in the catalog.
             </p>
           ) : null}
-          {ethicalOptions.map((r) => (
-            <label key={r.id} style={{ display: "block", marginBottom: "0.25rem" }}>
-              <input
-                type="checkbox"
-                disabled={locked}
-                checked={ethicalRiskIds.includes(r.id)}
-                onChange={(e) => {
-                  setEthicalRiskIds((prev) =>
-                    e.target.checked ? [...prev, r.id] : prev.filter((id) => id !== r.id),
-                  );
-                }}
-              />{" "}
-              {r.label}
-            </label>
-          ))}
+          <div className="catalog-checklist" role="group" aria-label="Ethical risks">
+            {ethicalOptions.map((r) => (
+              <label key={r.id} className="catalog-checklist__item">
+                <input
+                  type="checkbox"
+                  disabled={locked}
+                  checked={ethicalRiskIds.includes(r.id)}
+                  onChange={(e) => {
+                    setEthicalRiskIds((prev) =>
+                      e.target.checked ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                    );
+                  }}
+                />
+                <span>{r.label}</span>
+              </label>
+            ))}
+          </div>
         </section>
 
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>Usage context</h3>
-          <p style={{ marginTop: 0, color: "#555", fontSize: "0.95rem" }}>
+        <section className="card editor-section">
+          <h3 className="editor-section__title">Usage context</h3>
+          <p className="editor-section__hint">
             Describe how this scenario is intended to be used with children. Required before submitting for review.
           </p>
           <ScenarioUsageContextFields value={usageContext} onChange={setUsageContext} disabled={locked} />
@@ -936,90 +973,17 @@ export function ScenarioEditorPage({
           />
         ) : null}
 
-        <section style={sectionStyle}>
-          <h3 style={{ marginTop: 0 }}>Images</h3>
-          <div style={{ marginTop: "0.75rem" }}>
-            <label style={{ display: "block", marginBottom: "0.5rem" }}>
-              Cover image
-              <input
-                type="file"
-                accept="image/*"
-                disabled={locked}
-                style={{ display: "block", marginTop: "0.25rem" }}
-                onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {coverFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>{coverFile.name}</p> : null}
-            {scenarioId && coverAsset ? (
-              <button type="button" onClick={() => onDeleteCover()} disabled={locked} style={{ marginRight: "0.5rem" }}>
-                Remove cover
-              </button>
-            ) : null}
-            {coverAsset && assetPreviewUrls[coverAsset.asset_id] ? (
-              <img
-                src={assetPreviewUrls[coverAsset.asset_id]}
-                alt="cover"
-                style={{ maxWidth: "240px", maxHeight: "140px", marginTop: "0.5rem", border: "1px solid #ddd" }}
-              />
-            ) : null}
-          </div>
-          <div style={{ marginTop: "1rem" }}>
-            <label style={{ display: "block", marginBottom: "0.5rem" }}>
-              Inline image
-              <input
-                type="file"
-                accept="image/*"
-                disabled={locked}
-                style={{ display: "block", marginTop: "0.25rem" }}
-                onChange={(e) => setInlineFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {inlineFile ? <p style={{ fontSize: "0.85rem", color: "#555" }}>{inlineFile.name}</p> : null}
-            {scenarioId && inlineAssets.length > 0 ? (
-              <ul style={{ paddingLeft: "1.25rem", marginTop: "0.5rem" }}>
-                {inlineAssets.map((asset, index) => (
-                  <li key={asset.asset_id} style={{ marginBottom: "0.5rem" }}>
-                    #{index + 1}{" "}
-                    <button type="button" disabled={index === 0 || locked} onClick={() => moveInline(asset.asset_id, -1)}>
-                      ↑
-                    </button>{" "}
-                    <button
-                      type="button"
-                      disabled={index === inlineAssets.length - 1 || locked}
-                      onClick={() => moveInline(asset.asset_id, 1)}
-                    >
-                      ↓
-                    </button>{" "}
-                    <button type="button" disabled={locked} onClick={() => onDeleteInline(asset.asset_id)}>
-                      Remove
-                    </button>
-                    {assetPreviewUrls[asset.asset_id] ? (
-                      <div>
-                        <img
-                          src={assetPreviewUrls[asset.asset_id]}
-                          alt={`inline-${index + 1}`}
-                          style={{ maxWidth: "200px", maxHeight: "120px", marginTop: "0.35rem", display: "block" }}
-                        />
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        </section>
-
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-          <button type="submit" disabled={locked || saving}>
+        <div className="scenario-editor__actions">
+          <button type="submit" className="btn btn--primary" disabled={locked || saving}>
             {saving ? "Saving…" : "Save"}
           </button>
           {canSubmitReview ? (
-            <button type="button" disabled={locked || saving} onClick={() => onSubmitReview()}>
+            <button type="button" className="btn" disabled={locked || saving} onClick={() => onSubmitReview()}>
               Submit for review
             </button>
           ) : null}
           {!isCreate && state === "draft" ? (
-            <button type="button" onClick={() => onDeleteDraft()} style={{ color: "crimson" }}>
+            <button type="button" className="btn btn--danger" onClick={() => onDeleteDraft()}>
               Delete draft
             </button>
           ) : null}
@@ -1027,51 +991,38 @@ export function ScenarioEditorPage({
       </form>
       ) : null}
 
-      {message && !blockingError ? (
-        <p
-          style={{
-            marginTop: "1rem",
-            padding: "0.5rem 0.65rem",
-            borderRadius: "6px",
-            background: message.toLowerCase().includes("saved") || message.includes("Submitted")
-              ? "#e8f5e9"
-              : "#f5f5f5",
-            whiteSpace: "pre-wrap",
+      {!blockingError && (message || saveSimilarityMatches.length > 0) ? (
+        <StatusMessage
+          message={message}
+          {...editorStatusFeedback(message, saveSimilarityMatches.length > 0)}
+          onDismiss={() => {
+            setMessage("");
+            setSaveSimilarityMatches([]);
           }}
         >
-          {message}
-        </p>
+          {saveSimilarityMatches.length > 0 ? (
+            <>
+              <strong>Similar published scenario(s)</strong>
+              <ul className="text-list">
+                {saveSimilarityMatches.map((c) => (
+                  <li key={c.scenario_id}>
+                    {c.public_path ? (
+                      <Link to={c.public_path} target="_blank" rel="noopener noreferrer">
+                        {c.title}
+                      </Link>
+                    ) : (
+                      c.title
+                    )}
+                    <span className="text-muted" style={{ marginLeft: "0.35rem" }}>
+                      (score {c.score})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </StatusMessage>
       ) : null}
-      {saveSimilarityMatches.length > 0 && !blockingError ? (
-        <section
-          style={{
-            marginTop: "0.75rem",
-            padding: "0.85rem 1rem",
-            background: "#fff7e6",
-            border: "1px solid #f0c36d",
-            borderRadius: "8px",
-          }}
-        >
-          <strong style={{ display: "block", marginBottom: "0.35rem" }}>Similar published scenario(s)</strong>
-          <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.2rem" }}>
-            {saveSimilarityMatches.map((c) => (
-              <li key={c.scenario_id} style={{ marginBottom: "0.35rem" }}>
-                {c.public_path ? (
-                  <Link to={c.public_path} target="_blank" rel="noopener noreferrer">
-                    {c.title}
-                  </Link>
-                ) : (
-                  c.title
-                )}
-                <span style={{ color: "#666", marginLeft: "0.35rem" }}>(score {c.score})</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      <p style={{ marginTop: "1rem" }}>
-        <Link to="/my-scenarios">My scenarios</Link> · <Link to="/">Home</Link>
-      </p>
-    </main>
+    </PageLayout>
   );
 }

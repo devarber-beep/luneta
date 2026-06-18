@@ -1,5 +1,4 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   createAdminClassification,
   createAdminEthicalRisk,
@@ -10,8 +9,8 @@ import {
   type AdminCatalogEntry,
 } from "../adminApi";
 import { getToken } from "../session";
-
-const layoutStyle = { maxWidth: "960px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+import { PageLayout } from "../components/PageLayout";
+import { StatusMessage } from "../components/StatusMessage";
 
 export function AdminCatalogPage() {
   const token = getToken() ?? "";
@@ -63,25 +62,31 @@ export function AdminCatalogPage() {
   const rows = tab === "classification" ? classification : ethical;
 
   return (
-    <main style={layoutStyle}>
-      <h2>Admin — catalogs</h2>
-      <p>
-        <Link to="/admin/assignments">Reviewer assignments</Link> ·{" "}
-        <Link to="/admin/evaluations">Moderate evaluations</Link> · <Link to="/admin/audit">Activity log</Link> ·{" "}
-        <Link to="/">Home</Link>
-      </p>
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-        <button type="button" onClick={() => setTab("classification")} disabled={tab === "classification"}>
+    <PageLayout documentTitle="Catalogs" heading="">
+      <div className="btn-group btn-group--tabs" role="tablist" aria-label="Catalog type">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "classification"}
+          className={`btn${tab === "classification" ? " btn--primary" : ""}`}
+          onClick={() => setTab("classification")}
+        >
           Categories
         </button>
-        <button type="button" onClick={() => setTab("ethical")} disabled={tab === "ethical"}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "ethical"}
+          className={`btn${tab === "ethical" ? " btn--primary" : ""}`}
+          onClick={() => setTab("ethical")}
+        >
           Ethical risks
         </button>
       </div>
 
       <form onSubmit={onCreate} style={{ display: "grid", gap: "0.5rem", maxWidth: "480px", marginBottom: "1.5rem" }}>
         <h3 style={{ margin: 0 }}>Add entry</h3>
-        <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label" required />
+        <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} required aria-label="Label" />
         <button type="submit">Create</button>
       </form>
 
@@ -108,7 +113,7 @@ export function AdminCatalogPage() {
         </tbody>
       </table>
       {!rows.length ? <p>No entries yet.</p> : null}
-      {message ? <p style={{ color: "crimson", marginTop: "1rem" }}>{message}</p> : null}
-    </main>
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+    </PageLayout>
   );
 }

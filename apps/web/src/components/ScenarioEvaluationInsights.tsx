@@ -7,13 +7,14 @@ import {
   type EvaluationSummary,
 } from "../api";
 import { formatEvaluationScore } from "./evaluationLabels";
+import { StatusMessage } from "./StatusMessage";
 import { getRole } from "../session";
 
 function OwnerCommentsBody({ comments }: { comments: string[] }) {
   return (
-    <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+    <ul className="evaluation-summary__comment-list">
       {comments.map((text, index) => (
-        <li key={`${index}-${text.slice(0, 24)}`} style={{ marginBottom: "0.35rem", whiteSpace: "pre-wrap" }}>
+        <li key={`${index}-${text.slice(0, 24)}`} className="evaluation-summary__comment-item">
           {text}
         </li>
       ))}
@@ -23,39 +24,57 @@ function OwnerCommentsBody({ comments }: { comments: string[] }) {
 
 function SummaryBody({ summary, ownerComments }: { summary: EvaluationSummary; ownerComments?: string[] }) {
   if (summary.evaluation_count === 0) {
-    return <p style={{ color: "#666", margin: 0 }}>No evaluations yet.</p>;
+    return <p className="evaluation-summary__empty">No community evaluations yet.</p>;
   }
+
   return (
-    <>
-      <p style={{ margin: "0 0 0.5rem" }}>
+    <div className="evaluation-summary">
+      <p className="evaluation-summary__count">
         <strong>{summary.evaluation_count}</strong> evaluation
         {summary.evaluation_count === 1 ? "" : "s"}
-        {summary.average_risk_score != null ? (
-          <>
-            {" "}
-            · avg. risk{" "}
-            <strong>{formatEvaluationScore(summary.average_risk_score)}</strong>/10 · avg. benefit{" "}
-            <strong>
+      </p>
+
+      {summary.average_risk_score != null ? (
+        <div className="evaluation-summary__scores">
+          <div className="evaluation-score evaluation-score--risk">
+            <span className="evaluation-score__label">Avg. ethical risk</span>
+            <span className="evaluation-score__value">
+              {formatEvaluationScore(summary.average_risk_score)}
+              <span className="evaluation-score__max">/10</span>
+            </span>
+          </div>
+          <div className="evaluation-score evaluation-score--benefit">
+            <span className="evaluation-score__label">Avg. benefit</span>
+            <span className="evaluation-score__value">
               {summary.average_benefit_score != null
                 ? formatEvaluationScore(summary.average_benefit_score)
                 : "—"}
-            </strong>
-            /10
-          </>
-        ) : null}
-      </p>
-      {summary.detected_ethical_risk_labels.length ? (
-        <p style={{ margin: 0 }}>
-          <strong>Risks cited:</strong> {summary.detected_ethical_risk_labels.join(", ")}
-        </p>
+              <span className="evaluation-score__max">/10</span>
+            </span>
+          </div>
+        </div>
       ) : null}
+
+      {summary.detected_ethical_risk_labels.length ? (
+        <div className="evaluation-summary__risks">
+          <span className="evaluation-summary__risks-label">Risks cited</span>
+          <ul className="evaluation-tag-list">
+            {summary.detected_ethical_risk_labels.map((label) => (
+              <li key={label} className="evaluation-tag evaluation-tag--risk">
+                {label}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {ownerComments?.length ? (
-        <div style={{ marginTop: "0.75rem" }}>
-          <strong>Comments</strong>
+        <div className="evaluation-summary__comments">
+          <span className="evaluation-summary__comments-label">Comments</span>
           <OwnerCommentsBody comments={ownerComments} />
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -127,68 +146,78 @@ export function ScenarioEvaluationInsights({
 
   const body = (
     <>
-      {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
-      {!summary && showSummary ? <p style={{ color: "#666" }}>Loading community evaluations…</p> : null}
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+      {!summary && showSummary ? (
+        <p className="evaluation-panel__loading">Loading community evaluations…</p>
+      ) : null}
       {summary && showSummary ? (
-        <SummaryBody
-          summary={summary}
-          ownerComments={ownerView ? summary.comments : undefined}
-        />
+        <SummaryBody summary={summary} ownerComments={ownerView ? summary.comments : undefined} />
       ) : null}
       {showDetail && details.length > 0 ? (
-        <div style={{ marginTop: "1rem" }}>
-          <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>Evaluation detail</h4>
-          <ul style={{ paddingLeft: "1.25rem", margin: 0 }}>
+        <div className="evaluation-detail">
+          <h4 className="evaluation-detail__title">Evaluation detail</h4>
+          <ul className="evaluation-detail__list">
             {details.map((ev) => (
-              <li key={ev.id} style={{ marginBottom: "0.85rem" }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-                  <strong>{ev.evaluator_display_name ?? ev.evaluator_user_id}</strong>
+              <li key={ev.id} className="evaluation-detail__item">
+                <div className="evaluation-detail__header">
+                  <strong className="evaluation-detail__author">
+                    {ev.evaluator_display_name ?? ev.evaluator_user_id}
+                  </strong>
                   {ev.visibility === "hidden" ? (
-                    <span style={{ fontSize: "0.85rem", color: "#888" }}>(hidden)</span>
+                    <span className="evaluation-detail__badge">Hidden</span>
                   ) : null}
                   {showModeration ? (
-                    <>
-                      <button type="button" onClick={() => onModerate(ev.id, "hide")}>
+                    <div className="evaluation-detail__actions">
+                      <button type="button" className="btn btn--ghost btn--small" onClick={() => onModerate(ev.id, "hide")}>
                         Hide
                       </button>
-                      <button type="button" onClick={() => onModerate(ev.id, "delete")}>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small evaluation-detail__delete"
+                        onClick={() => onModerate(ev.id, "delete")}
+                      >
                         Delete
                       </button>
-                    </>
+                    </div>
                   ) : null}
                 </div>
-                <span>
-                  {" "}
-                  — risk {formatEvaluationScore(ev.risk_score)}/10, benefit {formatEvaluationScore(ev.benefit_score)}
-                  /10
-                </span>
+                <div className="evaluation-detail__scores">
+                  <span className="evaluation-detail__score evaluation-detail__score--risk">
+                    Risk {formatEvaluationScore(ev.risk_score)}/10
+                  </span>
+                  <span className="evaluation-detail__score evaluation-detail__score--benefit">
+                    Benefit {formatEvaluationScore(ev.benefit_score)}/10
+                  </span>
+                </div>
                 {ev.detected_ethical_risk_labels.length ? (
-                  <span> ({ev.detected_ethical_risk_labels.join(", ")})</span>
+                  <ul className="evaluation-tag-list evaluation-tag-list--inline">
+                    {ev.detected_ethical_risk_labels.map((label) => (
+                      <li key={label} className="evaluation-tag evaluation-tag--risk">
+                        {label}
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
-                {ev.comment ? <p style={{ margin: "0.25rem 0 0" }}>{ev.comment}</p> : null}
+                {ev.comment ? <p className="evaluation-detail__comment">{ev.comment}</p> : null}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
       {showDetail && getRole() === "admin" && details.length === 0 && summary?.evaluation_count === 0 ? (
-        <p style={{ color: "#666", marginTop: "0.75rem" }}>No evaluations to moderate.</p>
+        <p className="evaluation-panel__empty">No evaluations to moderate.</p>
       ) : null}
     </>
   );
 
   const heading = scenarioTitle ? `${scenarioTitle} — evaluations` : "Community ethical evaluations";
+  const headingId = `evaluations-${scenarioId}`;
 
   return (
-    <section
-      style={{
-        marginTop: "1.5rem",
-        padding: "1rem",
-        background: "#f8f6ff",
-        borderRadius: "8px",
-      }}
-    >
-      <h3 style={{ marginTop: 0 }}>{heading}</h3>
+    <section className="evaluation-panel" aria-labelledby={headingId}>
+      <h3 id={headingId} className="evaluation-panel__title">
+        {heading}
+      </h3>
       {body}
     </section>
   );

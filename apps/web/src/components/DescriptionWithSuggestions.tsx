@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   acceptScenarioSuggestion,
   applyAcceptedSuggestionText,
@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 import { getToken } from "../session";
+import { StatusMessage } from "./StatusMessage";
 
 export { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 
@@ -27,6 +28,8 @@ type Props = {
   notesOnly?: boolean;
   /** On published scenarios, paragraph suggestions are alternative text only. */
   publishedParagraphAltTextOnly?: boolean;
+  /** Hide accepted and rejected suggestions (e.g. on published public view). */
+  hideResolvedSuggestions?: boolean;
   onSuggestionSubmitted?: () => void;
   onScenarioUpdated?: () => void;
 };
@@ -44,6 +47,7 @@ export function DescriptionWithSuggestions({
   onDescriptionChange,
   notesOnly = false,
   publishedParagraphAltTextOnly = false,
+  hideResolvedSuggestions = false,
   onSuggestionSubmitted,
   onScenarioUpdated,
 }: Props) {
@@ -55,9 +59,15 @@ export function DescriptionWithSuggestions({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const scenarioSuggestions = suggestions.filter((s) => s.scope === "scenario");
+  const shouldHideResolved = hideResolvedSuggestions || publishedParagraphAltTextOnly;
+  const visibleSuggestions = useMemo(
+    () => (shouldHideResolved ? suggestions.filter((s) => s.status === "pending") : suggestions),
+    [suggestions, shouldHideResolved],
+  );
+
+  const scenarioSuggestions = visibleSuggestions.filter((s) => s.scope === "scenario");
   const byParagraph = (index: number) =>
-    suggestions.filter((s) => s.scope === "paragraph" && s.paragraph_index === index);
+    visibleSuggestions.filter((s) => s.scope === "paragraph" && s.paragraph_index === index);
 
   const defaultParagraphKind = publishedParagraphAltTextOnly ? "alternative_text" : "comment";
 
@@ -152,12 +162,12 @@ export function DescriptionWithSuggestions({
   };
 
   if (notesOnly) {
-    if (!canViewSuggestions || !suggestions.length) {
+    if (!canViewSuggestions || !visibleSuggestions.length) {
       return null;
     }
     return (
-      <div style={{ marginTop: "0.75rem" }}>
-        {suggestions.map((s) => (
+      <div className="suggestion-notes">
+        {visibleSuggestions.map((s) => (
           <div key={s.id} style={{ marginBottom: "0.5rem" }}>
             <MarginNote
               suggestion={s}
@@ -170,11 +180,7 @@ export function DescriptionWithSuggestions({
             />
           </div>
         ))}
-        {message ? (
-          <p role="status" style={{ fontSize: "0.9rem", marginTop: "0.5rem", color: "#1b5e20" }}>
-            {message}
-          </p>
-        ) : null}
+        <StatusMessage message={message} onDismiss={() => setMessage("")} />
       </div>
     );
   }
@@ -188,11 +194,11 @@ export function DescriptionWithSuggestions({
           rows={8}
           disabled={descriptionDisabled}
           required
-          style={{ width: "100%", marginBottom: canViewSuggestions && suggestions.length ? "0.5rem" : 0 }}
+          style={{ width: "100%", marginBottom: canViewSuggestions && visibleSuggestions.length ? "0.5rem" : 0 }}
         />
-        {canViewSuggestions && suggestions.length > 0 ? (
-          <div>
-            {suggestions.map((s) => (
+        {canViewSuggestions && visibleSuggestions.length > 0 ? (
+          <div className="suggestion-notes">
+            {visibleSuggestions.map((s) => (
               <div key={s.id} style={{ marginBottom: "0.5rem" }}>
                 <MarginNote
                   suggestion={s}
@@ -207,11 +213,7 @@ export function DescriptionWithSuggestions({
             ))}
           </div>
         ) : null}
-        {message ? (
-          <p role="status" style={{ fontSize: "0.9rem", marginTop: "0.5rem", color: "#1b5e20" }}>
-            {message}
-          </p>
-        ) : null}
+        <StatusMessage message={message} onDismiss={() => setMessage("")} />
       </div>
     );
   }
@@ -219,15 +221,15 @@ export function DescriptionWithSuggestions({
   return (
     <div>
       {canSuggest ? (
-        <div style={{ marginBottom: "0.75rem" }}>
+        <div className="description-with-suggestions__toolbar">
           <button
             type="button"
+            className="btn btn--suggest-floating"
             onClick={() => {
               setActiveParagraph("scenario");
               setDraftKind("comment");
               setDraftBody("");
             }}
-            style={floatingBtnStyle}
           >
             Suggest on whole scenario
           </button>
@@ -252,42 +254,23 @@ export function DescriptionWithSuggestions({
       ) : null}
 
       {paragraphs.length === 0 ? (
-        <p style={{ color: "#666", fontStyle: "italic" }}>No paragraphs yet. Add text separated by blank lines.</p>
+        <p className="scenario-description scenario-description--empty">No paragraphs yet. Add text separated by blank lines.</p>
       ) : (
         paragraphs.map((text, index) => (
           <div
             key={index}
-            style={{
-              display: "grid",
-              gridTemplateColumns: canViewSuggestions ? "1fr minmax(140px, 28%)" : "1fr",
-              gap: "0.75rem",
-              marginBottom: "1rem",
-              alignItems: "start",
-            }}
+            className={`description-with-suggestions__row${canViewSuggestions ? " description-with-suggestions__row--with-notes" : ""}`}
           >
             <div
-              style={{
-                position: "relative",
-                padding: "0.65rem 0.75rem",
-                borderRadius: "6px",
-                background: hoveredIndex === index && canSuggest ? "rgba(66, 133, 244, 0.08)" : "transparent",
-                outline: hoveredIndex === index && canSuggest ? "1px solid rgba(66, 133, 244, 0.35)" : "none",
-                transition: "background 0.15s ease, outline 0.15s ease",
-              }}
+              className={`description-with-suggestions__paragraph${hoveredIndex === index && canSuggest ? " description-with-suggestions__paragraph--hover" : ""}`}
               onMouseEnter={() => canSuggest && setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              <p style={{ margin: 0, whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{text}</p>
+              <p className="scenario-description__paragraph">{text}</p>
               {canSuggest && hoveredIndex === index ? (
                 <button
                   type="button"
-                  style={{
-                    ...floatingBtnStyle,
-                    position: "absolute",
-                    top: "0.5rem",
-                    right: "0.5rem",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
-                  }}
+                  className="btn btn--suggest-floating"
                   onClick={() => openParagraphSuggestion(index)}
                 >
                   Suggest
@@ -295,7 +278,7 @@ export function DescriptionWithSuggestions({
               ) : null}
             </div>
             {canViewSuggestions ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className="suggestion-notes suggestion-notes--inline">
                 {byParagraph(index).map((s) => (
                   <MarginNote
                     key={s.id}
@@ -341,36 +324,10 @@ export function DescriptionWithSuggestions({
         />
       ) : null}
 
-      {message ? (
-        <p
-          role="status"
-          style={{
-            fontSize: "0.9rem",
-            marginTop: "0.75rem",
-            padding: "0.5rem 0.65rem",
-            borderRadius: "6px",
-            background: message.toLowerCase().includes("error") || message.includes("failed")
-              ? "#fdecea"
-              : "#e8f5e9",
-            color: message.toLowerCase().includes("error") || message.includes("failed") ? "#b3261e" : "#1b5e20",
-          }}
-        >
-          {message}
-        </p>
-      ) : null}
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
     </div>
   );
 }
-
-const floatingBtnStyle: CSSProperties = {
-  fontSize: "0.8rem",
-  padding: "0.35rem 0.65rem",
-  borderRadius: "999px",
-  border: "1px solid #1a73e8",
-  background: "#fff",
-  color: "#1a73e8",
-  cursor: "pointer",
-};
 
 function MarginNote({
   suggestion: s,
@@ -394,42 +351,30 @@ function MarginNote({
     s.status === "accepted" &&
     s.kind === "alternative_text" &&
     !s.applied_at;
-  const statusColor =
-    s.status === "pending" ? "#b8860b" : s.status === "accepted" ? "#2e7d32" : "#9e9e9e";
+  const statusClass =
+    s.status === "pending" ? "suggestion-note--pending" : s.status === "accepted" ? "suggestion-note--accepted" : "suggestion-note--rejected";
   return (
-    <aside
-      style={{
-        background: "#fffde7",
-        border: "1px solid #f0e68c",
-        borderLeft: `4px solid ${statusColor}`,
-        borderRadius: "4px",
-        padding: "0.5rem 0.6rem",
-        fontSize: "0.82rem",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
+    <aside className={`suggestion-note ${statusClass}`}>
+      <div className="suggestion-note__header">
         {s.kind === "alternative_text" ? "Alt. text" : "Comment"} · {s.status}
       </div>
-      <p style={{ margin: "0 0 0.35rem", whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{s.body}</p>
+      <p className="suggestion-note__body">{s.body}</p>
       {canResolve && s.status === "pending" ? (
-        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-          <button type="button" disabled={busy} onClick={onAccept} style={{ fontSize: "0.75rem" }}>
+        <div className="suggestion-note__actions">
+          <button type="button" className="btn btn--small" disabled={busy} onClick={onAccept}>
             Accept
           </button>
-          <button type="button" disabled={busy} onClick={onReject} style={{ fontSize: "0.75rem" }}>
+          <button type="button" className="btn btn--small" disabled={busy} onClick={onReject}>
             Reject
           </button>
         </div>
       ) : null}
       {showApply ? (
-        <button type="button" disabled={busy} onClick={onApply} style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
+        <button type="button" className="btn btn--small" disabled={busy} onClick={onApply}>
           Apply
         </button>
       ) : null}
-      {s.applied_at ? (
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.72rem", color: "#666" }}>Applied</p>
-      ) : null}
+      {s.applied_at ? <p className="suggestion-note__meta">Applied</p> : null}
     </aside>
   );
 }

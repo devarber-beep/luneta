@@ -91,11 +91,11 @@ function YesNoField({
   disabled?: boolean;
 }) {
   return (
-    <fieldset style={{ border: "none", margin: 0, padding: 0 }} disabled={disabled}>
-      <legend style={{ marginBottom: "0.35rem", fontWeight: 500 }}>{label}</legend>
-      <div style={{ display: "flex", gap: "1rem" }}>
+    <fieldset className="usage-context-form__fieldset" disabled={disabled}>
+      <legend className="usage-context-form__legend">{label}</legend>
+      <div className="usage-context-form__radios">
         {USAGE_CONTEXT_YES_NO_OPTIONS.map((opt) => (
-          <label key={opt.value} style={{ display: "flex", gap: "0.35rem", alignItems: "center" }}>
+          <label key={opt.value} className="usage-context-form__radio">
             <input
               type="radio"
               name={label}
@@ -120,124 +120,128 @@ type Props = {
 
 export function ScenarioUsageContextFields({ value, onChange, disabled }: Props) {
   return (
-    <div style={{ display: "grid", gap: "0.85rem" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Children age range start</span>
+    <div className="usage-context-form usage-context-form--columns">
+      <div className="usage-context-form__col">
+        <div className="usage-context-form__row--split">
+          <label className="form-field">
+            <span className="form-field__label">Children age range start</span>
+            <input
+              type="number"
+              min={0}
+              max={17}
+              step={1}
+              required
+              disabled={disabled}
+              value={value.children_age_start}
+              onChange={(e) =>
+                onChange({ ...value, children_age_start: e.target.value === "" ? "" : Number(e.target.value) })
+              }
+              inputMode="numeric"
+            />
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">Children age range end</span>
+            <input
+              type="number"
+              min={0}
+              max={17}
+              step={1}
+              required
+              disabled={disabled}
+              value={value.children_age_end}
+              onChange={(e) =>
+                onChange({ ...value, children_age_end: e.target.value === "" ? "" : Number(e.target.value) })
+              }
+              inputMode="numeric"
+            />
+          </label>
+        </div>
+        <label className="form-field">
+          <span className="form-field__label">Number of children</span>
           <input
             type="number"
-            min={0}
-            max={17}
-            step={1}
-            required
-            disabled={disabled}
-            value={value.children_age_start}
-            onChange={(e) =>
-              onChange({ ...value, children_age_start: e.target.value === "" ? "" : Number(e.target.value) })
-            }
+            min={1}
+            max={500}
+            required={!value.children_count_undefined}
+            disabled={disabled || value.children_count_undefined}
+            value={value.children_count}
+            onChange={(e) => onChange({ ...value, children_count: e.target.value === "" ? "" : Number(e.target.value) })}
             inputMode="numeric"
           />
+          <label className="usage-context-form__checkbox-label">
+            <input
+              type="checkbox"
+              disabled={disabled}
+              checked={value.children_count_undefined}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  children_count_undefined: e.target.checked,
+                  children_count: e.target.checked ? "" : value.children_count,
+                })
+              }
+            />
+            Undefined
+          </label>
         </label>
-        <label style={{ display: "grid", gap: "0.25rem" }}>
-          <span>Children age range end</span>
-          <input
-            type="number"
-            min={0}
-            max={17}
-            step={1}
+
+        <label className="form-field">
+          <span className="form-field__label">Duration and frequency</span>
+          <select
             required
             disabled={disabled}
-            value={value.children_age_end}
-            onChange={(e) =>
-              onChange({ ...value, children_age_end: e.target.value === "" ? "" : Number(e.target.value) })
-            }
-            inputMode="numeric"
-          />
-        </label>
-      </div>
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Number of children</span>
-        <input
-          type="number"
-          min={1}
-          max={500}
-          required={!value.children_count_undefined}
-          disabled={disabled || value.children_count_undefined}
-          value={value.children_count}
-          onChange={(e) => onChange({ ...value, children_count: e.target.value === "" ? "" : Number(e.target.value) })}
-          inputMode="numeric"
-        />
-        <label style={{ marginTop: "0.25rem", fontSize: "0.9rem" }}>
-          <input
-            type="checkbox"
-            disabled={disabled}
-            checked={value.children_count_undefined}
+            value={value.duration_frequency}
             onChange={(e) =>
               onChange({
                 ...value,
-                children_count_undefined: e.target.checked,
-                children_count: e.target.checked ? "" : value.children_count,
+                duration_frequency: e.target.value as UsageContextFormState["duration_frequency"],
               })
             }
-          />{" "}
-          Undefined
-        </label>
-      </label>
-
-      <label style={{ display: "grid", gap: "0.25rem" }}>
-        <span>Duration and frequency</span>
-        <select
-          required
-          disabled={disabled}
-          value={value.duration_frequency}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              duration_frequency: e.target.value as UsageContextFormState["duration_frequency"],
-            })
-          }
-        >
-          <option value="" disabled>
-            Select an option
-          </option>
-          {USAGE_CONTEXT_DURATION_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
+          >
+            <option value="" disabled>
+              Select an option
             </option>
-          ))}
-        </select>
-      </label>
-      <YesNoField
-        label="Is anyone physically present during the session?"
-        value={value.physically_present}
-        onChange={(next) => onChange({ ...value, physically_present: next })}
-        disabled={disabled}
-      />
-      <YesNoField
-        label="Is anyone present online during the session?"
-        value={value.online_present}
-        onChange={(next) => onChange({ ...value, online_present: next })}
-        disabled={disabled}
-      />
+            {USAGE_CONTEXT_DURATION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-      <YesNoField
-        label="Does the execution place affect the scenario?"
-        value={value.execution_place_affects_scenario}
-        onChange={(next) => onChange({ ...value, execution_place_affects_scenario: next })}
-        disabled={disabled}
-      />
-      <YesNoField
-        label="Are there special circumstances for the child?"
-        value={value.special_circumstances}
-        onChange={(next) => onChange({ ...value, special_circumstances: next })}
-        disabled={disabled}
-      />
-      <YesNoField
-        label="Is consent in place for this scenario?"
-        value={value.consent_in_place}
-        onChange={(next) => onChange({ ...value, consent_in_place: next })}
-        disabled={disabled}
-      />
+      <div className="usage-context-form__col">
+        <YesNoField
+          label="Is anyone physically present during the session?"
+          value={value.physically_present}
+          onChange={(next) => onChange({ ...value, physically_present: next })}
+          disabled={disabled}
+        />
+        <YesNoField
+          label="Is anyone present online during the session?"
+          value={value.online_present}
+          onChange={(next) => onChange({ ...value, online_present: next })}
+          disabled={disabled}
+        />
+        <YesNoField
+          label="Does the execution place affect the scenario?"
+          value={value.execution_place_affects_scenario}
+          onChange={(next) => onChange({ ...value, execution_place_affects_scenario: next })}
+          disabled={disabled}
+        />
+        <YesNoField
+          label="Are there special circumstances for the child?"
+          value={value.special_circumstances}
+          onChange={(next) => onChange({ ...value, special_circumstances: next })}
+          disabled={disabled}
+        />
+        <YesNoField
+          label="Is consent in place for this scenario?"
+          value={value.consent_in_place}
+          onChange={(next) => onChange({ ...value, consent_in_place: next })}
+          disabled={disabled}
+        />
+      </div>
     </div>
   );
 }

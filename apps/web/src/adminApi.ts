@@ -197,16 +197,17 @@ export type AdminAuditEvent = {
   action_type: string;
   subject_type: string;
   subject_id: string;
+  subject_display_label: string | null;
   previous: Record<string, unknown> | null;
   current: Record<string, unknown> | null;
   created_at: string;
 };
 
 export type AdminAuditListParams = {
-  actor_user_id?: string;
+  actor_query?: string;
   action_type?: string;
   subject_type?: string;
-  subject_id?: string;
+  subject_query?: string;
   created_from?: string;
   created_to?: string;
   page?: number;
@@ -215,10 +216,10 @@ export type AdminAuditListParams = {
 
 function auditQuery(params: AdminAuditListParams): string {
   const search = new URLSearchParams();
-  if (params.actor_user_id) search.set("actor_user_id", params.actor_user_id);
+  if (params.actor_query) search.set("actor_query", params.actor_query);
   if (params.action_type) search.set("action_type", params.action_type);
   if (params.subject_type) search.set("subject_type", params.subject_type);
-  if (params.subject_id) search.set("subject_id", params.subject_id);
+  if (params.subject_query) search.set("subject_query", params.subject_query);
   if (params.created_from) search.set("created_from", params.created_from);
   if (params.created_to) search.set("created_to", params.created_to);
   if (params.page) search.set("page", String(params.page));

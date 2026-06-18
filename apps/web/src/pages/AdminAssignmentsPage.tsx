@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import {
+import { useEffect, useState } from "react";import {
   assignInvestigator,
   listAdminUsers,
   listReviewerInvestigators,
@@ -8,8 +6,8 @@ import {
   type AdminUserSummary,
 } from "../adminApi";
 import { getToken } from "../session";
-
-const layoutStyle = { maxWidth: "720px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+import { PageLayout } from "../components/PageLayout";
+import { StatusMessage } from "../components/StatusMessage";
 
 export function AdminAssignmentsPage() {
   const token = getToken() ?? "";
@@ -71,14 +69,8 @@ export function AdminAssignmentsPage() {
   const unassigned = investigators.filter((i) => !assignedIds.includes(i.user_id));
 
   return (
-    <main style={layoutStyle}>
-      <h2>Admin — reviewer assignments</h2>
-      <p>
-        <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/evaluations">Moderate evaluations</Link> ·{" "}
-        <Link to="/admin/audit">Activity log</Link> ·{" "}
-        <Link to="/">Home</Link>
-      </p>
-      <label style={{ display: "grid", gap: "0.25rem", marginBottom: "1rem" }}>
+    <PageLayout documentTitle="Assignments" heading="">
+      <label className="form-field" style={{ maxWidth: "28rem", marginBottom: "1rem" }}>
         <span>Reviewer</span>
         <select value={selectedReviewerId} onChange={(e) => setSelectedReviewerId(e.target.value)}>
           {reviewers.map((r) => (
@@ -92,11 +84,11 @@ export function AdminAssignmentsPage() {
       <section style={{ marginBottom: "1.5rem" }}>
         <h3>Assigned investigators</h3>
         {!assignedIds.length ? <p>None assigned yet.</p> : null}
-        <ul style={{ paddingLeft: "1.25rem" }}>
+        <ul className="assignment-list">
           {assignedIds.map((id) => (
-            <li key={id} style={{ marginBottom: "0.35rem" }}>
-              {investigatorName(id)}{" "}
-              <button type="button" onClick={() => void onUnassign(id)}>
+            <li key={id} className="assignment-list__item">
+              <span>{investigatorName(id)}</span>
+              <button type="button" className="btn btn--danger" onClick={() => void onUnassign(id)}>
                 Remove
               </button>
             </li>
@@ -107,11 +99,11 @@ export function AdminAssignmentsPage() {
       <section>
         <h3>Add investigator</h3>
         {!unassigned.length ? <p>All investigators are already assigned to this reviewer.</p> : null}
-        <ul style={{ paddingLeft: "1.25rem" }}>
+        <ul className="assignment-list">
           {unassigned.map((inv) => (
-            <li key={inv.user_id} style={{ marginBottom: "0.35rem" }}>
-              {inv.display_name}{" "}
-              <button type="button" onClick={() => void onAssign(inv.user_id)}>
+            <li key={inv.user_id} className="assignment-list__item">
+              <span>{inv.display_name}</span>
+              <button type="button" className="btn btn--primary" onClick={() => void onAssign(inv.user_id)}>
                 Assign
               </button>
             </li>
@@ -119,7 +111,7 @@ export function AdminAssignmentsPage() {
         </ul>
       </section>
 
-      {message ? <p style={{ color: "crimson", marginTop: "1rem" }}>{message}</p> : null}
-    </main>
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+    </PageLayout>
   );
 }

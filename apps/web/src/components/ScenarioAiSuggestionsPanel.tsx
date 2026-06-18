@@ -17,22 +17,6 @@ import {
 } from "./aiSuggestionMessages";
 import type { AiGenerateEmptyReason } from "../api";
 
-const panelStyle = {
-  marginBottom: "1.25rem",
-  padding: "1rem",
-  background: "#f3f6fc",
-  border: "1px solid #c5d4f7",
-  borderRadius: "8px",
-} as const;
-
-const itemStyle = {
-  marginTop: "0.75rem",
-  padding: "0.75rem",
-  background: "#fff",
-  border: "1px solid #dde3f0",
-  borderRadius: "6px",
-} as const;
-
 type Props = {
   token: string;
   scenarioId: string;
@@ -63,7 +47,6 @@ export function ScenarioAiSuggestionsPanel({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [items, setItems] = useState<AiSuggestionItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingSaveHint, setPendingSaveHint] = useState(false);
 
   const onGenerate = async () => {
     if (items.length > 0) {
@@ -104,7 +87,6 @@ export function ScenarioAiSuggestionsPanel({
     if (!requestId) return;
     const result = applyAiSuggestionToDraft(item, { title, description });
     onApplyToForm({ title: result.title, description: result.description });
-    setPendingSaveHint(true);
     const actionPayload = {
       request_id: requestId,
       scope: item.scope,
@@ -150,65 +132,43 @@ export function ScenarioAiSuggestionsPanel({
   };
 
   return (
-    <section style={panelStyle} aria-labelledby="ai-suggestions-heading">
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-        <h3 id="ai-suggestions-heading" style={{ margin: 0, flex: "1 1 auto" }}>
+    <section className="ai-suggestions-panel" aria-labelledby="ai-suggestions-heading">
+      <div className="ai-suggestions-panel__header">
+        <h3 id="ai-suggestions-heading" className="ai-suggestions-panel__title">
           AI suggestions
         </h3>
-        <span
-          style={{
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            padding: "0.15rem 0.45rem",
-            borderRadius: "4px",
-            background: "#1a73e8",
-            color: "#fff",
-          }}
-        >
+        <span className="badge-ai" aria-hidden>
           AI
         </span>
-        <button type="button" disabled={disabled || loading} onClick={() => onGenerate()}>
+        <button type="button" className="btn" disabled={disabled || loading} onClick={() => onGenerate()}>
           {loading ? "Generating…" : "Suggest improvements"}
         </button>
       </div>
-      <p style={{ margin: "0.5rem 0 0", fontSize: "0.88rem", color: "#444", lineHeight: 1.45 }}>
-        Optional AI help for the scenario owner (not reviewer suggestions). Up to 5 suggestions per
-        batch; up to 5 generations per hour. Apply copies text into the form only — use Save draft
-        to persist.
-      </p>
-      {pendingSaveHint ? (
-        <p style={{ margin: "0.5rem 0 0", fontSize: "0.88rem", color: "#b06000", fontWeight: 600 }}>
-          You have applied AI changes in the form that are not saved yet — click Save draft to
-          persist them.
-        </p>
-      ) : null}
       {items.length === 0 ? (
-        <p style={{ margin: "0.65rem 0 0", fontSize: "0.85rem", color: "#666" }}>
-          No pending AI suggestions. Click Suggest improvements to request a batch.
-        </p>
+        <p className="ai-suggestions-panel__hint">No pending AI suggestions. Click Suggest improvements to request a batch.</p>
       ) : (
-        <ul style={{ listStyle: "none", margin: "0.5rem 0 0", padding: 0 }}>
+        <ul className="ai-suggestions-panel__list">
           {items.map((item) => (
-            <li key={item.id} style={itemStyle}>
-              <div style={{ fontSize: "0.8rem", color: "#555", marginBottom: "0.35rem" }}>
+            <li key={item.id} className="ai-suggestions-panel__item">
+              <div className="ai-suggestions-panel__item-meta">
                 {scopeLabel(item)} · {item.kind}
               </div>
-              <p style={{ margin: "0 0 0.35rem", fontSize: "0.88rem" }}>
+              <p className="ai-suggestions-panel__item-text">
                 <strong>Why:</strong> {item.rationale}
               </p>
-              <p style={{ margin: "0 0 0.35rem", fontSize: "0.85rem", color: "#333" }}>
+              <p className="ai-suggestions-panel__item-text">
                 <strong>Current excerpt:</strong>{" "}
-                <span style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>{item.current_excerpt}</span>
+                <span className="ai-suggestions-panel__excerpt">{item.current_excerpt}</span>
               </p>
-              <p style={{ margin: "0 0 0.5rem", fontSize: "0.85rem", color: "#333" }}>
+              <p className="ai-suggestions-panel__item-text">
                 <strong>Proposed:</strong>{" "}
-                <span style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}>{item.proposed_text}</span>
+                <span className="ai-suggestions-panel__excerpt">{item.proposed_text}</span>
               </p>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button type="button" disabled={disabled} onClick={() => onApply(item)}>
+              <div className="btn-group">
+                <button type="button" className="btn btn--primary" disabled={disabled} onClick={() => onApply(item)}>
                   Apply to form
                 </button>
-                <button type="button" disabled={disabled} onClick={() => onDiscard(item)}>
+                <button type="button" className="btn btn--ghost" disabled={disabled} onClick={() => onDiscard(item)}>
                   Discard
                 </button>
               </div>

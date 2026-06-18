@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   listNotifications,
@@ -16,13 +16,18 @@ function formatWhen(iso: string): string {
   }
 }
 
-export function NotificationBell() {
+type Props = {
+  variant?: "default" | "navbar";
+};
+
+export function NotificationBell({ variant = "default" }: Props) {
   const token = useToken() ?? "";
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -46,6 +51,19 @@ export function NotificationBell() {
     }, 60_000);
     return () => window.clearInterval(interval);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onDocClick = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
 
   const onToggle = () => {
     setOpen((value) => !value);
@@ -85,104 +103,55 @@ export function NotificationBell() {
 
   if (!token) return null;
 
+  const isNavbar = variant === "navbar";
+
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
+    <div
+      className={`notification-bell${isNavbar ? " notification-bell--navbar" : ""}`}
+      ref={rootRef}
+    >
       <button
         type="button"
+        className="notification-bell__trigger"
         onClick={onToggle}
         aria-expanded={open}
-        aria-label="Notifications"
-        style={{
-          position: "relative",
-          padding: "0.35rem 0.65rem",
-          borderRadius: "6px",
-          border: "1px solid #ccc",
-          background: "#fff",
-          cursor: "pointer",
-          font: "inherit",
-        }}
+        aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications"}
       >
-        Notifications
+        <span className="notification-bell__icon" aria-hidden>
+          🔔
+        </span>
         {unreadCount > 0 ? (
-          <span
-            style={{
-              marginLeft: "0.35rem",
-              background: "#d93025",
-              color: "#fff",
-              borderRadius: "999px",
-              padding: "0 0.4rem",
-              fontSize: "0.75rem",
-              fontWeight: 700,
-            }}
-          >
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
+          <span className="notification-bell__badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
         ) : null}
       </button>
       {open ? (
-        <div
-          role="dialog"
-          aria-label="Notification list"
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 0.35rem)",
-            width: "min(360px, 90vw)",
-            maxHeight: "420px",
-            overflow: "auto",
-            background: "#fff",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            zIndex: 50,
-            padding: "0.5rem 0",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "0.5rem 0.75rem",
-              borderBottom: "1px solid #eee",
-            }}
-          >
-            <strong style={{ fontSize: "0.9rem" }}>Activity</strong>
+        <div className="notification-bell__panel" role="dialog" aria-label="Notification list">
+          <div className="notification-bell__header">
+            <strong>Activity</strong>
             {unreadCount > 0 ? (
-              <button type="button" onClick={onMarkAll} style={{ fontSize: "0.8rem" }}>
+              <button type="button" className="notification-bell__mark-all" onClick={onMarkAll}>
                 Mark all read
               </button>
             ) : null}
           </div>
-          {error ? (
-            <p style={{ color: "crimson", padding: "0.5rem 0.75rem", margin: 0 }}>{error}</p>
-          ) : null}
-          {loading ? <p style={{ padding: "0.75rem", margin: 0, color: "#666" }}>Loading…</p> : null}
+          {error ? <p className="notification-bell__error">{error}</p> : null}
+          {loading ? <p className="notification-bell__empty">Loading…</p> : null}
           {!loading && items.length === 0 ? (
-            <p style={{ padding: "0.75rem", margin: 0, color: "#666" }}>No notifications yet.</p>
+            <p className="notification-bell__empty">No notifications yet.</p>
           ) : null}
           {!loading
             ? items.map((row) => (
                 <article
                   key={row.id}
-                  style={{
-                    padding: "0.65rem 0.75rem",
-                    borderBottom: "1px solid #f0f0f0",
-                    background: row.read_at ? "#fff" : "#f8fbff",
-                  }}
+                  className={`notification-bell__item${row.read_at ? "" : " notification-bell__item--unread"}`}
                 >
-                  <div style={{ fontWeight: 600, fontSize: "0.88rem", lineHeight: 1.3 }}>{row.title}</div>
-                  {row.message ? (
-                    <p style={{ margin: "0.25rem 0 0", fontSize: "0.8rem", color: "#444" }}>{row.message}</p>
-                  ) : null}
-                  <div style={{ fontSize: "0.72rem", color: "#777", marginTop: "0.25rem" }}>
-                    {formatWhen(row.created_at)}
-                  </div>
-                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem", flexWrap: "wrap" }}>
+                  <div className="notification-bell__title">{row.title}</div>
+                  {row.message ? <p className="notification-bell__message">{row.message}</p> : null}
+                  <div className="notification-bell__when">{formatWhen(row.created_at)}</div>
+                  <div className="notification-bell__actions">
                     {row.link_path ? (
                       <Link
                         to={row.link_path}
-                        style={{ fontSize: "0.8rem" }}
                         onClick={() => {
                           onOpen(row).catch(() => undefined);
                         }}
@@ -191,7 +160,7 @@ export function NotificationBell() {
                       </Link>
                     ) : null}
                     {!row.read_at ? (
-                      <button type="button" style={{ fontSize: "0.8rem" }} onClick={() => onMarkRead(row.id)}>
+                      <button type="button" onClick={() => onMarkRead(row.id)}>
                         Mark read
                       </button>
                     ) : null}

@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
   listAdminEvaluationModerationTargets,
   type AdminEvaluationModerationTarget,
 } from "../adminApi";
 import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsights";
 import { getToken } from "../session";
+import { PageLayout } from "../components/PageLayout";
+import { StatusMessage } from "../components/StatusMessage";
 
-const layoutStyle = { maxWidth: "960px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+const PAGE_SIZE = 4;
 
 function formatPublishedAt(iso: string): string {
   try {
@@ -23,59 +24,70 @@ export function AdminEvaluationsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setLoading(true);
     listAdminEvaluationModerationTargets(token)
       .then((res) => {
         setTargets(res.items);
-        if (res.items.length && !selectedId) {
+        setPage(1);
+        if (res.items.length) {
           setSelectedId(res.items[0].scenario_id);
+        } else {
+          setSelectedId("");
         }
       })
       .catch((e: Error) => setMessage(e.message))
       .finally(() => setLoading(false));
   }, [token]);
 
+  const totalPages = Math.max(1, Math.ceil(targets.length / PAGE_SIZE));
+  const paginatedTargets = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return targets.slice(start, start + PAGE_SIZE);
+  }, [targets, page]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    if (!paginatedTargets.length) {
+      return;
+    }
+    if (!paginatedTargets.some((t) => t.scenario_id === selectedId)) {
+      setSelectedId(paginatedTargets[0].scenario_id);
+    }
+  }, [paginatedTargets, selectedId]);
+
   const selected = targets.find((t) => t.scenario_id === selectedId);
 
   return (
-    <main style={layoutStyle}>
-      <h2>Admin — evaluation moderation</h2>
-      <p>
-        <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/assignments">Assignments</Link> ·{" "}
-        <Link to="/admin/audit">Activity log</Link> · <Link to="/">Home</Link>
-      </p>
-      {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
-      {loading ? <p style={{ color: "#666" }}>Loading published scenarios…</p> : null}
+    <PageLayout documentTitle="Evaluations" heading="">
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+      {loading ? <p className="text-muted">Loading published scenarios…</p> : null}
       {!loading && targets.length === 0 ? (
-        <p style={{ color: "#666" }}>No published scenarios yet.</p>
+        <p className="text-muted">No published scenarios yet.</p>
       ) : null}
       {!loading && targets.length > 0 ? (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 280px) 1fr", gap: "1.5rem" }}>
           <nav aria-label="Published scenarios">
             <h3 style={{ marginTop: 0, fontSize: "1rem" }}>Published scenarios</h3>
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-              {targets.map((row) => {
+            <ul className="list-picker">
+              {paginatedTargets.map((row) => {
                 const active = row.scenario_id === selectedId;
                 return (
-                  <li key={row.scenario_id} style={{ marginBottom: "0.35rem" }}>
+                  <li key={row.scenario_id} className="list-picker__item">
                     <button
                       type="button"
                       onClick={() => setSelectedId(row.scenario_id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "0.5rem 0.65rem",
-                        borderRadius: "6px",
-                        border: active ? "2px solid #1a73e8" : "1px solid #ddd",
-                        background: active ? "#e8f0fe" : "#fff",
-                        cursor: "pointer",
-                        font: "inherit",
-                      }}
+                      className={`list-picker__button${active ? " list-picker__button--active" : ""}`}
                     >
-                      <div style={{ fontWeight: 600, lineHeight: 1.3 }}>{row.title}</div>
-                      <div style={{ fontSize: "0.8rem", color: "#555", marginTop: "0.2rem" }}>
+                      <div className="list-picker__title">{row.title}</div>
+                      <div className="list-picker__meta">
                         {row.evaluation_count} evaluation{row.evaluation_count === 1 ? "" : "s"} ·{" "}
                         {formatPublishedAt(row.published_at)}
                       </div>
@@ -84,6 +96,24 @@ export function AdminEvaluationsPage() {
                 );
               })}
             </ul>
+            {targets.length > PAGE_SIZE ? (
+              <nav className="pagination" aria-label="Published scenarios pagination">
+                <button type="button" className="btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  Previous
+                </button>
+                <span className="text-muted" style={{ fontSize: "0.9rem" }}>
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
+              </nav>
+            ) : null}
           </nav>
           <div>
             {selected ? (
@@ -96,11 +126,11 @@ export function AdminEvaluationsPage() {
                 showModeration
               />
             ) : (
-              <p style={{ color: "#666" }}>Select a scenario to moderate evaluations.</p>
+              <p className="text-muted">Select a scenario to moderate evaluations.</p>
             )}
           </div>
         </div>
       ) : null}
-    </main>
+    </PageLayout>
   );
 }

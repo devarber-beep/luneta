@@ -1,5 +1,4 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   fetchAuditCatalog,
   getAdminAuditEvent,
@@ -8,8 +7,8 @@ import {
   type AuditCatalogOption,
 } from "../adminApi";
 import { getToken } from "../session";
-
-const layoutStyle = { maxWidth: "1100px", margin: "0 auto", padding: "2rem", fontFamily: "system-ui, sans-serif" };
+import { PageLayout } from "../components/PageLayout";
+import { StatusMessage } from "../components/StatusMessage";
 
 function formatWhen(iso: string): string {
   try {
@@ -33,6 +32,13 @@ function actorLabel(row: AdminAuditEvent): string {
   return row.actor_user_id;
 }
 
+function subjectSummary(row: AdminAuditEvent, subjectTypeLabel: string): string {
+  if (row.subject_display_label) {
+    return `${subjectTypeLabel}: ${row.subject_display_label}`;
+  }
+  return `${subjectTypeLabel} · ${row.subject_id}`;
+}
+
 export function AdminAuditPage() {
   const token = getToken() ?? "";
   const [catalog, setCatalog] = useState<{ action_types: AuditCatalogOption[]; subject_types: AuditCatalogOption[] }>({
@@ -42,16 +48,16 @@ export function AdminAuditPage() {
   const [items, setItems] = useState<AdminAuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(30);
+  const [pageSize] = useState(5);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState<AdminAuditEvent | null>(null);
 
-  const [actorUserId, setActorUserId] = useState("");
+  const [actorQuery, setActorQuery] = useState("");
   const [actionType, setActionType] = useState("");
   const [subjectType, setSubjectType] = useState("");
-  const [subjectId, setSubjectId] = useState("");
+  const [subjectQuery, setSubjectQuery] = useState("");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
 
@@ -68,10 +74,10 @@ export function AdminAuditPage() {
         const res = await listAdminAuditEvents(token, {
           page: targetPage,
           page_size: pageSize,
-          actor_user_id: actorUserId.trim() || undefined,
+          actor_query: actorQuery.trim() || undefined,
           action_type: actionType || undefined,
           subject_type: subjectType || undefined,
-          subject_id: subjectId.trim() || undefined,
+          subject_query: subjectQuery.trim() || undefined,
           created_from: createdFrom ? new Date(createdFrom).toISOString() : undefined,
           created_to: createdTo ? new Date(createdTo).toISOString() : undefined,
         });
@@ -89,16 +95,7 @@ export function AdminAuditPage() {
         setLoading(false);
       }
     },
-    [
-      token,
-      pageSize,
-      actorUserId,
-      actionType,
-      subjectType,
-      subjectId,
-      createdFrom,
-      createdTo,
-    ],
+    [token, pageSize, actorQuery, actionType, subjectType, subjectQuery, createdFrom, createdTo],
   );
 
   useEffect(() => {
@@ -129,14 +126,8 @@ export function AdminAuditPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <main style={layoutStyle}>
-      <h2>Admin — activity log</h2>
-      <p>
-        <Link to="/admin/catalogs">Catalogs</Link> · <Link to="/admin/assignments">Assignments</Link> ·{" "}
-        <Link to="/admin/evaluations">Moderate evaluations</Link> · <Link to="/">Home</Link>
-      </p>
-      {message ? <p style={{ color: "crimson" }}>{message}</p> : null}
-
+    <PageLayout documentTitle="Activity log" heading="">
+      <StatusMessage message={message} onDismiss={() => setMessage("")} />
       <form
         onSubmit={onFilter}
         style={{
@@ -148,8 +139,12 @@ export function AdminAuditPage() {
         }}
       >
         <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem" }}>
-          Actor user id
-          <input value={actorUserId} onChange={(e) => setActorUserId(e.target.value)} />
+          Actor (name or email)
+          <input
+            value={actorQuery}
+            onChange={(e) => setActorQuery(e.target.value)}
+            autoComplete="off"
+          />
         </label>
         <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem" }}>
           Action
@@ -174,8 +169,12 @@ export function AdminAuditPage() {
           </select>
         </label>
         <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem" }}>
-          Subject id
-          <input value={subjectId} onChange={(e) => setSubjectId(e.target.value)} />
+          Subject search
+          <input
+            value={subjectQuery}
+            onChange={(e) => setSubjectQuery(e.target.value)}
+            autoComplete="off"
+          />
         </label>
         <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem" }}>
           From
@@ -199,43 +198,43 @@ export function AdminAuditPage() {
       {!loading && items.length > 0 ? (
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 1fr) minmax(320px, 1.2fr)", gap: "1.5rem" }}>
           <section>
-            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            <ul className="list-picker">
               {items.map((row) => {
                 const active = row.id === selectedId;
                 return (
-                  <li key={row.id} style={{ marginBottom: "0.35rem" }}>
+                  <li key={row.id} className="list-picker__item">
                     <button
                       type="button"
                       onClick={() => setSelectedId(row.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "0.55rem 0.65rem",
-                        borderRadius: "6px",
-                        border: active ? "2px solid #1a73e8" : "1px solid #ddd",
-                        background: active ? "#e8f0fe" : "#fff",
-                        cursor: "pointer",
-                        font: "inherit",
-                      }}
+                      className={`list-picker__button${active ? " list-picker__button--active" : ""}`}
                     >
-                      <div style={{ fontWeight: 600, lineHeight: 1.3 }}>{actionLabel(row.action_type)}</div>
-                      <div style={{ fontSize: "0.8rem", color: "#555", marginTop: "0.2rem" }}>
-                        {formatWhen(row.created_at)} · {subjectLabel(row.subject_type)} · {row.subject_id.slice(0, 12)}
-                        {row.subject_id.length > 12 ? "…" : ""}
+                      <div className="list-picker__title">{actionLabel(row.action_type)}</div>
+                      <div className="list-picker__meta">
+                        {formatWhen(row.created_at)} · {subjectSummary(row, subjectLabel(row.subject_type))}
                       </div>
                     </button>
                   </li>
                 );
               })}
             </ul>
-            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
-              <button type="button" disabled={page <= 1} onClick={() => loadList(page - 1)}>
-                Previous
-              </button>
-              <button type="button" disabled={page >= totalPages} onClick={() => loadList(page + 1)}>
-                Next
-              </button>
-            </div>
+            {total > pageSize ? (
+              <nav className="pagination" aria-label="Activity log pagination">
+                <button type="button" className="btn" disabled={page <= 1} onClick={() => loadList(page - 1)}>
+                  Previous
+                </button>
+                <span className="text-muted" style={{ fontSize: "0.9rem" }}>
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={page >= totalPages}
+                  onClick={() => loadList(page + 1)}
+                >
+                  Next
+                </button>
+              </nav>
+            ) : null}
           </section>
 
           <section aria-live="polite">
@@ -252,7 +251,13 @@ export function AdminAuditPage() {
                 <dd>{actionLabel(detail.action_type)}</dd>
                 <dt style={{ fontWeight: 600 }}>Subject</dt>
                 <dd>
-                  {subjectLabel(detail.subject_type)} · <code>{detail.subject_id}</code>
+                  {subjectSummary(detail, subjectLabel(detail.subject_type))}
+                  {detail.subject_display_label ? (
+                    <>
+                      {" "}
+                      · <code>{detail.subject_id}</code>
+                    </>
+                  ) : null}
                 </dd>
                 <dt style={{ fontWeight: 600 }}>Previous</dt>
                 <dd>
@@ -269,6 +274,6 @@ export function AdminAuditPage() {
           </section>
         </div>
       ) : null}
-    </main>
+    </PageLayout>
   );
 }

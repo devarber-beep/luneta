@@ -524,6 +524,7 @@ export async function reviewQueue(
     scenario_id: string;
     title: string;
     author_user_id: string;
+    author_display_name: string;
     author_university?: string | null;
     state: string;
     has_prior_approval: boolean;
@@ -531,6 +532,9 @@ export async function reviewQueue(
     live_public_title?: string | null;
     live_public_description?: string | null;
     live_public_path?: string | null;
+    description_preview?: string | null;
+    cover_url?: string | null;
+    cover_alt?: string | null;
   }>;
 }> {
   const search = new URLSearchParams();
@@ -594,11 +598,15 @@ export async function reviewedScenarios(
     scenario_id: string;
     title: string;
     author_user_id: string;
+    author_display_name: string;
     author_university?: string | null;
     state: string;
     last_reviewed_at: string;
     last_review_outcome?: string | null;
     live_public_path?: string | null;
+    description_preview?: string | null;
+    cover_url?: string | null;
+    cover_alt?: string | null;
   }>;
 }> {
   const search = new URLSearchParams();
@@ -634,6 +642,12 @@ export type PublicScenarioListItem = {
   author_user_id: string;
   author_display_name: string;
   author_university?: string | null;
+  description_preview?: string | null;
+  cover_url?: string | null;
+  cover_alt?: string | null;
+  evaluation_count?: number;
+  average_risk_score?: number | null;
+  average_benefit_score?: number | null;
 };
 
 export type PublicScenarioSearchResult = {
@@ -774,6 +788,12 @@ export type ScenarioSummary = {
   public_path?: string | null;
   my_participation_role: "owner" | "collaborator";
   pending_suggestion_count?: number;
+  description_preview?: string | null;
+  cover_url?: string | null;
+  cover_alt?: string | null;
+  evaluation_count?: number;
+  average_risk_score?: number | null;
+  average_benefit_score?: number | null;
 };
 
 export async function listMyScenarios(
