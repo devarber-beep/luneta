@@ -15,6 +15,12 @@ class PublicScenarioListItem(BaseModel):
     author_user_id: str
     author_display_name: str
     author_university: str | None = None
+    description_preview: str | None = None
+    cover_url: str | None = None
+    cover_alt: str | None = None
+    evaluation_count: int = 0
+    average_risk_score: float | None = None
+    average_benefit_score: float | None = None
 
 
 class PublicScenarioSearchResponse(BaseModel):

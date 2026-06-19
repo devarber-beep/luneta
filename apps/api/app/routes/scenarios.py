@@ -50,6 +50,11 @@ from app.services.content_policy import SimilarityAdvisory
 from app.services.scenario_service import ScenarioSaveResult
 from app.services.scenario_similarity_service import ScenarioSimilarityService
 from app.services.suggestion_service import SuggestionService
+from app.services.scenario_list_preview import (
+    cover_signed_url,
+    description_preview,
+    evaluation_stats_for_scenario_ids,
+)
 from app.storage.minio_storage import MinioScenarioStorage
 
 router = APIRouter()
@@ -233,19 +238,33 @@ async def list_my_scenarios(
     pending_counts = await _suggestion_service(db).pending_post_publication_counts(
         scenario_ids=scenario_ids
     )
-    return [
-        ScenarioSummaryResponse(
-            id=s.id or "",
-            title=s.title,
-            state=s.state,
-            updated_at=s.updated_at,
-            first_published_at=s.first_published_at,
-            public_path=f"/public/{s.public_slug}" if s.public_slug else None,
-            my_participation_role=_my_participation_role(scenario=s, user_id=uid),
-            pending_suggestion_count=pending_counts.get(s.id or "", 0),
+    storage = MinioScenarioStorage.from_settings()
+    published_ids = [s.id or "" for s in scenarios if s.id and s.public_slug]
+    eval_stats = await evaluation_stats_for_scenario_ids(db, published_ids)
+    items: list[ScenarioSummaryResponse] = []
+    for s in scenarios:
+        sid = s.id or ""
+        cover_url, cover_alt = cover_signed_url(s, storage)
+        stats = eval_stats.get(sid) if s.public_slug else None
+        items.append(
+            ScenarioSummaryResponse(
+                id=sid,
+                title=s.title,
+                state=s.state,
+                updated_at=s.updated_at,
+                first_published_at=s.first_published_at,
+                public_path=f"/public/{s.public_slug}" if s.public_slug else None,
+                my_participation_role=_my_participation_role(scenario=s, user_id=uid),
+                pending_suggestion_count=pending_counts.get(sid, 0),
+                description_preview=description_preview(s.summary or s.description),
+                cover_url=cover_url,
+                cover_alt=cover_alt,
+                evaluation_count=stats.evaluation_count if stats else 0,
+                average_risk_score=stats.average_risk_score if stats else None,
+                average_benefit_score=stats.average_benefit_score if stats else None,
+            )
         )
-        for s in scenarios
-    ]
+    return items
 
 
 @router.get("/{scenario_id}", response_model=ScenarioResponse)

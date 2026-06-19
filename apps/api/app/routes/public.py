@@ -22,6 +22,11 @@ from app.schemas.public import (
     PublicScenarioResponse,
     PublicScenarioSearchResponse,
 )
+from app.services.scenario_list_preview import (
+    cover_signed_url,
+    description_preview,
+    evaluation_stats_for_scenario_ids,
+)
 from app.storage.minio_storage import MinioScenarioStorage
 
 router = APIRouter()
@@ -72,18 +77,32 @@ async def _catalog_labels_for_scenario(*, scenario, db: AsyncIOMotorDatabase) ->
 async def _list_items_for_scenarios(
     *,
     scenarios,
+    db: AsyncIOMotorDatabase,
 ) -> list[PublicScenarioListItem]:
+    storage = MinioScenarioStorage.from_settings()
+    scenario_ids = [s.id or "" for s in scenarios if s.id]
+    eval_stats = await evaluation_stats_for_scenario_ids(db, scenario_ids)
     items: list[PublicScenarioListItem] = []
     for scenario in scenarios:
+        sid = scenario.id or ""
+        cover_url, cover_alt = cover_signed_url(scenario, storage)
+        stats = eval_stats.get(sid)
+        body = scenario.public_description or scenario.description
         items.append(
             PublicScenarioListItem(
-                id=scenario.id or "",
+                id=sid,
                 title=scenario.public_title or scenario.title,
                 published_at=scenario.published_at or scenario.updated_at,
                 public_path=f"/public/{scenario.public_slug}",
                 author_user_id=scenario.author_user_id,
                 author_display_name=_author_display_name_for_scenario(scenario=scenario),
                 author_university=scenario.author_university,
+                description_preview=description_preview(body),
+                cover_url=cover_url,
+                cover_alt=cover_alt,
+                evaluation_count=stats.evaluation_count if stats else 0,
+                average_risk_score=stats.average_risk_score if stats else None,
+                average_benefit_score=stats.average_benefit_score if stats else None,
             )
         )
     return items
@@ -159,7 +178,7 @@ async def search_public_scenarios(
         page=page,
         page_size=page_size,
     )
-    items = await _list_items_for_scenarios(scenarios=scenarios)
+    items = await _list_items_for_scenarios(scenarios=scenarios, db=db)
     return PublicScenarioSearchResponse(items=items, total=total, page=page, page_size=page_size)
 
 

@@ -23,6 +23,12 @@ class ScenarioSummaryResponse(BaseModel):
     public_path: str | None = None
     my_participation_role: ScenarioParticipationRole
     pending_suggestion_count: int = 0
+    description_preview: str | None = None
+    cover_url: str | None = None
+    cover_alt: str | None = None
+    evaluation_count: int = 0
+    average_risk_score: float | None = None
+    average_benefit_score: float | None = None
 
 
 class ScenarioCreateRequest(BaseModel):

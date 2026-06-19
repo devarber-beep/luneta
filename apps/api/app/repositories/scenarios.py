@@ -157,6 +157,41 @@ class ScenariosRepository:
         doc = await self._collection.find_one({"public_slug": slug, "deleted_at": None})
         return self._to_model(doc)
 
+    async def list_ids_matching_title(self, q: str) -> list[str]:
+        trimmed = q.strip()
+        if not trimmed:
+            return []
+        pattern = re.escape(trimmed)
+        query = {
+            "deleted_at": None,
+            "$or": [
+                {"title": {"$regex": pattern, "$options": "i"}},
+                {"public_title": {"$regex": pattern, "$options": "i"}},
+            ],
+        }
+        ids: list[str] = []
+        cursor = self._collection.find(query)
+        async for doc in cursor:
+            oid = doc.get("_id")
+            if oid is not None:
+                ids.append(str(oid))
+        return ids
+
+    async def map_titles_by_ids(self, scenario_ids: list[str]) -> dict[str, str]:
+        oids: list[ObjectId] = []
+        for scenario_id in dict.fromkeys(scenario_ids):
+            if ObjectId.is_valid(scenario_id):
+                oids.append(ObjectId(scenario_id))
+        if not oids:
+            return {}
+        out: dict[str, str] = {}
+        cursor = self._collection.find({"_id": {"$in": oids}, "deleted_at": None})
+        async for doc in cursor:
+            oid = doc.get("_id")
+            if oid is not None:
+                out[str(oid)] = str(doc.get("title") or doc.get("public_title") or "")
+        return out
+
     async def update_draft_content(
         self,
         *,

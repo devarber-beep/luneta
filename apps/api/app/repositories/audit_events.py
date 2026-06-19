@@ -63,10 +63,11 @@ class AuditEventsRepository:
     async def list_filtered(
         self,
         *,
-        actor_user_id: str | None = None,
+        actor_user_ids: list[str] | None = None,
         action_types: list[AuditActionType] | None = None,
         subject_type: AuditSubjectType | None = None,
-        subject_id: str | None = None,
+        subject_ids: list[str] | None = None,
+        subject_clauses: list[dict[str, Any]] | None = None,
         created_from: datetime | None = None,
         created_to: datetime | None = None,
         page: int = 1,
@@ -74,15 +75,22 @@ class AuditEventsRepository:
     ) -> tuple[list[AuditEventModel], int]:
         await self.ensure_indexes()
         query: dict[str, Any] = {}
-        if actor_user_id:
-            query["actor_user_id"] = actor_user_id
+        if actor_user_ids is not None:
+            if not actor_user_ids:
+                return [], 0
+            query["actor_user_id"] = actor_user_ids[0] if len(actor_user_ids) == 1 else {"$in": actor_user_ids}
         if action_types:
             values = [item.value for item in action_types]
             query["action_type"] = values[0] if len(values) == 1 else {"$in": values}
         if subject_type is not None:
             query["subject_type"] = subject_type.value
-        if subject_id:
-            query["subject_id"] = subject_id
+        if subject_ids is not None:
+            if not subject_ids:
+                return [], 0
+            query["subject_id"] = subject_ids[0] if len(subject_ids) == 1 else {"$in": subject_ids}
+        if subject_clauses:
+            clause = subject_clauses[0] if len(subject_clauses) == 1 else {"$or": subject_clauses}
+            query = {"$and": [query, clause]} if query else clause
         if created_from is not None or created_to is not None:
             created_filter: dict[str, Any] = {}
             if created_from is not None:

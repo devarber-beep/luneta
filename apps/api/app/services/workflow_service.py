@@ -26,6 +26,14 @@ from app.services.audit_helpers import record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.notification_service import NotificationService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
+from app.services.scenario_list_preview import cover_signed_url, description_preview
+from app.storage.minio_storage import MinioScenarioStorage
+
+
+def _author_display_name_for_scenario(scenario) -> str:
+    if scenario.author_display_name:
+        return scenario.author_display_name
+    return scenario.author_user_id
 
 
 class WorkflowService:
@@ -115,16 +123,22 @@ class WorkflowService:
             if scenario.last_reviewed_at is None:
                 continue
             live_slug = scenario.public_slug
+            storage = MinioScenarioStorage.from_settings()
+            cover_url, cover_alt = cover_signed_url(scenario, storage)
             items.append(
                 ReviewedScenarioItem(
                     scenario_id=scenario.id or "",
                     title=scenario.title,
                     author_user_id=scenario.author_user_id,
+                    author_display_name=_author_display_name_for_scenario(scenario),
                     author_university=scenario.author_university,
                     state=scenario.state,
                     last_reviewed_at=scenario.last_reviewed_at,
                     last_review_outcome=scenario.last_review_outcome,
                     live_public_path=f"/public/{live_slug}" if live_slug else None,
+                    description_preview=description_preview(scenario.description),
+                    cover_url=cover_url,
+                    cover_alt=cover_alt,
                 )
             )
         return items
@@ -331,10 +345,13 @@ class WorkflowService:
         live_slug = scenario.public_slug
         live_title = scenario.public_title
         live_description = scenario.public_description
+        storage = MinioScenarioStorage.from_settings()
+        cover_url, cover_alt = cover_signed_url(scenario, storage)
         return ReviewQueueItem(
             scenario_id=scenario.id or "",
             title=scenario.title,
             author_user_id=scenario.author_user_id,
+            author_display_name=_author_display_name_for_scenario(scenario),
             author_university=scenario.author_university,
             state=scenario.state,
             has_prior_approval=scenario.first_approved_at is not None,
@@ -342,6 +359,9 @@ class WorkflowService:
             live_public_title=live_title,
             live_public_description=live_description,
             live_public_path=f"/public/{live_slug}" if live_slug else None,
+            description_preview=description_preview(scenario.description),
+            cover_url=cover_url,
+            cover_alt=cover_alt,
         )
 
     async def _require_scenario(self, scenario_id: str):

@@ -12,6 +12,7 @@ from app.domain.authz_permissions import Permission
 from app.domain.enums import AuditActionType, AuditSubjectType
 from app.models.user import UserModel
 from app.repositories.audit_events import AuditEventsRepository
+from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.audit import AuditCatalogOption, AuditCatalogResponse, AuditEventItem, AuditEventListResponse
 from app.services.audit_service import AuditQueryService
@@ -62,6 +63,7 @@ def _query_service(db: AsyncIOMotorDatabase) -> AuditQueryService:
     return AuditQueryService(
         audit_repo=AuditEventsRepository(db),
         users_repo=UsersRepository(db),
+        scenarios_repo=ScenariosRepository(db),
     )
 
 
@@ -99,10 +101,13 @@ async def audit_catalog(
 
 @router.get("/audit-events", response_model=AuditEventListResponse)
 async def list_audit_events(
-    actor_user_id: str | None = Query(default=None),
+    actor_query: str | None = Query(default=None, description="Actor name or email (partial match)"),
     action_type: str | None = Query(default=None, description="Comma-separated action_type values"),
     subject_type: AuditSubjectType | None = Query(default=None),
-    subject_id: str | None = Query(default=None),
+    subject_query: str | None = Query(
+        default=None,
+        description="Subject search: scenario title, user name/email, or partial id for other types",
+    ),
     created_from: datetime | None = Query(default=None),
     created_to: datetime | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -112,10 +117,10 @@ async def list_audit_events(
 ) -> AuditEventListResponse:
     service = _query_service(db)
     items, total = await service.list_events_enriched(
-        actor_user_id=actor_user_id,
+        actor_query=actor_query,
         action_types=_parse_action_types(action_type),
         subject_type=subject_type,
-        subject_id=subject_id,
+        subject_query=subject_query,
         created_from=created_from,
         created_to=created_to,
         page=page,

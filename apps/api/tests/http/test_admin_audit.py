@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from bson import ObjectId
 
 from tests.conftest import user_doc
 
@@ -31,6 +32,25 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
     insert = await fake_db["users"].insert_one(admin)
     admin_id = str(insert.inserted_id)
 
+    scenario_oid = ObjectId()
+    scenario_id = str(scenario_oid)
+    await fake_db["scenarios"].insert_one(
+        {
+            "_id": scenario_oid,
+            "title": "Classroom VR ethics scenario",
+            "slug": "classroom-vr-ethics",
+            "description": "Body",
+            "state": "published",
+            "author_user_id": admin_id,
+            "category_ids": [],
+            "ethical_risk_ids": [],
+            "collaborators": [{"user_id": admin_id, "role": "owner"}],
+            "deleted_at": None,
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
     now = datetime.now(UTC)
     older = now - timedelta(days=2)
     await fake_db["audit_events"].insert_one(
@@ -51,7 +71,7 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
             "actor_role": "admin",
             "action_type": "scenario_published",
             "subject_type": "scenario",
-            "subject_id": "scenario-abc",
+            "subject_id": scenario_id,
             "previous": {"state": "in_review"},
             "current": {"state": "published"},
             "created_at": now,
@@ -79,11 +99,19 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
 
     by_subject = await api_client.get(
         "/admin/audit-events",
-        params={"subject_type": "scenario", "subject_id": "scenario-abc"},
+        params={"subject_type": "scenario", "subject_query": "Classroom VR"},
         headers=headers,
     )
     assert by_subject.status_code == 200
     assert by_subject.json()["total"] == 1
+
+    by_actor = await api_client.get(
+        "/admin/audit-events",
+        params={"actor_query": "adm-audit@luneta.dev"},
+        headers=headers,
+    )
+    assert by_actor.status_code == 200
+    assert by_actor.json()["total"] == 2
 
     by_action = await api_client.get(
         "/admin/audit-events",
@@ -98,7 +126,8 @@ async def test_admin_lists_and_filters_audit_events(api_client, fake_db) -> None
         headers=headers,
     )
     assert detail.status_code == 200
-    assert detail.json()["subject_id"] == "scenario-abc"
+    assert detail.json()["subject_id"] == scenario_id
+    assert detail.json()["subject_display_label"] == "Classroom VR ethics scenario"
 
 
 @pytest.mark.asyncio
@@ -171,7 +200,7 @@ async def test_create_investigator_writes_listable_audit_event(api_client, fake_
 
     listed = await api_client.get(
         "/admin/audit-events",
-        params={"action_type": "investigator_account_created", "subject_id": inv_id},
+        params={"action_type": "investigator_account_created", "subject_query": "listed-inv@luneta.dev"},
         headers=headers,
     )
     assert listed.status_code == 200

@@ -16,6 +16,7 @@ class AuditEventItem(BaseModel):
     action_type: str
     subject_type: str
     subject_id: str
+    subject_display_label: str | None = None
     previous: dict[str, Any] | None = None
     current: dict[str, Any] | None = None
     created_at: datetime
