@@ -39,15 +39,12 @@ def effective_scenario(
     *,
     title: str | None = None,
     description: str | None = None,
-    summary: str | None = None,
 ) -> ScenarioModel:
     updates: dict[str, str | None] = {}
     if title is not None:
         updates["title"] = title
     if description is not None:
         updates["description"] = description.strip()
-    if summary is not None:
-        updates["summary"] = summary
     if not updates:
         return scenario
     return scenario.model_copy(update=updates)
@@ -116,7 +113,6 @@ async def enforce_content_policies(
     action: Literal["save", "submit_review"],
     title: str | None = None,
     description: str | None = None,
-    summary: str | None = None,
 ) -> SimilarityAdvisory | None:
     if not should_run_content_checks(scenario):
         return None
@@ -125,7 +121,6 @@ async def enforce_content_policies(
         scenario,
         title=title,
         description=description,
-        summary=summary,
     )
     scenario_id = scenario.id or ""
 

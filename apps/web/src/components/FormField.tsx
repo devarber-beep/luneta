@@ -1,4 +1,4 @@
-import { type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes, useId } from "react";
+import { type InputHTMLAttributes, type TextareaHTMLAttributes, useId } from "react";
 
 type BaseProps = {
   label: string;
@@ -31,8 +31,4 @@ export function FormField(props: InputProps | TextareaProps) {
       )}
     </div>
   );
-}
-
-export function FormActions({ children }: { children: ReactNode }) {
-  return <div className="btn-group">{children}</div>;
 }

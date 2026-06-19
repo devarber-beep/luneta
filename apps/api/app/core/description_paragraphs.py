@@ -1,6 +1,6 @@
 """Split scenario descriptions into paragraphs (double newline separated).
 
-Contract: packages/contracts/fixtures/description_paragraphs.json
+Contract: fixtures/description_paragraphs.json
 Web mirror: apps/web/src/domain/descriptionParagraphs.ts
 """
 from __future__ import annotations

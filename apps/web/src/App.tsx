@@ -861,10 +861,9 @@ function PublicScenarioPage() {
   const [authorUniversity, setAuthorUniversity] = useState<string | null>(null);
   const [collaborators, setCollaborators] = useState<Array<{ user_id: string; display_name: string }>>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [summary, setSummary] = useState<string | null>(null);
-  const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+    const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [ethicalRisks, setEthicalRisks] = useState<Array<{ id: string; label: string }>>([]);
   const [usageContextLines, setUsageContextLines] = useState<string[]>([]);
   const [publicCanSuggest, setPublicCanSuggest] = useState(false);
@@ -911,7 +910,6 @@ function PublicScenarioPage() {
         setCollaborators(data.collaborators ?? []);
         setTitle(data.title);
         setDescription(data.description);
-        setSummary(data.summary ?? null);
         setCategories(data.categories ?? []);
         setEthicalRisks(data.ethical_risks ?? []);
         setUsageContextLines(describeUsageContext(data.usage_context as ScenarioUsageContext | null));
@@ -1040,8 +1038,6 @@ function PublicScenarioPage() {
                 </div>
               ) : null}
             </header>
-
-            {summary ? <p className="public-scenario__summary">{summary}</p> : null}
 
             <div className="scenario-read-section public-scenario__description">
               {scenarioId && token && (publicCanSuggest || canViewSuggestions) ? (

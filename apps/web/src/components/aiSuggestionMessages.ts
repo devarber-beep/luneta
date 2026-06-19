@@ -1,4 +1,4 @@
-export type AiGenerateEmptyReason = "none" | "model_empty" | "filtered";
+import type { AiGenerateEmptyReason } from "../api";
 
 export function aiGenerateEmptyMessage(
   emptyReason: AiGenerateEmptyReason,

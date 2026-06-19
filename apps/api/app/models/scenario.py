@@ -61,9 +61,6 @@ class ScenarioModel(BaseModel):
     collaborators: list[ScenarioCollaboratorModel] = Field(default_factory=list)
     state: ScenarioState = ScenarioState.DRAFT
     current_revision_number: int = 1
-    summary: str | None = None
-    categories: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
     submitted_for_review_at: datetime | None = None
     submitted_for_review_by_user_id: str | None = None
     review_started_at: datetime | None = None
@@ -92,7 +89,6 @@ class ScenarioModel(BaseModel):
     inline_assets: list[ScenarioAssetModel] = Field(default_factory=list)
     ethical_considerations: ScenarioAssessmentModel | None = None
     risk_assessment: ScenarioAssessmentModel | None = None
-    sensitive_data_involved: bool | None = None
     avg_rating: float | None = None
     rating_count: int = 0
     rating_sum: int = 0

@@ -26,7 +26,7 @@ async def _signup_investigator(api_client, fake_db, *, email: str, token: str) -
 
 
 @pytest.mark.asyncio
-async def test_investigator_can_list_active_authoring_catalogs(api_client, fake_db) -> None:
+async def test_investigator_can_list_active_ethical_risks_and_public_categories(api_client, fake_db) -> None:
     now = datetime.now(UTC)
     cat = await fake_db["scenario_classification_catalog"].insert_one(
         {"slug": "author-cat", "label": "Education", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
@@ -37,10 +37,6 @@ async def test_investigator_can_list_active_authoring_catalogs(api_client, fake_
     headers = await _signup_investigator(
         api_client, fake_db, email="authorcat@luneta.dev", token="author-cat"
     )
-
-    categories = await api_client.get("/catalog/scenario-classification", headers=headers)
-    assert categories.status_code == 200
-    assert categories.json()["items"] == [{"id": str(cat.inserted_id), "label": "Education"}]
 
     risks = await api_client.get("/catalog/ethical-risks", headers=headers)
     assert risks.status_code == 200

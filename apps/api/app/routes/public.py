@@ -221,7 +221,6 @@ async def get_public_scenario(slug: str, db: AsyncIOMotorDatabase = Depends(get_
         author_university=scenario.author_university,
         title=scenario.public_title or scenario.title,
         description=scenario.public_description or scenario.description,
-        summary=scenario.summary,
         published_at=scenario.published_at or scenario.updated_at,
         categories=categories,
         ethical_risks=ethical_risks,

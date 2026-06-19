@@ -1,7 +1,7 @@
 # Luneta - un solo comando para levantar todo en local
-# Uso: docker compose up   o   make up
+# Uso: docker compose up
 #
-# Servicios: mongo, redis, minio, mailhog (infra) + api, worker, web (apps)
+# Servicios: mongo, minio, mailhog (infra) + api, web (apps)
 
 services:
   mongo:
@@ -11,12 +11,6 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
-
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
 
   minio:
     image: minio/minio:latest
@@ -46,7 +40,6 @@ services:
       - "8000:8000"
     environment:
       MONGODB_URI: mongodb://mongo:27017/luneta
-      REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: http://localhost:9000
       WEB_URL: http://localhost:5173
@@ -56,28 +49,6 @@ services:
       - .env
     depends_on:
       - mongo
-      - redis
-
-  worker:
-    build:
-      context: apps/api
-      dockerfile: Dockerfile
-    command: ["taskiq", "worker", "worker:broker"]
-    restart: unless-stopped
-    environment:
-      MONGODB_URI: mongodb://mongo:27017/luneta
-      REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
-      WEB_URL: http://localhost:5173
-      EMAIL_SMTP_HOST: mailhog
-      EMAIL_SMTP_PORT: 1025
-    env_file:
-      - .env
-    depends_on:
-      - mongo
-      - redis
-      - api
 
   web:
     build:

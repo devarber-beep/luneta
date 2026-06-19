@@ -63,29 +63,6 @@ def can_list_suggestions(
     return False
 
 
-def can_read_description_paragraphs(
-    *,
-    user: UserModel,
-    scenario: ScenarioModel,
-    portfolio_investigator_ids: frozenset[str],
-    reviewer_has_reviewed_scenario: bool = False,
-) -> bool:
-    """Paragraph text for composing or reviewing suggestions."""
-    if scenario.deleted_at is not None:
-        return False
-    return can_list_suggestions(
-        user=user,
-        scenario=scenario,
-        portfolio_investigator_ids=portfolio_investigator_ids,
-        reviewer_has_reviewed_scenario=reviewer_has_reviewed_scenario,
-    ) or can_create_suggestion(
-        user=user,
-        scenario=scenario,
-        portfolio_investigator_ids=portfolio_investigator_ids,
-        reviewer_has_reviewed_scenario=reviewer_has_reviewed_scenario,
-    )
-
-
 def can_create_suggestion(
     *,
     user: UserModel,

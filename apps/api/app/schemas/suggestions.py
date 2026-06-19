@@ -37,10 +37,6 @@ class SuggestionListResponse(BaseModel):
     items: list[SuggestionResponse]
 
 
-class DescriptionParagraphsResponse(BaseModel):
-    paragraphs: list[str]
-
-
 class ReviewFeedbackStatusResponse(BaseModel):
     has_submitted_feedback: bool
 

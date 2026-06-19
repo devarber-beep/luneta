@@ -152,7 +152,7 @@ async def test_patch_returns_similarity_advisory_without_blocking_save(api_clien
     sid = body["id"]
     patch = await api_client.patch(
         f"/scenarios/{sid}",
-        json={"summary": "Still similar after save."},
+        json={"title": "Classroom smart glasses pilot copy"},
         headers=headers,
     )
     assert patch.status_code == 200

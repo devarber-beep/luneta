@@ -1,7 +1,7 @@
 [project]
 name = "luneta-api"
 version = "0.1.0"
-description = "Luneta API - FastAPI + Taskiq worker"
+description = "Luneta API - FastAPI"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115.0",
@@ -11,8 +11,6 @@ dependencies = [
   "motor>=3.4.0",
   "minio>=7.2.0",
   "python-multipart>=0.0.9",
-  "taskiq>=0.11.0",
-  "taskiq-redis>=0.6.0",
   "python-dotenv>=1.0.1",
   "openai>=1.40.0",
   "google-genai>=1.0.0",

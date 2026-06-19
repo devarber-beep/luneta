@@ -9,9 +9,5 @@ class CatalogEntryPublic(BaseModel):
     label: str
 
 
-class ActiveClassificationListResponse(BaseModel):
-    items: list[CatalogEntryPublic]
-
-
 class ActiveEthicalRiskListResponse(BaseModel):
     items: list[CatalogEntryPublic]

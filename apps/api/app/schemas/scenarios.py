@@ -39,13 +39,9 @@ class ScenarioCreateRequest(BaseModel):
 class ScenarioPatchRequest(BaseModel):
     title: str | None = Field(default=None, min_length=3, max_length=120)
     description: str | None = Field(default=None, min_length=1, max_length=2000)
-    summary: str | None = Field(default=None, max_length=500)
-    categories: list[str] | None = None
-    tags: list[str] | None = None
     category_ids: list[str] | None = None
     ethical_risk_ids: list[str] | None = None
     usage_context: ScenarioUsageContextModel | None = None
-    sensitive_data_involved: bool | None = None
 
 
 class ScenarioAssetResponse(BaseModel):
@@ -91,15 +87,11 @@ class ScenarioResponse(BaseModel):
     published_by_user_id: str | None = None
     public_revision_number: int | None = None
     last_state_changed_at: datetime
-    summary: str | None = None
-    categories: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
     keywords_normalized: list[str] = Field(default_factory=list)
     cover_image: ScenarioAssetResponse | None = None
     inline_assets: list[ScenarioAssetResponse] = Field(default_factory=list)
     ethical_considerations: ScenarioAssessmentResponse | None = None
     risk_assessment: ScenarioAssessmentResponse | None = None
-    sensitive_data_involved: bool | None = None
     avg_rating: float | None = None
     rating_count: int = 0
     rating_sum: int = 0
@@ -134,15 +126,6 @@ class ScenarioCollaboratorResponse(BaseModel):
     added_by: str
 
 
-class AddCollaboratorRequest(BaseModel):
-    user_id: str = Field(min_length=1)
-
-
-class ScenarioCollaboratorsResponse(BaseModel):
-    scenario_id: str
-    collaborators: list[ScenarioCollaboratorResponse]
-
-
 class ReorderInlineAssetsRequest(BaseModel):
     asset_ids: list[str]
 
@@ -163,19 +146,3 @@ class SimilarityCandidateResponse(BaseModel):
 class SimilarityAdvisoryResponse(BaseModel):
     provider: str
     candidates: list[SimilarityCandidateResponse] = Field(default_factory=list)
-
-
-class ScenarioRevisionListItem(BaseModel):
-    revision_number: int
-    title: str
-    description: str
-    state_snapshot: ScenarioState
-    created_at: datetime
-    created_by_user_id: str
-    accepted_suggestion_id: str | None = None
-    change_summary: str | None = None
-
-
-class ScenarioRevisionsResponse(BaseModel):
-    scenario_id: str
-    items: list[ScenarioRevisionListItem]

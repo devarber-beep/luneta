@@ -1,6 +1,6 @@
 /**
  * Paragraph splitting for scenario descriptions.
- * Contract: packages/contracts/fixtures/description_paragraphs.json
+ * Contract: fixtures/description_paragraphs.json
  * Python mirror: apps/api/app/core/description_paragraphs.py
  */
 export const PARAGRAPH_SEPARATOR = "\n\n";

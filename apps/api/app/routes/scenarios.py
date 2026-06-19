@@ -29,15 +29,12 @@ from app.repositories.users import UsersRepository
 from app.schemas.scenarios import (
     ReorderInlineAssetsRequest,
     ScenarioCreateRequest,
-    ScenarioCollaboratorsResponse,
     ScenarioCollaboratorResponse,
     ScenarioPatchRequest,
     ScenarioResponse,
     SimilarityAdvisoryResponse,
     SimilarityCandidateResponse,
     ScenarioParticipationRole,
-    ScenarioRevisionListItem,
-    ScenarioRevisionsResponse,
     ScenarioSummaryResponse,
     StartEditingWorkingCopyResponse,
     ScenarioAssetReadUrlResponse,
@@ -168,15 +165,11 @@ def _to_response(
         published_by_user_id=scenario.published_by_user_id,
         public_revision_number=scenario.public_revision_number,
         last_state_changed_at=scenario.last_state_changed_at,
-        summary=scenario.summary,
-        categories=scenario.categories,
-        tags=scenario.tags,
         keywords_normalized=scenario.keywords_normalized,
         cover_image=cover_image,
         inline_assets=inline_assets,
         ethical_considerations=scenario.ethical_considerations,
         risk_assessment=scenario.risk_assessment,
-        sensitive_data_involved=scenario.sensitive_data_involved,
         avg_rating=scenario.avg_rating,
         rating_count=scenario.rating_count,
         rating_sum=scenario.rating_sum,
@@ -267,7 +260,7 @@ async def list_my_scenarios(
                 public_path=f"/public/{s.public_slug}" if s.public_slug else None,
                 my_participation_role=_my_participation_role(scenario=s, user_id=uid),
                 pending_suggestion_count=pending_counts.get(sid, 0),
-                description_preview=description_preview(s.summary or s.description),
+                description_preview=description_preview(s.description),
                 cover_url=cover_url,
                 cover_alt=cover_alt,
                 evaluation_count=stats.evaluation_count if stats else 0,
@@ -332,13 +325,9 @@ async def patch_scenario(
         current_user=current_user,
         title=raw.get("title"),
         description=raw.get("description"),
-        summary=raw.get("summary"),
-        categories=raw.get("categories"),
-        tags=raw.get("tags"),
         category_ids=raw.get("category_ids"),
         ethical_risk_ids=raw.get("ethical_risk_ids"),
         usage_context=payload.usage_context if usage_context_raw is not None else None,
-        sensitive_data_involved=raw.get("sensitive_data_involved"),
     )
     return _to_response_from_save(result)
 
@@ -531,64 +520,4 @@ async def get_asset_read_url(
         expires_in_seconds=expires_in_seconds,
     )
     return ScenarioAssetReadUrlResponse(asset_id=asset_id, signed_url=signed_url, expires_in_seconds=expires)
-
-
-@router.get("/{scenario_id}/collaborators", response_model=ScenarioCollaboratorsResponse)
-async def list_collaborators(
-    scenario_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(
-        require_any_active_permission(Permission.SCENARIO_READ_OWN, Permission.SCENARIO_READ_REVIEW_QUEUE)
-    ),
-) -> ScenarioCollaboratorsResponse:
-    collaborators, scenario = await _service(db).list_collaborators(
-        scenario_id=scenario_id,
-        current_user=current_user,
-    )
-    return ScenarioCollaboratorsResponse(
-        scenario_id=scenario.id or "",
-        collaborators=[
-            ScenarioCollaboratorResponse(
-                user_id=collaborator.user_id,
-                role=collaborator.role,
-                added_at=collaborator.added_at,
-                added_by=collaborator.added_by,
-            )
-            for collaborator in collaborators
-        ],
-    )
-
-
-@router.get("/{scenario_id}/revisions", response_model=ScenarioRevisionsResponse)
-async def list_scenario_revisions(
-    scenario_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(
-        require_any_permission(
-            Permission.SCENARIO_READ_OWN,
-            Permission.SCENARIO_READ_REVIEW_QUEUE,
-        )
-    ),
-) -> ScenarioRevisionsResponse:
-    revisions = await _service(db).list_revisions(
-        scenario_id=scenario_id,
-        current_user=current_user,
-    )
-    return ScenarioRevisionsResponse(
-        scenario_id=scenario_id,
-        items=[
-            ScenarioRevisionListItem(
-                revision_number=row.revision_number,
-                title=row.title,
-                description=row.description,
-                state_snapshot=row.state_snapshot,
-                created_at=row.created_at,
-                created_by_user_id=row.created_by_user_id,
-                accepted_suggestion_id=row.accepted_suggestion_id,
-                change_summary=row.change_summary,
-            )
-            for row in revisions
-        ],
-    )
-
 

@@ -7,15 +7,12 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.db import get_db
 from app.deps.authz import require_permission
-from app.deps.storage import get_user_avatar_storage
 from app.domain.authz_permissions import Permission
 from app.domain.enums import UserAccountStatus, UserRole
 from app.models.user import UserModel
-from app.presenters.me_response import build_me_response
 from app.repositories.audit_events import AuditEventsRepository
 from app.repositories.email_verification_tokens import EmailVerificationTokensRepository
 from app.repositories.reviewer_assignments import ReviewerAssignmentsRepository
-from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
 from app.schemas.admin_users import (
     AdminCreateInvestigatorRequest,
@@ -26,14 +23,11 @@ from app.schemas.admin_users import (
     ReviewerInvestigatorIdsResponse,
     AdminUserSummaryResponse,
 )
-from app.schemas.auth import MeResponse, ProfilePatchRequest
 from app.services.admin_user_service import AdminUserService
 from app.services.audit_service import AuditService
-from app.services.auth_service import AuthService
 from app.services.notifications_factory import build_notification_service
 from app.services.reviewer_assignment_service import ReviewerAssignmentService
 from app.settings import settings
-from app.storage.minio_storage import MinioUserAvatarStorage
 
 router = APIRouter()
 
@@ -75,41 +69,6 @@ async def admin_create_investigator(
         last_name=payload.last_name,
     )
     return AdminCreateInvestigatorResponse(user_id=user.id or "", email_normalized=user.email_normalized)
-
-
-@router.get("/users/{user_id}/profile", response_model=MeResponse)
-async def admin_get_user_profile(
-    user_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _: UserModel = Depends(require_permission(Permission.USER_ADMIN_READ_ANY_PROFILE)),
-    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
-) -> MeResponse:
-    user = await UsersRepository(db).get_by_id(user_id)
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return build_me_response(user=user, storage=storage)
-
-
-@router.patch("/users/{user_id}/profile", response_model=MeResponse)
-async def admin_patch_user_profile(
-    user_id: str,
-    payload: ProfilePatchRequest,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _: UserModel = Depends(require_permission(Permission.USER_ADMIN_UPDATE_ANY_PROFILE)),
-    storage: MinioUserAvatarStorage = Depends(get_user_avatar_storage),
-) -> MeResponse:
-    users_repo = UsersRepository(db)
-    target = await users_repo.get_by_id(user_id)
-    if target is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    auth_service = AuthService(
-        users_repo=users_repo,
-        token_secret=settings.auth_token_secret,
-        token_ttl_seconds=settings.auth_token_ttl_seconds,
-        scenarios_repo=ScenariosRepository(db),
-    )
-    updated = await auth_service.update_profile(user=target, patch=payload)
-    return build_me_response(user=updated, storage=storage)
 
 
 @router.patch("/users/{user_id}/role", response_model=AdminUserMutationResponse)

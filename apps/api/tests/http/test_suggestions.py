@@ -741,9 +741,6 @@ async def test_investigator_suggests_on_other_published_scenario(api_client, fak
     public = await api_client.get(f"/public/scenarios/{slug}")
     assert public.status_code == 200
     assert public.json()["author_user_id"]
-    paras = await api_client.get(f"/scenarios/{sid}/suggestions/paragraphs", headers=other_h)
-    assert paras.status_code == 200
-    assert len(paras.json()["paragraphs"]) >= 1
     sug = await api_client.post(
         f"/scenarios/{sid}/suggestions",
         headers=other_h,

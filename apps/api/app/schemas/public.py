@@ -59,7 +59,6 @@ class PublicScenarioResponse(BaseModel):
     author_university: str | None = None
     title: str
     description: str
-    summary: str | None = None
     published_at: datetime
     categories: list[PublicCatalogLabel] = Field(default_factory=list)
     ethical_risks: list[PublicCatalogLabel] = Field(default_factory=list)

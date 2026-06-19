@@ -10,7 +10,6 @@ from app.core.permissions import get_collaborator_role, is_valid_transition
 from app.core.suggestion_access import (
     can_create_suggestion,
     can_list_suggestions,
-    can_read_description_paragraphs,
     can_read_review_feedback_status,
     can_resolve_suggestion,
 )
@@ -88,22 +87,6 @@ class SuggestionService:
         return await self._suggestions_repo.count_pending_post_publication_by_scenario_ids(
             scenario_ids=scenario_ids
         )
-
-    async def list_paragraphs(self, *, scenario_id: str, current_user: UserModel) -> list[str]:
-        scenario = await self._require_scenario(scenario_id)
-        portfolio = await self._portfolio(current_user)
-        reviewed = await self._review_events_repo.actor_has_reviewed_scenario(
-            scenario_id=scenario_id,
-            actor_user_id=current_user.id or "",
-        )
-        if not can_read_description_paragraphs(
-            user=current_user,
-            scenario=scenario,
-            portfolio_investigator_ids=portfolio,
-            reviewer_has_reviewed_scenario=reviewed,
-        ):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot read description paragraphs")
-        return split_paragraphs(scenario.description)
 
     async def get_review_feedback_status(
         self,
@@ -354,9 +337,6 @@ class SuggestionService:
             scenario_id=scenario_id,
             title=None,
             description=new_description,
-            summary=None,
-            categories=None,
-            tags=None,
         )
         if patched is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")

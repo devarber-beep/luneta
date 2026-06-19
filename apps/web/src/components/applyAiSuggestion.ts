@@ -4,7 +4,7 @@ import {
   splitDescriptionParagraphs,
 } from "../domain/descriptionParagraphs";
 
-export function replaceExcerpt(current: string, excerpt: string, proposed: string): string {
+function replaceExcerpt(current: string, excerpt: string, proposed: string): string {
   const field = current ?? "";
   const needle = excerpt.trim();
   if (!needle) {
@@ -20,7 +20,7 @@ export function replaceExcerpt(current: string, excerpt: string, proposed: strin
   return proposed;
 }
 
-export type ApplyAiSuggestionResult = {
+type ApplyAiSuggestionResult = {
   title?: string;
   description?: string;
   excerptFound: boolean;

@@ -92,15 +92,16 @@ async def test_generate_blocked_when_sensitive(api_client, fake_db, monkeypatch)
     )
     create = await api_client.post(
         "/scenarios",
-        json={
-            "title": "Contact study",
-            "description": "Email teacher@school.edu for coordination.",
-        },
+        json={"title": "Contact study", "description": "A classroom observation study."},
         headers=headers,
     )
     sid = create.json()["id"]
 
-    gen = await api_client.post(f"/scenarios/{sid}/ai-suggestions/generate", headers=headers)
+    gen = await api_client.post(
+        f"/scenarios/{sid}/ai-suggestions/generate",
+        headers=headers,
+        json={"description": "Email teacher@school.edu for coordination."},
+    )
     assert gen.status_code == 400
     detail = gen.json()["detail"]
     assert detail["code"] == "sensitive_data_detected"

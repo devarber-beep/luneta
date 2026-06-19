@@ -50,21 +50,6 @@ export function usageContextFromScenario(ctx: ScenarioUsageContext | null | unde
   };
 }
 
-export function usageContextFormIsComplete(form: UsageContextFormState): boolean {
-  return (
-    form.children_age_start !== "" &&
-    form.children_age_end !== "" &&
-    form.children_age_end >= form.children_age_start &&
-    (form.children_count_undefined || form.children_count !== "") &&
-    form.duration_frequency !== "" &&
-    form.physically_present !== "" &&
-    form.online_present !== "" &&
-    form.execution_place_affects_scenario !== "" &&
-    form.special_circumstances !== "" &&
-    form.consent_in_place !== ""
-  );
-}
-
 export function usageContextToPatch(form: UsageContextFormState): ScenarioUsageContext {
   return {
     children_age_start: form.children_age_start === "" ? null : form.children_age_start,

@@ -165,14 +165,6 @@ export async function unassignInvestigator(
   }
 }
 
-export async function fetchActiveCategories(token: string): Promise<{ items: CatalogEntry[] }> {
-  return request("/catalog/scenario-classification", { headers: authHeaders(token) });
-}
-
-export async function fetchActiveEthicalRisks(token: string): Promise<{ items: CatalogEntry[] }> {
-  return request("/catalog/ethical-risks", { headers: authHeaders(token) });
-}
-
 export type AdminEvaluationModerationTarget = {
   scenario_id: string;
   title: string;

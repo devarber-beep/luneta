@@ -67,15 +67,11 @@ class ScenariosRepository:
             ],
             "state": ScenarioState.DRAFT.value,
             "current_revision_number": 1,
-            "summary": None,
-            "categories": [],
-            "tags": [],
             "keywords_normalized": [],
             "cover_image": None,
             "inline_assets": [],
             "ethical_considerations": None,
             "risk_assessment": None,
-            "sensitive_data_involved": None,
             "avg_rating": None,
             "rating_count": 0,
             "rating_sum": 0,
@@ -198,13 +194,9 @@ class ScenariosRepository:
         scenario_id: str,
         title: str | None,
         description: str | None,
-        summary: str | None,
-        categories: list[str] | None,
-        tags: list[str] | None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
         usage_context: dict | None = None,
-        sensitive_data_involved: bool | None = None,
     ) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
             return None
@@ -220,26 +212,14 @@ class ScenariosRepository:
             set_doc["ethical_risk_ids"] = ethical_risk_ids
         if usage_context is not None:
             set_doc["usage_context"] = usage_context
-        if summary is not None:
-            set_doc["summary"] = summary
-        if categories is not None:
-            set_doc["categories"] = categories
-        if tags is not None:
-            set_doc["tags"] = tags
-        if sensitive_data_involved is not None:
-            set_doc["sensitive_data_involved"] = sensitive_data_involved
-        if any(k in set_doc for k in {"title", "summary", "categories", "tags"}):
+        if title is not None or description is not None:
             existing = await self.get_by_id(scenario_id)
             if existing is not None:
                 kw_title = set_doc.get("title", existing.title)
-                kw_summary = set_doc.get("summary", existing.summary)
-                kw_categories = set_doc.get("categories", existing.categories)
-                kw_tags = set_doc.get("tags", existing.tags)
+                kw_description = set_doc.get("description", existing.description)
                 set_doc["keywords_normalized"] = self._build_keywords(
                     title=kw_title,
-                    summary=kw_summary,
-                    categories=kw_categories,
-                    tags=kw_tags,
+                    description=kw_description,
                 )
         if len(set_doc) == 1:
             return await self.get_by_id(scenario_id)
@@ -826,7 +806,6 @@ class ScenariosRepository:
                     {"public_description": {"$regex": pattern, "$options": "i"}},
                 ]
             )
-        text_or.append({"summary": {"$regex": pattern, "$options": "i"}})
         if include_author_university_in_text_search:
             text_or.append({"author_university": {"$regex": pattern, "$options": "i"}})
         text_or.append({"author_display_name": {"$regex": pattern, "$options": "i"}})
@@ -880,16 +859,12 @@ class ScenariosRepository:
         self,
         *,
         title: str,
-        summary: str | None,
-        categories: list[str],
-        tags: list[str],
+        description: str,
     ) -> list[str]:
         tokens: list[str] = []
-        source = [title, summary or "", *categories, *tags]
-        for piece in source:
+        for piece in (title, description):
             for token in re.split(r"\W+", piece.lower()):
                 tok = token.strip()
                 if len(tok) >= 2:
                     tokens.append(tok)
-        # Stable order while removing duplicates.
         return list(dict.fromkeys(tokens))

@@ -10,8 +10,6 @@ import { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 import { getToken } from "../session";
 import { StatusMessage } from "./StatusMessage";
 
-export { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
-
 function suggestionStatusFeedback(message: string) {
   if (message === "Suggestion submitted.") {
     return { variant: "success" as const, presentation: "modal" as const, title: "Suggestion submitted" };

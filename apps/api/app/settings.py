@@ -29,11 +29,7 @@ class Settings(BaseSettings):
     # work when pytest is run from repo root (`python -m pytest`) as well as from `apps/api`.
     model_config = _settings_config
 
-    app_name: str = "Luneta API"
-    api_url: str = "http://localhost:8000"
-
     mongodb_uri: str = "mongodb://localhost:27017/luneta"
-    redis_url: str = "redis://localhost:6379/0"
 
     s3_endpoint: str = "http://localhost:9000"
     s3_public_endpoint: str = "http://localhost:9000"

@@ -77,7 +77,7 @@ async def test_patch_strips_inactive_category_and_ethical_risk(api_client, fake_
 
     patch = await api_client.patch(
         f"/scenarios/{sid}",
-        json={"summary": "Touch draft to trigger cleanup."},
+        json={"description": "Touch draft to trigger catalog cleanup."},
         headers=headers,
     )
     assert patch.status_code == 200

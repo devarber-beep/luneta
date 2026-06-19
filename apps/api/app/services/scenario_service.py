@@ -2,13 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 
 from app.core.permissions import (
-    can_manage_collaborators,
-    get_collaborator_role,
     has_republication_pending,
     is_valid_transition,
 )
@@ -21,7 +18,7 @@ from app.core.scenario_access import (
     can_submit_review,
     can_update_scenario,
 )
-from app.domain.enums import AuditActionType, CollaboratorRole, ReviewEventType, ScenarioState, UserRole
+from app.domain.enums import AuditActionType, ReviewEventType, ScenarioState, UserRole
 from app.models.scenario import ScenarioModel
 from app.models.scenario_usage_context import ScenarioUsageContextModel
 from app.models.user import UserModel
@@ -32,7 +29,6 @@ from app.repositories.scenario_classification import ScenarioClassificationRepos
 from app.repositories.scenario_revisions import ScenarioRevisionsRepository
 from app.repositories.scenarios import ScenariosRepository
 from app.repositories.users import UsersRepository
-from app.models.scenario_revision import ScenarioRevisionModel
 from app.services.audit_helpers import record_revision_snapshot_audit, record_scenario_audit
 from app.services.audit_service import AuditService
 from app.services.portfolio_loader import portfolio_investigator_ids_for_user
@@ -180,15 +176,6 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return scenario
 
-    async def list_revisions(
-        self,
-        *,
-        scenario_id: str,
-        current_user: UserModel,
-    ) -> list[ScenarioRevisionModel]:
-        await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
-        return await self._revisions_repo.list_for_scenario(scenario_id=scenario_id)
-
     async def patch_draft(
         self,
         *,
@@ -196,13 +183,9 @@ class ScenarioService:
         current_user: UserModel,
         title: str | None = None,
         description: str | None = None,
-        summary: str | None = None,
-        categories: list[str] | None = None,
-        tags: list[str] | None = None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
         usage_context: ScenarioUsageContextModel | None = None,
-        sensitive_data_involved: bool | None = None,
     ) -> ScenarioSaveResult:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
@@ -240,20 +223,15 @@ class ScenarioService:
                 action="save",
                 title=title,
                 description=description,
-                summary=summary,
             )
 
         updated = await self._scenarios_repo.update_draft_content(
             scenario_id=scenario_id,
             title=title,
             description=description.strip() if description is not None else None,
-            summary=summary,
-            categories=categories,
-            tags=tags,
             category_ids=category_ids,
             ethical_risk_ids=ethical_risk_ids,
             usage_context=usage_context.model_dump(mode="json") if usage_context is not None else None,
-            sensitive_data_involved=sensitive_data_involved,
         )
         if updated is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
@@ -294,20 +272,12 @@ class ScenarioService:
             changed_fields.append("title")
         if description is not None:
             changed_fields.append("description")
-        if summary is not None:
-            changed_fields.append("summary")
-        if categories is not None:
-            changed_fields.append("categories")
-        if tags is not None:
-            changed_fields.append("tags")
         if category_ids is not None:
             changed_fields.append("category_ids")
         if ethical_risk_ids is not None:
             changed_fields.append("ethical_risk_ids")
         if usage_context is not None:
             changed_fields.append("usage_context")
-        if sensitive_data_involved is not None:
-            changed_fields.append("sensitive_data_involved")
         await record_scenario_audit(
             self._audit,
             actor=current_user,
@@ -493,9 +463,6 @@ class ScenarioService:
                 scenario_id=scenario_id,
                 title=None,
                 description=None,
-                summary=None,
-                categories=None,
-                tags=None,
                 category_ids=category_ids,
                 ethical_risk_ids=ethical_risk_ids,
             )
@@ -623,120 +590,6 @@ class ScenarioService:
             from_state=scenario.state,
             to_state=updated.state,
             current_extra={"action": "start_editing_working_copy"},
-        )
-        return updated
-
-    async def list_collaborators(self, *, scenario_id: str, current_user: UserModel):
-        scenario = await self.get_scenario_if_readable(scenario_id=scenario_id, current_user=current_user)
-        return scenario.collaborators, scenario
-
-    async def add_collaborator(
-        self, *, scenario_id: str, collaborator_user_id: str, current_user: UserModel
-    ) -> ScenarioModel:
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-
-        actor_user_id = current_user.id or ""
-        actor_collaborator_role = get_collaborator_role(scenario=scenario, user_id=actor_user_id)
-        if not can_manage_collaborators(collaborator_role=actor_collaborator_role):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage collaborators")
-
-        if collaborator_user_id == actor_user_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Owner is already collaborator")
-
-        collaborator_user = await self._users_repo.get_by_id(collaborator_user_id)
-        if collaborator_user is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collaborator user not found")
-        if collaborator_user.role not in (UserRole.INVESTIGATOR, UserRole.REVIEWER, UserRole.ADMIN):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only investigator, reviewer, or admin users can be collaborators",
-            )
-
-        collaborators = [c.model_dump(mode="json") for c in scenario.collaborators]
-        for collaborator in collaborators:
-            if collaborator["user_id"] == collaborator_user_id:
-                if collaborator["role"] == CollaboratorRole.COLLABORATOR.value:
-                    return scenario
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already has collaborator role")
-
-        collaborators.append(
-            {
-                "user_id": collaborator_user_id,
-                "role": CollaboratorRole.COLLABORATOR.value,
-                "added_at": datetime.now(UTC),
-                "added_by": actor_user_id,
-            }
-        )
-        updated = await self._scenarios_repo.replace_collaborators(
-            scenario_id=scenario_id,
-            collaborators=collaborators,
-        )
-        if updated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._review_events_repo.create(
-            scenario_id=updated.id or "",
-            event_type=ReviewEventType.COLLABORATOR_ADDED,
-            actor_user_id=actor_user_id,
-            actor_role=UserRole(current_user.role),
-        )
-        await record_scenario_audit(
-            self._audit,
-            actor=current_user,
-            action_type=AuditActionType.SCENARIO_COLLABORATOR_ADDED,
-            scenario_id=updated.id or "",
-            current_extra={"collaborator_user_id": collaborator_user_id},
-        )
-        if self._notifications is not None:
-            await self._notifications.notify_collaborator_added(
-                collaborator_user_id=collaborator_user_id,
-                scenario=updated,
-                actor_user_id=actor_user_id,
-            )
-        return updated
-
-    async def remove_collaborator(
-        self, *, scenario_id: str, collaborator_user_id: str, current_user: UserModel
-    ) -> ScenarioModel:
-        scenario = await self._scenarios_repo.get_by_id(scenario_id)
-        if scenario is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-
-        actor_user_id = current_user.id or ""
-        actor_collaborator_role = get_collaborator_role(scenario=scenario, user_id=actor_user_id)
-        if not can_manage_collaborators(collaborator_role=actor_collaborator_role):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage collaborators")
-
-        filtered = [
-            collaborator
-            for collaborator in scenario.collaborators
-            if not (
-                collaborator.user_id == collaborator_user_id
-                and collaborator.role == CollaboratorRole.COLLABORATOR
-            )
-        ]
-        if len(filtered) == len(scenario.collaborators):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collaborator not found")
-
-        updated = await self._scenarios_repo.replace_collaborators(
-            scenario_id=scenario_id,
-            collaborators=[c.model_dump(mode="json") for c in filtered],
-        )
-        if updated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        await self._review_events_repo.create(
-            scenario_id=updated.id or "",
-            event_type=ReviewEventType.COLLABORATOR_REMOVED,
-            actor_user_id=actor_user_id,
-            actor_role=UserRole(current_user.role),
-        )
-        await record_scenario_audit(
-            self._audit,
-            actor=current_user,
-            action_type=AuditActionType.SCENARIO_COLLABORATOR_REMOVED,
-            scenario_id=updated.id or "",
-            current_extra={"collaborator_user_id": collaborator_user_id},
         )
         return updated
 

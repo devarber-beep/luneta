@@ -1,4 +1,4 @@
-"""Paragraph split/join contract: Python impl + web mirror (packages/contracts)."""
+"""Paragraph split/join contract: Python impl + web mirror (fixtures/description_paragraphs.json)."""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,7 @@ from app.core.description_paragraphs import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_FIXTURE_PATH = _REPO_ROOT / "packages" / "contracts" / "fixtures" / "description_paragraphs.json"
+_FIXTURE_PATH = _REPO_ROOT / "fixtures" / "description_paragraphs.json"
 _WEB_TS_PATH = _REPO_ROOT / "apps" / "web" / "src" / "domain" / "descriptionParagraphs.ts"
 
 

@@ -22,11 +22,10 @@ Uses `api_client` (+ `fake_db` by default). Exercises status codes, auth headers
 | `test_vertical_slice_http_e2e.py` | Full vertical slice over HTTP (may need MinIO when uploading assets) |
 | `test_auth_session.py` | Login, password gate, profile, avatar, disabled account |
 | `test_admin_rf1.py` | Admin user lifecycle (create investigator, roles, deactivate) |
-| `test_admin_phase1.py` | Admin profile read/patch, reviewer assignments, audit hook |
+| `test_admin_phase1.py` | Admin reviewer assignments, audit hook |
 | `test_admin_catalogs.py` | Admin classification & ethical-risk catalogs |
 | `test_audit_events.py` | Audit log on admin actions |
 | `test_dev_last_email_verification.py` | Signup role + dev verification helper |
-| `test_orgs.py` | Organizations list |
 | `test_milestone3_reviewer_self_publish.py` | `POST .../publish` returns 403 for self-review |
 
 ## Shared fixtures

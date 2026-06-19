@@ -1,4 +1,4 @@
-"""Admin profile access and reviewer–investigator assignments."""
+"""Admin reviewer–investigator assignments."""
 from __future__ import annotations
 
 import pytest
@@ -16,34 +16,6 @@ async def _admin_token(api_client, fake_db) -> str:
     )
     assert login.status_code == 200
     return login.json()["access_token"]
-
-
-@pytest.mark.asyncio
-async def test_admin_reads_and_patches_disabled_user_profile(api_client, fake_db) -> None:
-    token = await _admin_token(api_client, fake_db)
-    headers = {"Authorization": f"Bearer {token}"}
-    ins = await fake_db["users"].insert_one(
-        user_doc(
-            email="disabledinv@luneta.dev",
-            role="investigator",
-            account_status="disabled",
-            verified=False,
-        )
-    )
-    user_id = str(ins.inserted_id)
-
-    got = await api_client.get(f"/admin/users/{user_id}/profile", headers=headers)
-    assert got.status_code == 200
-    assert got.json()["account_status"] == "disabled"
-    assert got.json()["email_normalized"] == "disabledinv@luneta.dev"
-
-    patched = await api_client.patch(
-        f"/admin/users/{user_id}/profile",
-        json={"university": "Lab University"},
-        headers=headers,
-    )
-    assert patched.status_code == 200
-    assert patched.json()["university"] == "Lab University"
 
 
 @pytest.mark.asyncio

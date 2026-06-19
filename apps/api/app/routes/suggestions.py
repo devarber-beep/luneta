@@ -20,7 +20,6 @@ from app.routes import scenarios as scenarios_routes
 from app.schemas.suggestions import (
     AcceptSuggestionResponse,
     CreateSuggestionRequest,
-    DescriptionParagraphsResponse,
     ReviewFeedbackStatusResponse,
     SuggestionListResponse,
     SuggestionResponse,
@@ -64,16 +63,6 @@ def _to_response(suggestion, *, current_user: UserModel) -> SuggestionResponse:
         resolved_by_user_id=suggestion.resolved_by_user_id,
         applied_at=suggestion.applied_at,
     )
-
-
-@router.get("/{scenario_id}/suggestions/paragraphs", response_model=DescriptionParagraphsResponse)
-async def list_description_paragraphs(
-    scenario_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_SUGGESTION_READ)),
-) -> DescriptionParagraphsResponse:
-    paragraphs = await _service(db).list_paragraphs(scenario_id=scenario_id, current_user=current_user)
-    return DescriptionParagraphsResponse(paragraphs=paragraphs)
 
 
 @router.get("/{scenario_id}/suggestions/review-feedback", response_model=ReviewFeedbackStatusResponse)

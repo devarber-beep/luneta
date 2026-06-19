@@ -57,13 +57,9 @@ class _FakeScenariosRepo:
         scenario_id: str,
         title: str | None,
         description: str | None,
-        summary: str | None,
-        categories: list[str] | None,
-        tags: list[str] | None,
         category_ids: list[str] | None = None,
         ethical_risk_ids: list[str] | None = None,
         usage_context: dict | None = None,
-        sensitive_data_involved: bool | None = None,
     ):
         if not self.scenario or self.scenario.id != scenario_id:
             return None
@@ -79,14 +75,6 @@ class _FakeScenariosRepo:
             data["ethical_risk_ids"] = ethical_risk_ids
         if usage_context is not None:
             data["usage_context"] = usage_context
-        if summary is not None:
-            data["summary"] = summary
-        if categories is not None:
-            data["categories"] = categories
-        if tags is not None:
-            data["tags"] = tags
-        if sensitive_data_involved is not None:
-            data["sensitive_data_involved"] = sensitive_data_involved
         data["updated_at"] = datetime.now(UTC)
         self.scenario = ScenarioModel.model_validate(data)
         return self.scenario

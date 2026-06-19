@@ -19,7 +19,7 @@ _SPANISH_POSTAL = re.compile(
     re.IGNORECASE,
 )
 _STREET = re.compile(
-    r"\b(?:calle|c\/|avenida|av\.|plaza|paseo|pº|carretera|ctra\.|camino|traves[ií]a|rúa|rua|"
+    r"\b(?:calle|c\/|avenida|av\.|plaza|paseo|pº|carretera|ctra\.|camino|traves[ií]a|"
     r"urbanizaci[oó]n|pol[ií]gono)\s+"
     r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9][A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9\s.'-]{2,48}\d*\b",
     re.IGNORECASE,
@@ -106,8 +106,6 @@ _NAME_STOPWORDS: frozenset[str] = frozenset(
         "south",
         "east",
         "west",
-        "new",
-        "york",
         "san",
         "los",
         "las",
@@ -140,7 +138,6 @@ FINDING_LABELS: dict[str, str] = {
 FIELD_LABELS: dict[str, str] = {
     "title": "Title",
     "description": "Description",
-    "summary": "Summary",
     "public_title": "Public title",
     "public_description": "Public description",
 }
@@ -173,7 +170,6 @@ def _scenario_fields(scenario: ScenarioModel) -> list[tuple[str, str]]:
     for field, value in (
         ("title", scenario.title),
         ("description", scenario.description),
-        ("summary", scenario.summary),
         ("public_title", scenario.public_title),
         ("public_description", scenario.public_description),
     ):

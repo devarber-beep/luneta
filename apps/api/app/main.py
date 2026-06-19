@@ -10,7 +10,6 @@ from app.routes import (
     auth,
     catalog,
     health,
-    orgs,
     public,
     scenarios,
     evaluations,
@@ -34,8 +33,6 @@ def create_app() -> FastAPI:
     # Health
     app.include_router(health.router, prefix="/health", tags=["health"])
 
-    # Organizations (first real MongoDB access)
-    app.include_router(orgs.router, prefix="/orgs", tags=["orgs"])
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
     app.include_router(catalog.router, prefix="/catalog", tags=["catalog"])

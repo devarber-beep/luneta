@@ -742,11 +742,6 @@ export async function searchPublicScenarios(
   return request(`/public/scenarios${qs ? `?${qs}` : ""}`);
 }
 
-export async function listPublicScenarios(): Promise<PublicScenarioListItem[]> {
-  const result = await searchPublicScenarios({ page_size: 100 });
-  return result.items;
-}
-
 export type PublicScenarioParticipant = {
   user_id: string;
   display_name: string;
@@ -763,7 +758,6 @@ export async function publicScenario(slug: string): Promise<{
   cover_image?: ScenarioAssetWithUrl | null;
   inline_assets?: ScenarioAssetWithUrl[];
   collaborators: PublicScenarioParticipant[];
-  summary?: string | null;
   categories?: Array<{ id: string; label: string }>;
   ethical_risks?: Array<{ id: string; label: string }>;
   usage_context?: ScenarioUsageContext | null;
@@ -915,12 +909,6 @@ export async function getScenarioReviewFeedbackStatus(
 
 export async function listScenarioSuggestions(token: string, scenarioId: string): Promise<{ items: SuggestionItem[] }> {
   return request(`/scenarios/${scenarioId}/suggestions`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-export async function listScenarioParagraphs(token: string, scenarioId: string): Promise<{ paragraphs: string[] }> {
-  return request(`/scenarios/${scenarioId}/suggestions/paragraphs`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
