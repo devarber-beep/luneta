@@ -7,48 +7,48 @@
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Source Serif 4", "Georgia", "Times New Roman", serif;
 
-  /* University of Iowa brand — https://brand.uiowa.edu/color */
-  --iowa-gold: #ffcd00;
-  --iowa-black: #000000;
-  --iowa-white: #ffffff;
-  --iowa-gray: #63666a;
-  --iowa-gray-light: #bbbcbc;
-  --iowa-blue: #00558c;
-  --iowa-green: #00664f;
-  --iowa-orange: #bd472a;
+  /* Core palette */
+  --palette-gold: #ffcd00;
+  --palette-black: #000000;
+  --palette-white: #ffffff;
+  --palette-gray: #63666a;
+  --palette-gray-muted: #bbbcbc;
+  --palette-blue: #00558c;
+  --palette-green: #00664f;
+  --palette-orange: #bd472a;
 
   --color-bg: #fafafa;
   --color-surface: #ffffff;
   --color-surface-muted: #f3f4f6;
-  --color-text: var(--iowa-black);
+  --color-text: var(--palette-black);
   --color-text-muted: #5c6166;
   --color-border: #e8eaed;
-  --color-accent: var(--iowa-black);
-  --color-accent-hover: var(--iowa-blue);
+  --color-accent: var(--palette-black);
+  --color-accent-hover: var(--palette-blue);
   --color-accent-soft: #f7f3e8;
-  --color-focus: var(--iowa-blue);
-  --color-error: var(--iowa-orange);
-  --color-success: var(--iowa-green);
+  --color-focus: var(--palette-blue);
+  --color-error: var(--palette-orange);
+  --color-success: var(--palette-green);
   --color-warning-bg: #ebe6d6;
   --color-warning-border: #c9a300;
 
-  --color-btn-primary-bg: var(--iowa-gold);
-  --color-btn-primary-text: var(--iowa-black);
+  --color-btn-primary-bg: var(--palette-gold);
+  --color-btn-primary-text: var(--palette-black);
   --color-btn-primary-hover: #e6b800;
 
-  /* Navbar — black field, white text, gold accents (Iowa formal; calmer than gold + white) */
+  /* Navbar — dark field, light text, gold accents */
   --color-nav-bg: #1a1a1a;
   --color-nav-bg-end: #000000;
   --color-nav-border: #333333;
-  --color-nav-text: var(--iowa-white);
+  --color-nav-text: var(--palette-white);
   --color-nav-text-muted: rgba(255, 255, 255, 0.9);
-  --color-nav-accent: var(--iowa-gold);
+  --color-nav-accent: var(--palette-gold);
   --color-nav-chrome-muted: rgba(255, 255, 255, 0.78);
 
   /* Footer — gold field, black text and links */
-  --color-footer-bg: var(--iowa-gold);
-  --color-footer-text: var(--iowa-black);
-  --color-footer-link: var(--iowa-black);
+  --color-footer-bg: var(--palette-gold);
+  --color-footer-text: var(--palette-black);
+  --color-footer-link: var(--palette-black);
   --color-footer-muted: rgba(0, 0, 0, 0.72);
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -364,7 +364,7 @@ a:hover {
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.14);
-  color: var(--iowa-white);
+  color: var(--palette-white);
   border: 1px solid rgba(255, 255, 255, 0.28);
   font-size: 0.78rem;
   font-weight: 600;
@@ -450,7 +450,7 @@ a:hover {
 .notification-bell--navbar .notification-bell__trigger:hover {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.5);
-  color: var(--iowa-white);
+  color: var(--palette-white);
 }
 
 .notification-bell__icon {
@@ -466,8 +466,8 @@ a:hover {
   height: 1.1rem;
   padding: 0 0.3rem;
   border-radius: 999px;
-  background: var(--iowa-orange);
-  color: var(--iowa-white);
+  background: var(--palette-orange);
+  color: var(--palette-white);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1.1rem;
@@ -697,7 +697,7 @@ a:hover {
 
 .scenario-card__title a:hover,
 .scenario-card__title a:focus-visible {
-  color: var(--iowa-gold);
+  color: var(--palette-gold);
   text-decoration: underline;
 }
 
@@ -719,12 +719,12 @@ a:hover {
 
 .scenario-card__badge--muted {
   background: var(--color-surface-muted);
-  color: var(--iowa-gray);
+  color: var(--palette-gray);
 }
 
 .scenario-card__badge--warning {
   background: var(--color-warning-bg);
-  color: var(--iowa-black);
+  color: var(--palette-black);
 }
 
 .scenario-card__preview {
@@ -794,7 +794,7 @@ a:hover {
   height: 1.15rem;
   padding: 0 0.3rem;
   border-radius: 999px;
-  background: var(--iowa-orange);
+  background: var(--palette-orange);
   color: #fff;
   font-size: 0.68rem;
   font-weight: 700;
@@ -934,7 +934,7 @@ textarea {
 
 .btn:hover:not(:disabled) {
   background: #f0f0f0;
-  border-color: var(--iowa-gray);
+  border-color: var(--palette-gray);
 }
 
 .btn--primary {
@@ -1029,7 +1029,7 @@ textarea {
 }
 
 .alert-modal__dialog--info {
-  border-color: var(--iowa-blue);
+  border-color: var(--palette-blue);
 }
 
 .alert-modal__badge {
@@ -1065,8 +1065,8 @@ textarea {
 
 .alert-modal__badge--info {
   background: #e8f2f8;
-  color: var(--iowa-blue);
-  border: 2px solid var(--iowa-blue);
+  color: var(--palette-blue);
+  border: 2px solid var(--palette-blue);
 }
 
 .alert-modal__title {
@@ -1143,20 +1143,20 @@ textarea {
 }
 
 .alert-modal__close--warning {
-  background: var(--iowa-gold);
-  color: var(--iowa-black);
-  border: 2px solid var(--iowa-black);
+  background: var(--palette-gold);
+  color: var(--palette-black);
+  border: 2px solid var(--palette-black);
 }
 
 .alert-modal__close--warning:hover:not(:disabled) {
   background: var(--color-btn-primary-hover);
-  border-color: var(--iowa-black);
-  color: var(--iowa-black);
+  border-color: var(--palette-black);
+  color: var(--palette-black);
 }
 
 .alert-modal__close--warning .alert-modal__close-icon {
   background: rgba(0, 0, 0, 0.08);
-  border: 2px solid var(--iowa-black);
+  border: 2px solid var(--palette-black);
 }
 
 .alert-modal__close--success {
@@ -1177,9 +1177,9 @@ textarea {
 }
 
 .alert-modal__close--info {
-  background: var(--iowa-blue);
+  background: var(--palette-blue);
   color: #fff;
-  border: 2px solid var(--iowa-blue);
+  border: 2px solid var(--palette-blue);
 }
 
 .alert-modal__close--info:hover:not(:disabled) {
@@ -1215,7 +1215,7 @@ textarea {
 
 .alert-modal__cancel:hover:not(:disabled) {
   background: var(--color-surface-muted);
-  border-color: var(--iowa-black);
+  border-color: var(--palette-black);
 }
 
 .alert-modal__confirm {
@@ -1229,7 +1229,7 @@ textarea {
 .editor-section__title {
   margin: 0 0 1rem;
   padding-bottom: 0.55rem;
-  border-bottom: 2px solid var(--iowa-gold);
+  border-bottom: 2px solid var(--palette-gold);
   font-family: var(--font-serif);
   font-size: 1.15rem;
   font-weight: 600;
@@ -1258,7 +1258,7 @@ textarea {
   line-height: 1.2;
   margin-bottom: 0.5rem;
   padding-bottom: 0.85rem;
-  border-bottom: 3px solid var(--iowa-gold);
+  border-bottom: 3px solid var(--palette-gold);
 }
 
 .page-layout--scenario-editor-new h1 {
@@ -1308,7 +1308,7 @@ textarea {
 .scenario-editor__state--not_suitable {
   background: #f8ece8;
   border-color: #e0c4bb;
-  color: var(--iowa-orange);
+  color: var(--palette-orange);
 }
 
 .scenario-editor__meta-note {
@@ -1400,9 +1400,9 @@ textarea {
 }
 
 .catalog-checklist__item:has(input:checked) {
-  border-color: var(--iowa-gold);
+  border-color: var(--palette-gold);
   background: var(--color-accent-soft);
-  box-shadow: inset 3px 0 0 var(--iowa-gold);
+  box-shadow: inset 3px 0 0 var(--palette-gold);
 }
 
 .catalog-checklist__item input {
@@ -1710,7 +1710,7 @@ textarea {
   margin-top: auto;
   background: var(--color-footer-bg);
   color: var(--color-footer-text);
-  border-top: 2px solid var(--iowa-black);
+  border-top: 2px solid var(--palette-black);
 }
 
 .site-footer__inner {
@@ -1741,7 +1741,7 @@ textarea {
 
 .site-footer__nav a:hover,
 .site-footer__nav a:focus-visible {
-  color: var(--iowa-black);
+  color: var(--palette-black);
   opacity: 0.85;
   text-decoration: underline;
 }
@@ -1804,8 +1804,8 @@ textarea {
   font-weight: 600;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: var(--iowa-black);
-  color: var(--iowa-gold);
+  background: var(--palette-black);
+  color: var(--palette-gold);
 }
 
 .list-picker {
@@ -1831,7 +1831,7 @@ textarea {
 }
 
 .list-picker__button--active {
-  border: 2px solid var(--iowa-blue);
+  border: 2px solid var(--palette-blue);
   background: #e8f2f8;
 }
 
@@ -2038,7 +2038,7 @@ textarea {
   line-height: 1.2;
   margin-bottom: 0.5rem;
   padding-bottom: 0.85rem;
-  border-bottom: 3px solid var(--iowa-gold);
+  border-bottom: 3px solid var(--palette-gold);
 }
 
 .profile-page {
@@ -2104,7 +2104,7 @@ textarea {
   text-transform: uppercase;
   background: var(--color-accent-soft);
   color: var(--color-text);
-  border: 1px solid var(--iowa-gold);
+  border: 1px solid var(--palette-gold);
 }
 
 .profile-page__email {
@@ -2139,7 +2139,7 @@ textarea {
 
 .profile-page__verified--no {
   font-weight: 600;
-  color: var(--iowa-orange);
+  color: var(--palette-orange);
 }
 
 .profile-page__form {
@@ -2160,7 +2160,7 @@ textarea {
 .page-layout--public-scenario .page-layout__header {
   margin-bottom: 0.35rem;
   padding-bottom: 0.85rem;
-  border-bottom: 3px solid var(--iowa-gold);
+  border-bottom: 3px solid var(--palette-gold);
 }
 
 .page-layout--public-scenario .page-layout__heading {
@@ -2256,12 +2256,12 @@ textarea {
   line-height: 1.35;
   background: var(--color-accent-soft);
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--iowa-gold);
+  border-left: 3px solid var(--palette-gold);
 }
 
 .public-scenario__tag--risk {
   background: #f8f3f1;
-  border-left-color: var(--iowa-orange);
+  border-left-color: var(--palette-orange);
 }
 
 .public-scenario__context-list {
@@ -2311,7 +2311,7 @@ textarea {
 .public-scenario__affiliation::before {
   content: "·";
   margin-right: 0.45rem;
-  color: var(--iowa-gray-light);
+  color: var(--palette-gray-muted);
 }
 
 .public-scenario__collaborators {
@@ -2386,7 +2386,7 @@ textarea {
 .public-scenario__evaluations {
   margin-top: 2.5rem;
   padding-top: 2rem;
-  border-top: 2px solid var(--iowa-gold);
+  border-top: 2px solid var(--palette-gold);
   display: grid;
   gap: 1.5rem;
 }
@@ -2450,7 +2450,7 @@ textarea {
 
 .description-with-suggestions__paragraph--hover {
   background: var(--color-accent-soft);
-  border-color: var(--iowa-gold);
+  border-color: var(--palette-gold);
 }
 
 .description-with-suggestions__paragraph .scenario-description__paragraph {
@@ -2484,7 +2484,7 @@ textarea {
 }
 
 .suggestion-note--pending {
-  border-left-color: var(--iowa-gold);
+  border-left-color: var(--palette-gold);
   background: var(--color-warning-bg);
 }
 
@@ -2537,7 +2537,7 @@ textarea {
 .evaluation-panel__title {
   margin: 0 0 1.15rem;
   padding-bottom: 0.55rem;
-  border-bottom: 2px solid var(--iowa-gold);
+  border-bottom: 2px solid var(--palette-gold);
   font-family: var(--font-serif);
   font-size: 1.2rem;
   font-weight: 600;
@@ -2597,12 +2597,12 @@ textarea {
 }
 
 .evaluation-score--risk {
-  border-left: 4px solid var(--iowa-orange);
+  border-left: 4px solid var(--palette-orange);
   background: linear-gradient(90deg, #f8f3f1 0%, var(--color-surface-muted) 100%);
 }
 
 .evaluation-score--benefit {
-  border-left: 4px solid var(--iowa-gold);
+  border-left: 4px solid var(--palette-gold);
   background: linear-gradient(90deg, var(--color-accent-soft) 0%, var(--color-surface-muted) 100%);
 }
 
@@ -2666,12 +2666,12 @@ textarea {
   line-height: 1.35;
   background: var(--color-accent-soft);
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--iowa-gold);
+  border-left: 3px solid var(--palette-gold);
 }
 
 .evaluation-tag--risk {
   background: #f8f3f1;
-  border-left-color: var(--iowa-orange);
+  border-left-color: var(--palette-orange);
 }
 
 .evaluation-summary__comment-list {
@@ -2766,7 +2766,7 @@ textarea {
 }
 
 .evaluation-detail__score--risk {
-  color: var(--iowa-orange);
+  color: var(--palette-orange);
 }
 
 .evaluation-detail__score--benefit {
@@ -2803,7 +2803,7 @@ textarea {
   content: "▸";
   display: inline-block;
   margin-right: 0.45rem;
-  color: var(--iowa-gold);
+  color: var(--palette-gold);
   transition: transform 0.15s ease;
 }
 
@@ -2823,7 +2823,7 @@ textarea {
 
 .evaluation-submitted {
   background: linear-gradient(135deg, var(--color-accent-soft) 0%, var(--color-surface) 55%);
-  border-color: var(--iowa-gold);
+  border-color: var(--palette-gold);
 }
 
 .evaluation-form__intro {
@@ -2855,7 +2855,7 @@ textarea {
 
 .evaluation-slider__input {
   width: 100%;
-  accent-color: var(--iowa-gold);
+  accent-color: var(--palette-gold);
   cursor: pointer;
 }
 
@@ -2901,7 +2901,7 @@ textarea {
 }
 
 .evaluation-form__comment textarea:focus {
-  outline: 2px solid var(--iowa-gold);
+  outline: 2px solid var(--palette-gold);
   outline-offset: 1px;
 }
 

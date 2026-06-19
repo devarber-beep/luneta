@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 const CONSORTIUM_URL = "https://jphourcade.com/projects/xrforyouthethics/index.html";
 const UGR_URL = "https://www.ugr.es/en";
-const IOWA_URL = "https://uiowa.edu/";
+const PARTNER_UNIVERSITY_URL = "https://uiowa.edu/";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -19,7 +19,7 @@ export function SiteFooter() {
           <a href={UGR_URL} rel="noreferrer" target="_blank">
             Universidad de Granada
           </a>
-          <a href={IOWA_URL} rel="noreferrer" target="_blank">
+          <a href={PARTNER_UNIVERSITY_URL} rel="noreferrer" target="_blank">
             University of Iowa
           </a>
         </nav>
