@@ -131,7 +131,7 @@ async def accept_suggestion(
     )
     return AcceptSuggestionResponse(
         suggestion=_to_response(suggestion, current_user=current_user),
-        scenario=scenarios_routes._to_response(scenario),
+        scenario=scenarios_routes._to_response_with_owner_flags(scenario, current_user=current_user),
     )
 
 
@@ -167,5 +167,5 @@ async def apply_suggestion_text(
     )
     return AcceptSuggestionResponse(
         suggestion=_to_response(suggestion, current_user=current_user),
-        scenario=scenarios_routes._to_response(scenario),
+        scenario=scenarios_routes._to_response_with_owner_flags(scenario, current_user=current_user),
     )

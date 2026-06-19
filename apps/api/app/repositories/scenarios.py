@@ -503,15 +503,39 @@ class ScenariosRepository:
         )
         return await self.get_by_id(scenario_id)
 
-    async def soft_delete_draft(self, *, scenario_id: str) -> ScenarioModel | None:
+    async def soft_delete_scenario(
+        self,
+        *,
+        scenario_id: str,
+        states: list[ScenarioState] | None = None,
+    ) -> ScenarioModel | None:
         if not ObjectId.is_valid(scenario_id):
+            return None
+        existing = await self._collection.find_one({"_id": ObjectId(scenario_id), "deleted_at": None})
+        if existing is None:
+            return None
+        if states is not None and existing.get("state") not in [state.value for state in states]:
             return None
         now = datetime.now(UTC)
         await self._collection.update_one(
-            {"_id": ObjectId(scenario_id), "state": ScenarioState.DRAFT.value, "deleted_at": None},
-            {"$set": {"deleted_at": now, "updated_at": now}},
+            {"_id": ObjectId(scenario_id), "deleted_at": None},
+            {
+                "$set": {
+                    "deleted_at": now,
+                    "updated_at": now,
+                    "cover_image": None,
+                    "inline_assets": [],
+                }
+            },
         )
-        return await self.get_by_id(scenario_id)
+        existing["deleted_at"] = now
+        existing["updated_at"] = now
+        existing["cover_image"] = None
+        existing["inline_assets"] = []
+        return self._to_model(existing)
+
+    async def soft_delete_draft(self, *, scenario_id: str) -> ScenarioModel | None:
+        return await self.soft_delete_scenario(scenario_id=scenario_id, states=[ScenarioState.DRAFT])
 
     async def list_by_state(self, *, state: ScenarioState) -> list[ScenarioModel]:
         return await self.list_by_states(states=[state])

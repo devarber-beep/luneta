@@ -45,6 +45,7 @@ _ACTION_LABELS: dict[str, str] = {
     AuditActionType.SCENARIO_MARKED_NOT_SUITABLE.value: "Marked not suitable",
     AuditActionType.SCENARIO_REOPENED.value: "Scenario reopened",
     AuditActionType.SCENARIO_DRAFT_DELETED.value: "Draft deleted",
+    AuditActionType.SCENARIO_DELETED.value: "Scenario deleted",
     AuditActionType.SCENARIO_COLLABORATOR_ADDED.value: "Collaborator added",
     AuditActionType.SCENARIO_COLLABORATOR_REMOVED.value: "Collaborator removed",
 }

@@ -230,6 +230,16 @@ def can_reopen_not_suitable(*, user: UserModel, scenario: ScenarioModel) -> bool
     return scenario.state == ScenarioState.NOT_SUITABLE
 
 
+def can_delete_own_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
+    if scenario.deleted_at is not None:
+        return False
+    if Permission.SCENARIO_DELETE_OWN not in permissions_for_user(user=user):
+        return False
+    if (user.id or "") != scenario.author_user_id:
+        return False
+    return scenario.state in {ScenarioState.DRAFT, ScenarioState.PUBLISHED}
+
+
 def can_delete_own_draft(*, user: UserModel, scenario: ScenarioModel) -> bool:
     if scenario.deleted_at is not None:
         return False
@@ -238,3 +248,9 @@ def can_delete_own_draft(*, user: UserModel, scenario: ScenarioModel) -> bool:
     if scenario.state != ScenarioState.DRAFT:
         return False
     return (user.id or "") == scenario.author_user_id
+
+
+def can_admin_delete_scenario(*, user: UserModel, scenario: ScenarioModel) -> bool:
+    if scenario.deleted_at is not None:
+        return False
+    return Permission.SCENARIO_ADMIN_DELETE in permissions_for_user(user=user)

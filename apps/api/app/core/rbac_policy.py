@@ -61,6 +61,7 @@ _ADMIN_ONLY_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.USER_ADMIN_MANAGE_SCENARIO_CLASSIFICATION,
         Permission.USER_ADMIN_MANAGE_ETHICAL_RISK_CATALOG,
         Permission.AUDIT_EVENT_READ,
+        Permission.SCENARIO_ADMIN_DELETE,
     }
 )
 

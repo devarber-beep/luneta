@@ -12,6 +12,7 @@ class Permission(StrEnum):
     SCENARIO_READ_OWN = "scenario_read_own"
     SCENARIO_UPDATE_OWN = "scenario_update_own"
     SCENARIO_DELETE_OWN = "scenario_delete_own"
+    SCENARIO_ADMIN_DELETE = "scenario_admin_delete"
     SCENARIO_SUBMIT_REVIEW = "scenario_submit_review"
     SCENARIO_READ_REVIEW_QUEUE = "scenario_read_review_queue"
     SCENARIO_UPDATE_IN_REVIEW = "scenario_update_in_review"

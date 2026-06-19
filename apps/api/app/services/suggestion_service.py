@@ -475,7 +475,7 @@ class SuggestionService:
 
         if at_creation == ScenarioState.PUBLISHED:
             updated = scenario
-            if author_role in {UserRole.INVESTIGATOR, UserRole.REVIEWER}:
+            if author_role in {UserRole.INVESTIGATOR, UserRole.REVIEWER, UserRole.ADMIN}:
                 updated = await self._ensure_collaborator(
                     scenario=updated,
                     collaborator_user_id=suggestion.author_user_id,

@@ -13,7 +13,8 @@ from app.core.permissions import (
     is_valid_transition,
 )
 from app.core.scenario_access import (
-    can_delete_own_draft,
+    can_admin_delete_scenario,
+    can_delete_own_scenario,
     can_read_scenario,
     can_start_applying_changes_scenario,
     can_start_editing_working_copy,
@@ -750,19 +751,44 @@ class ScenarioService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit this scenario")
         return scenario
 
-    async def delete_draft(self, *, scenario_id: str, current_user: UserModel) -> None:
+    @staticmethod
+    def _purge_scenario_assets(*, scenario: ScenarioModel, storage: MinioScenarioStorage) -> None:
+        storage.ensure_bucket()
+        if scenario.cover_image is not None:
+            storage.delete_object(storage_key=scenario.cover_image.storage_key)
+        for asset in scenario.inline_assets:
+            storage.delete_object(storage_key=asset.storage_key)
+
+    async def delete_scenario(
+        self,
+        *,
+        scenario_id: str,
+        current_user: UserModel,
+        storage: MinioScenarioStorage,
+    ) -> None:
         scenario = await self._scenarios_repo.get_by_id(scenario_id)
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
-        if not can_delete_own_draft(user=current_user, scenario=scenario):
+
+        owner_delete = can_delete_own_scenario(user=current_user, scenario=scenario)
+        admin_delete = can_admin_delete_scenario(user=current_user, scenario=scenario)
+        if not owner_delete and not admin_delete:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete this scenario")
-        deleted = await self._scenarios_repo.soft_delete_draft(scenario_id=scenario_id)
+
+        self._purge_scenario_assets(scenario=scenario, storage=storage)
+        if owner_delete and scenario.state == ScenarioState.DRAFT:
+            deleted = await self._scenarios_repo.soft_delete_draft(scenario_id=scenario_id)
+            action_type = AuditActionType.SCENARIO_DRAFT_DELETED
+        else:
+            deleted = await self._scenarios_repo.soft_delete_scenario(scenario_id=scenario_id)
+            action_type = AuditActionType.SCENARIO_DELETED
+
         if deleted is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found")
         await record_scenario_audit(
             self._audit,
             actor=current_user,
-            action_type=AuditActionType.SCENARIO_DRAFT_DELETED,
+            action_type=action_type,
             scenario_id=scenario_id,
             from_state=scenario.state,
         )

@@ -195,6 +195,17 @@ def _to_response_from_save(result: ScenarioSaveResult) -> ScenarioResponse:
     return _to_response(result.scenario, similarity_advisory=result.similarity_advisory)
 
 
+def _to_response_with_owner_flags(scenario, *, current_user: UserModel) -> ScenarioResponse:
+    return _to_response(scenario).model_copy(
+        update={
+            "can_start_editing_working_copy": can_start_editing_working_copy(
+                user=current_user,
+                scenario=scenario,
+            ),
+        }
+    )
+
+
 @router.post("", response_model=ScenarioResponse)
 async def create_scenario(
     payload: ScenarioCreateRequest,
@@ -336,9 +347,15 @@ async def patch_scenario(
 async def delete_scenario(
     scenario_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: UserModel = Depends(require_active_user_with_permission(Permission.SCENARIO_DELETE_OWN)),
+    current_user: UserModel = Depends(
+        require_any_active_permission(Permission.SCENARIO_DELETE_OWN, Permission.SCENARIO_ADMIN_DELETE)
+    ),
 ) -> None:
-    await _service(db).delete_draft(scenario_id=scenario_id, current_user=current_user)
+    await _service(db).delete_scenario(
+        scenario_id=scenario_id,
+        current_user=current_user,
+        storage=MinioScenarioStorage.from_settings(),
+    )
 
 
 @router.post("/{scenario_id}/submit-review", response_model=SubmitReviewResponse)

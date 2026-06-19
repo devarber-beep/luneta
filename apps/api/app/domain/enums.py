@@ -107,6 +107,7 @@ class AuditActionType(StrEnum):
     SCENARIO_MARKED_NOT_SUITABLE = "scenario_marked_not_suitable"
     SCENARIO_REOPENED = "scenario_reopened"
     SCENARIO_DRAFT_DELETED = "scenario_draft_deleted"
+    SCENARIO_DELETED = "scenario_deleted"
     SCENARIO_COLLABORATOR_ADDED = "scenario_collaborator_added"
     SCENARIO_COLLABORATOR_REMOVED = "scenario_collaborator_removed"
 

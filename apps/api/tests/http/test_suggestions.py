@@ -923,6 +923,76 @@ async def test_reviewer_published_accept_adds_collaborator(api_client, fake_db) 
 
 
 @pytest.mark.asyncio
+async def test_admin_published_accept_adds_collaborator(api_client, fake_db) -> None:
+    owner_h = await _signup_and_promote(
+        api_client, fake_db, email="sugown7e@luneta.dev", role="investigator", token="sug-own7e-tok"
+    )
+    admin_h = await _signup_and_promote(
+        api_client, fake_db, email="sugadmin7e@luneta.dev", role="admin", token="sug-adm7e-tok"
+    )
+    create = await api_client.post(
+        "/scenarios",
+        json={"title": "Admin suggestion pub", "description": "Opening.\n\nClosing."},
+        headers=owner_h,
+    )
+    sid = create.json()["id"]
+    now = datetime.now(UTC)
+    cat = await fake_db["scenario_classification_catalog"].insert_one(
+        {"slug": "sug7e-cat", "label": "Cat", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    risk = await fake_db["ethical_risk_catalog"].insert_one(
+        {"slug": "sug7e-risk", "label": "Risk", "is_active": True, "sort_order": 0, "created_at": now, "updated_at": now}
+    )
+    await fake_db["scenarios"].update_one(
+        {"_id": ObjectId(sid)},
+        {"$set": {"cover_image": {"asset_id": "c1", "storage_key": f"s/{sid}/c1", "mime_type": "image/png", "order": 0}}},
+    )
+    await api_client.patch(
+        f"/scenarios/{sid}",
+        json={
+            "category_ids": [str(cat.inserted_id)],
+            "ethical_risk_ids": [str(risk.inserted_id)],
+            "usage_context": {
+                "children_age_start": 5,
+                "children_age_end": 9,
+                "children_count": 12,
+                "duration_frequency": "once_a_week",
+                "physically_present": "yes",
+                "online_present": "no",
+                "execution_place_affects_scenario": "yes",
+                "special_circumstances": "no",
+                "consent_in_place": "yes",
+            },
+        },
+        headers=owner_h,
+    )
+    await api_client.post(f"/scenarios/{sid}/submit-review", headers=owner_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/start-review", headers=admin_h)
+    await api_client.post(f"/workflow/scenarios/{sid}/publish", headers=admin_h)
+    sug = await api_client.post(
+        f"/scenarios/{sid}/suggestions",
+        headers=admin_h,
+        json={
+            "scope": "paragraph",
+            "kind": "alternative_text",
+            "paragraph_index": 0,
+            "body": "Admin suggested opening.",
+        },
+    )
+    assert sug.status_code == 201
+    accept = await api_client.post(
+        f"/scenarios/{sid}/suggestions/{sug.json()['id']}/accept",
+        headers=owner_h,
+    )
+    assert accept.status_code == 200
+    scenario = accept.json()["scenario"]
+    assert scenario["state"] == "published"
+    admin_doc = await fake_db["users"].find_one({"email_normalized": "sugadmin7e@luneta.dev"})
+    collab_ids = [c["user_id"] for c in scenario["collaborators"]]
+    assert str(admin_doc["_id"]) in collab_ids
+
+
+@pytest.mark.asyncio
 async def test_investigator_paragraph_comment_on_published(api_client, fake_db) -> None:
     owner_h = await _signup_and_promote(
         api_client, fake_db, email="sugown8@luneta.dev", role="investigator", token="sug-own8-tok"
