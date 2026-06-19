@@ -39,12 +39,12 @@ export function SiteNavbar() {
           ) : null}
           {token ? (
             <Link to="/my-scenarios" className={linkClass("/my-scenarios")}>
-              My scenarios
+              My Scenarios
             </Link>
           ) : null}
           {token ? (
             <Link to="/scenarios/new" className={linkClass("/scenarios/new")}>
-              New scenario
+              New Scenario
             </Link>
           ) : null}
           {role === "reviewer" || role === "admin" ? (
@@ -67,7 +67,7 @@ export function SiteNavbar() {
                 Evaluations
               </Link>
               <Link to="/admin/audit" className={linkClass("/admin/audit")}>
-                Activity log
+                Activity Log
               </Link>
             </>
           ) : null}
