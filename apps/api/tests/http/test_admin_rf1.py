@@ -137,6 +137,89 @@ async def test_admin_demote_reviewer_to_investigator(api_client, fake_db) -> Non
 
 
 @pytest.mark.asyncio
+async def test_admin_promote_investigator_to_admin(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    await fake_db["users"].insert_one(
+        user_doc(email="invadm@luneta.dev", role="investigator", password_plain="Password123!", first_name="Invadm", last_name="User")
+    )
+    inv = await fake_db["users"].find_one({"email_normalized": "invadm@luneta.dev"})
+    assert inv is not None
+    iid = str(inv["_id"])
+
+    admin_login = await api_client.post(
+        "/auth/login",
+        json={"email": "admrf1@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = admin_login.json()["access_token"]
+    patch_role = await api_client.patch(
+        f"/admin/users/{iid}/role",
+        json={"role": "admin"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert patch_role.status_code == 200
+    assert patch_role.json()["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_demote_last_admin(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="onlyadmin@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    sole = await fake_db["users"].find_one({"email_normalized": "onlyadmin@luneta.dev"})
+    assert sole is not None
+    aid = str(sole["_id"])
+
+    login = await api_client.post(
+        "/auth/login",
+        json={"email": "onlyadmin@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = login.json()["access_token"]
+    blocked = await api_client.patch(
+        f"/admin/users/{aid}/role",
+        json={"role": "investigator"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"] == "Cannot change role of the last admin account"
+
+
+@pytest.mark.asyncio
+async def test_admin_list_marks_last_admin_role_locked(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="onlyadmin@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    login = await api_client.post(
+        "/auth/login",
+        json={"email": "onlyadmin@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = login.json()["access_token"]
+    listed = await api_client.get("/admin/users/summary", headers={"Authorization": f"Bearer {token}"})
+    assert listed.status_code == 200
+    row = next(r for r in listed.json() if r["email_normalized"] == "onlyadmin@luneta.dev")
+    assert row["role_change_locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_demote_admin_to_registered(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    await fake_db["users"].insert_one(
+        user_doc(email="adm2@luneta.dev", role="admin", password_plain="Password123!", first_name="Adm2", last_name="User")
+    )
+    target = await fake_db["users"].find_one({"email_normalized": "adm2@luneta.dev"})
+    assert target is not None
+    tid = str(target["_id"])
+
+    admin_login = await api_client.post(
+        "/auth/login",
+        json={"email": "admrf1@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = admin_login.json()["access_token"]
+    patch_role = await api_client.patch(
+        f"/admin/users/{tid}/role",
+        json={"role": "registered"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert patch_role.status_code == 200
+    assert patch_role.json()["role"] == "registered"
+
+
+@pytest.mark.asyncio
 async def test_admin_list_users_summary_includes_registered(api_client, fake_db) -> None:
     from unittest.mock import patch
 

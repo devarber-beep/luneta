@@ -18,20 +18,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
 };
 
-function selectableRoles(current: string): Array<AdminUserSummary["role"] | "admin"> {
-  switch (current) {
-    case "registered":
-      return ["registered", "investigator"];
-    case "investigator":
-      return ["registered", "investigator", "reviewer"];
-    case "reviewer":
-      return ["reviewer", "investigator"];
-    case "admin":
-      return ["admin"];
-    default:
-      return [current as AdminUserSummary["role"]];
-  }
-}
+const ALL_ROLES = ["registered", "investigator", "reviewer", "admin"] as const;
 
 export function AdminUsersPage() {
   const token = getToken() ?? "";
@@ -88,10 +75,14 @@ export function AdminUsersPage() {
   };
 
   const onRoleChange = async (user: AdminUserSummary, nextRole: string) => {
-    if (nextRole === user.role || user.role === "admin") return;
+    if (nextRole === user.role || user.role_change_locked) return;
     setRowBusy(user.user_id);
     try {
-      await patchAdminUserRole(token, user.user_id, nextRole as "registered" | "investigator" | "reviewer");
+      await patchAdminUserRole(
+        token,
+        user.user_id,
+        nextRole as "registered" | "investigator" | "reviewer" | "admin",
+      );
       loadUsers();
       setMessage(`Role updated for ${user.display_name}.`);
     } catch (e) {
@@ -166,7 +157,6 @@ export function AdminUsersPage() {
               <tbody>
                 {users.map((user) => {
                   const busy = rowBusy === user.user_id;
-                  const roles = selectableRoles(user.role);
                   return (
                     <tr key={user.user_id} style={{ borderBottom: "1px solid #eee" }}>
                       <td style={{ padding: "0.5rem" }}>{user.display_name}</td>
@@ -174,10 +164,15 @@ export function AdminUsersPage() {
                       <td style={{ padding: "0.5rem" }}>
                         <select
                           value={user.role}
-                          disabled={busy || user.role === "admin"}
+                          disabled={busy || user.role_change_locked}
+                          title={
+                            user.role_change_locked
+                              ? "This is the last admin account; promote another user to admin before changing this role."
+                              : undefined
+                          }
                           onChange={(e) => onRoleChange(user, e.target.value)}
                         >
-                          {roles.map((role) => (
+                          {ALL_ROLES.map((role) => (
                             <option key={role} value={role}>
                               {ROLE_LABELS[role] ?? role}
                             </option>

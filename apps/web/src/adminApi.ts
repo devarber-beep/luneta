@@ -15,6 +15,7 @@ export type AdminUserSummary = {
   email_normalized: string;
   role: string;
   account_status: "active" | "disabled";
+  role_change_locked?: boolean;
 };
 
 function authHeaders(token: string) {
@@ -113,7 +114,7 @@ export async function listAdminUsers(
 export async function patchAdminUserRole(
   token: string,
   userId: string,
-  role: "registered" | "investigator" | "reviewer",
+  role: "registered" | "investigator" | "reviewer" | "admin",
 ): Promise<{ user_id: string; role: string; account_status: string }> {
   return request(`/admin/users/${userId}/role`, {
     method: "PATCH",

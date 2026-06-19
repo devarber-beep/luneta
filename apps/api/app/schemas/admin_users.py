@@ -1,7 +1,7 @@
 """Request and response bodies for admin user management."""
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field
 
 from app.domain.enums import UserAccountStatus, UserRole
 
@@ -18,16 +18,7 @@ class AdminCreateInvestigatorResponse(BaseModel):
 
 
 class AdminSetUserRoleRequest(BaseModel):
-    """Assignable roles: registered, investigator, reviewer (not admin)."""
-
     role: UserRole
-
-    @field_validator("role")
-    @classmethod
-    def assignable_role(cls, v: UserRole) -> UserRole:
-        if v not in (UserRole.REGISTERED, UserRole.INVESTIGATOR, UserRole.REVIEWER):
-            raise ValueError("role must be registered, investigator, or reviewer")
-        return v
 
 
 class AdminSetAccountStatusRequest(BaseModel):
@@ -51,3 +42,4 @@ class AdminUserSummaryResponse(BaseModel):
     email_normalized: EmailStr
     role: UserRole
     account_status: UserAccountStatus
+    role_change_locked: bool = False

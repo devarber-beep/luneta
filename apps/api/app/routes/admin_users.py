@@ -122,6 +122,7 @@ async def admin_list_users_summary(
         q=q,
         include_disabled=include_disabled,
     )
+    admin_count = await repo.count_by_role(UserRole.ADMIN)
     return [
         AdminUserSummaryResponse(
             user_id=u.id or "",
@@ -129,6 +130,7 @@ async def admin_list_users_summary(
             email_normalized=u.email_normalized,
             role=UserRole(u.role),
             account_status=UserAccountStatus(u.account_status),
+            role_change_locked=UserRole(u.role) == UserRole.ADMIN and admin_count <= 1,
         )
         for u in users
     ]

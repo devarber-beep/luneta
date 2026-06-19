@@ -33,13 +33,6 @@ from app.services.notification_service import NotificationService
 
 
 
-_ALLOWED_ROLE_TRANSITIONS: dict[UserRole, frozenset[UserRole]] = {
-    UserRole.REGISTERED: frozenset({UserRole.INVESTIGATOR}),
-    UserRole.INVESTIGATOR: frozenset({UserRole.REGISTERED, UserRole.REVIEWER}),
-    UserRole.REVIEWER: frozenset({UserRole.INVESTIGATOR}),
-}
-
-
 class AdminUserService:
 
     def __init__(
@@ -187,18 +180,13 @@ class AdminUserService:
         if new_role == current:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already has this role")
 
-        if current == UserRole.ADMIN:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot change role of an admin account",
-            )
-
-        allowed = _ALLOWED_ROLE_TRANSITIONS.get(current, frozenset())
-        if new_role not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot change role from {current.value} to {new_role.value}",
-            )
+        if current == UserRole.ADMIN and new_role != UserRole.ADMIN:
+            admin_count = await self._users_repo.count_by_role(UserRole.ADMIN)
+            if admin_count <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Cannot change role of the last admin account",
+                )
 
         updated = await self._users_repo.set_role(target_user_id, role=new_role)
 

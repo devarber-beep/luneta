@@ -139,6 +139,9 @@ class UsersRepository:
                 ids.append(str(oid))
         return ids
 
+    async def count_by_role(self, role: UserRole) -> int:
+        return await self._collection.count_documents({"role": role.value})
+
     async def list_by_roles(self, roles: list[UserRole]) -> list[UserModel]:
         if not roles:
             return []
