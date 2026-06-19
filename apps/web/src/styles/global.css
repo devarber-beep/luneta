@@ -198,6 +198,23 @@ a:hover {
   padding-top: 6.25rem;
 }
 
+.page-layout__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.page-layout__heading {
+  margin: 0;
+}
+
+.page-layout__header-aside {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .page-layout--auth {
   max-width: 28rem;
 }
@@ -1166,6 +1183,35 @@ textarea {
   border: 2px solid #fff;
 }
 
+.alert-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.alert-modal__actions .btn {
+  flex: 1 1 9rem;
+  min-height: 3.25rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.alert-modal__cancel {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+}
+
+.alert-modal__cancel:hover:not(:disabled) {
+  background: var(--color-surface-muted);
+  border-color: var(--iowa-black);
+}
+
+.alert-modal__confirm {
+  min-height: 3.25rem;
+}
+
 .editor-section {
   margin-bottom: 0;
 }
@@ -1307,6 +1353,10 @@ textarea {
 .scenario-editor__description-label {
   font-weight: 600;
   font-size: 0.95rem;
+}
+
+.scenario-editor__admin-actions {
+  margin-bottom: 1rem;
 }
 
 .scenario-editor__actions {
@@ -2125,12 +2175,21 @@ textarea {
   max-width: 84rem;
 }
 
-.page-layout--public-scenario h1 {
-  font-size: clamp(1.65rem, 2.5vw, 2.15rem);
-  line-height: 1.2;
+.page-layout--public-scenario .page-layout__header {
   margin-bottom: 0.35rem;
   padding-bottom: 0.85rem;
   border-bottom: 3px solid var(--iowa-gold);
+}
+
+.page-layout--public-scenario .page-layout__heading {
+  font-size: clamp(1.65rem, 2.5vw, 2.15rem);
+  line-height: 1.2;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.page-layout--public-scenario .page-layout__header-aside {
+  padding-top: 0.2rem;
 }
 
 .public-scenario__published {

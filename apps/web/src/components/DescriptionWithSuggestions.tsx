@@ -12,6 +12,26 @@ import { StatusMessage } from "./StatusMessage";
 
 export { splitDescriptionParagraphs } from "../domain/descriptionParagraphs";
 
+function suggestionStatusFeedback(message: string) {
+  if (message === "Suggestion submitted.") {
+    return { variant: "success" as const, presentation: "modal" as const, title: "Suggestion submitted" };
+  }
+  if (message === "Suggestion accepted.") {
+    return { variant: "success" as const, presentation: "modal" as const, title: "Suggestion accepted" };
+  }
+  if (message === "Suggestion rejected.") {
+    return { variant: "success" as const, presentation: "modal" as const, title: "Suggestion rejected" };
+  }
+  if (message === "Alternative text applied to the scenario.") {
+    return {
+      variant: "success" as const,
+      presentation: "modal" as const,
+      title: "Alternative text applied",
+    };
+  }
+  return { variant: undefined, presentation: "auto" as const, title: undefined };
+}
+
 type Props = {
   scenarioId: string;
   description: string;
@@ -32,6 +52,15 @@ type Props = {
   hideResolvedSuggestions?: boolean;
   onSuggestionSubmitted?: () => void;
   onScenarioUpdated?: () => void;
+  onSuggestionAccepted?: (result: {
+    suggestion: SuggestionItem;
+    scenario: { state: string; description?: string; can_start_editing_working_copy?: boolean };
+  }) => void | Promise<void>;
+  onSuggestionApplied?: (result: {
+    suggestion: SuggestionItem;
+    scenario: { description?: string };
+  }) => void | Promise<void>;
+  onEnsureReadyToApply?: () => void | Promise<void>;
 };
 
 export function DescriptionWithSuggestions({
@@ -50,6 +79,9 @@ export function DescriptionWithSuggestions({
   hideResolvedSuggestions = false,
   onSuggestionSubmitted,
   onScenarioUpdated,
+  onSuggestionAccepted,
+  onSuggestionApplied,
+  onEnsureReadyToApply,
 }: Props) {
   const paragraphs = useMemo(() => splitDescriptionParagraphs(description), [description]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -132,8 +164,13 @@ export function DescriptionWithSuggestions({
     if (!token) return;
     setBusy(true);
     try {
-      await applyAcceptedSuggestionText(token, scenarioId, suggestionId);
-      onScenarioUpdated?.();
+      await onEnsureReadyToApply?.();
+      const result = await applyAcceptedSuggestionText(token, scenarioId, suggestionId);
+      if (onSuggestionApplied) {
+        await onSuggestionApplied(result);
+      } else {
+        onScenarioUpdated?.();
+      }
       setMessage("Alternative text applied to the scenario.");
     } catch (e) {
       setMessage((e as Error).message);
@@ -148,11 +185,16 @@ export function DescriptionWithSuggestions({
     setBusy(true);
     try {
       if (action === "accept") {
-        await acceptScenarioSuggestion(token, scenarioId, suggestionId);
+        const result = await acceptScenarioSuggestion(token, scenarioId, suggestionId);
+        if (onSuggestionAccepted) {
+          await onSuggestionAccepted(result);
+        } else {
+          onScenarioUpdated?.();
+        }
       } else {
         await rejectScenarioSuggestion(token, scenarioId, suggestionId);
+        onScenarioUpdated?.();
       }
-      onScenarioUpdated?.();
       setMessage(action === "accept" ? "Suggestion accepted." : "Suggestion rejected.");
     } catch (e) {
       setMessage((e as Error).message);
@@ -180,7 +222,11 @@ export function DescriptionWithSuggestions({
             />
           </div>
         ))}
-        <StatusMessage message={message} onDismiss={() => setMessage("")} />
+        <StatusMessage
+          message={message}
+          {...suggestionStatusFeedback(message)}
+          onDismiss={() => setMessage("")}
+        />
       </div>
     );
   }
@@ -213,7 +259,11 @@ export function DescriptionWithSuggestions({
             ))}
           </div>
         ) : null}
-        <StatusMessage message={message} onDismiss={() => setMessage("")} />
+        <StatusMessage
+          message={message}
+          {...suggestionStatusFeedback(message)}
+          onDismiss={() => setMessage("")}
+        />
       </div>
     );
   }
@@ -324,7 +374,11 @@ export function DescriptionWithSuggestions({
         />
       ) : null}
 
-      <StatusMessage message={message} onDismiss={() => setMessage("")} />
+      <StatusMessage
+        message={message}
+        {...suggestionStatusFeedback(message)}
+        onDismiss={() => setMessage("")}
+      />
     </div>
   );
 }
@@ -347,7 +401,7 @@ function MarginNote({
   busy: boolean;
 }) {
   const showApply =
-    canApplyAcceptedText &&
+    (canApplyAcceptedText || canResolve) &&
     s.status === "accepted" &&
     s.kind === "alternative_text" &&
     !s.applied_at;
@@ -370,9 +424,11 @@ function MarginNote({
         </div>
       ) : null}
       {showApply ? (
-        <button type="button" className="btn btn--small" disabled={busy} onClick={onApply}>
-          Apply
-        </button>
+        <div className="suggestion-note__actions">
+          <button type="button" className="btn btn--small" disabled={busy} onClick={onApply}>
+            Apply
+          </button>
+        </div>
       ) : null}
       {s.applied_at ? <p className="suggestion-note__meta">Applied</p> : null}
     </aside>

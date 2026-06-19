@@ -9,6 +9,8 @@ type Props = {
   heading?: string;
   headingLevel?: 1 | 2;
   className?: string;
+  /** Optional actions aligned to the top-right of the page heading row. */
+  headerAside?: ReactNode;
 };
 
 export function PageLayout({
@@ -17,6 +19,7 @@ export function PageLayout({
   heading,
   headingLevel = 2,
   className,
+  headerAside,
 }: Props) {
   const visibleHeading = heading === undefined ? documentTitle : heading;
   useDocumentTitle(documentTitle ?? visibleHeading);
@@ -25,7 +28,14 @@ export function PageLayout({
 
   return (
     <main id="main-content" className={`page-layout${className ? ` ${className}` : ""}`} tabIndex={-1}>
-      {visibleHeading ? <HeadingTag>{visibleHeading}</HeadingTag> : null}
+      {headerAside && visibleHeading ? (
+        <div className="page-layout__header page-layout__header--with-aside">
+          <HeadingTag className="page-layout__heading">{visibleHeading}</HeadingTag>
+          <div className="page-layout__header-aside">{headerAside}</div>
+        </div>
+      ) : visibleHeading ? (
+        <HeadingTag>{visibleHeading}</HeadingTag>
+      ) : null}
       {children}
     </main>
   );

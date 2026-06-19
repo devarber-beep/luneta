@@ -26,6 +26,7 @@ import {
   fetchPublicSearchCategories,
   fetchPublicSearchEthicalRisks,
   type SuggestionItem,
+  type ScenarioResponse,
 } from "../api";
 import { DescriptionWithSuggestions } from "../components/DescriptionWithSuggestions";
 import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsights";
@@ -44,6 +45,7 @@ import {
 import { FormField } from "../components/FormField";
 import { PageLayout } from "../components/PageLayout";
 import { StatusMessage } from "../components/StatusMessage";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { getRole, getToken } from "../session";
 
 function editorStatusFeedback(message: string, hasSimilarityWarning: boolean) {
@@ -103,6 +105,8 @@ export function ScenarioEditorPage({
   const [sensitiveFindings, setSensitiveFindings] = useState<SensitiveFindingLocation[]>([]);
   const [similarMatches, setSimilarMatches] = useState<SimilarScenarioMatch[]>([]);
   const [saveSimilarityMatches, setSaveSimilarityMatches] = useState<SimilarScenarioMatch[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<"draft" | "admin" | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const role = getRole();
   const isOwner = Boolean(myUserId && authorUserId && myUserId === authorUserId);
@@ -112,16 +116,17 @@ export function ScenarioEditorPage({
   const [myParticipationRole, setMyParticipationRole] = useState<"owner" | "collaborator" | null>(null);
   const [pendingSuggestionCount, setPendingSuggestionCount] = useState(0);
 
-  const isCollaborator = viewOnly || myParticipationRole === "collaborator";
+  const isCollaboratorRole = myParticipationRole === "collaborator";
+  const isReadOnlyView = viewOnly || isCollaboratorRole;
 
   const reviewerInReview =
     state === "in_review" && (isAdmin || (role === "reviewer" && !isOwner));
   const locked =
-    isCollaborator ||
+    isReadOnlyView ||
     state === "not_suitable" ||
     (isOwner && state === "changes_required") ||
     ((state === "queued" || state === "in_review") && !reviewerInReview);
-  const ownerCanEditDescription = isOwner && !locked && !isCollaborator;
+  const ownerCanEditDescription = isOwner && !locked && !isCollaboratorRole;
   const canApplySuggestionText =
     ownerCanEditDescription && (state === "applying_changes" || state === "draft");
   const canSuggest =
@@ -135,7 +140,7 @@ export function ScenarioEditorPage({
     scenarioId && !isCreate && !ownerCanEditDescription && (effectiveCanSuggest || canViewSuggestions),
   );
   const canSubmitReview =
-    !isCollaborator &&
+    !isReadOnlyView &&
     isOwner &&
     (state === "draft" || state === "published" || state === "applying_changes");
   const hideResolvedSuggestions = state === "published";
@@ -231,7 +236,7 @@ export function ScenarioEditorPage({
       setCanViewSuggestions(false);
       return;
     }
-    if (!isOwner && !isAdmin && !canSuggest && !isCollaborator) {
+    if (!isOwner && !isAdmin && !canSuggest && !isCollaboratorRole) {
       setSuggestions([]);
       setCanViewSuggestions(false);
       return;
@@ -242,22 +247,74 @@ export function ScenarioEditorPage({
       setCanViewSuggestions(true);
     } catch {
       setSuggestions([]);
-      setCanViewSuggestions(isOwner || isAdmin || isCollaborator);
+      setCanViewSuggestions(isOwner || isAdmin || isCollaboratorRole);
+    }
+  };
+
+  const ensureReadyToApplySuggestions = async () => {
+    const token = getToken();
+    if (!token || !scenarioId) {
+      return;
+    }
+    const scenario = await getScenario(token, scenarioId);
+    if (scenario.state === "published") {
+      const started = await startEditingWorkingCopy(token, scenarioId);
+      setState(started.state);
+      await load(scenarioId);
+    }
+  };
+
+  const handleSuggestionAccepted = async (result: {
+    suggestion: SuggestionItem;
+    scenario: ScenarioResponse;
+  }) => {
+    const token = getToken();
+    if (!token || !scenarioId) {
+      return;
+    }
+
+    setSuggestions((prev) => prev.map((s) => (s.id === result.suggestion.id ? result.suggestion : s)));
+    setState(result.scenario.state);
+    setDescription(result.scenario.description ?? "");
+    setPendingSuggestionCount(result.scenario.pending_suggestion_count ?? 0);
+    setApiCanSuggest(result.scenario.can_create_suggestion ?? false);
+
+    if (
+      result.suggestion.kind === "alternative_text" &&
+      result.scenario.state === "published"
+    ) {
+      const started = await startEditingWorkingCopy(token, scenarioId);
+      setState(started.state);
+    }
+
+    await load(scenarioId);
+    await loadSuggestions(scenarioId);
+  };
+
+  const handleSuggestionApplied = async (result: {
+    suggestion: SuggestionItem;
+    scenario: ScenarioResponse;
+  }) => {
+    setSuggestions((prev) => prev.map((s) => (s.id === result.suggestion.id ? result.suggestion : s)));
+    setDescription(result.scenario.description ?? "");
+    if (scenarioId) {
+      await load(scenarioId);
+      await loadSuggestions(scenarioId);
     }
   };
 
   useEffect(() => {
-    setCanViewSuggestions(isOwner || isAdmin || isCollaborator);
-  }, [isOwner, isAdmin, isCollaborator]);
+    setCanViewSuggestions(isOwner || isAdmin || isCollaboratorRole);
+  }, [isOwner, isAdmin, isCollaboratorRole]);
 
   useEffect(() => {
-    if (scenarioId && !isCreate && (isOwner || isAdmin || canSuggest || isCollaborator)) {
+    if (scenarioId && !isCreate && (isOwner || isAdmin || canSuggest || isCollaboratorRole)) {
       loadSuggestions(scenarioId).catch(() => undefined);
     } else {
       setSuggestions([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioId, isOwner, isAdmin, canSuggest, isCollaborator, state]);
+  }, [scenarioId, isOwner, isAdmin, canSuggest, isCollaboratorRole, state]);
 
   useEffect(() => {
     if (scenarioId && reviewerInReview) {
@@ -506,22 +563,40 @@ export function ScenarioEditorPage({
     }
   };
 
-  const onDeleteDraft = async () => {
+  const executeDeleteDraft = async () => {
     const token = getToken();
-    if (!token || !scenarioId || state !== "draft") return;
-    if (!window.confirm("Delete this draft? This cannot be undone.")) return;
+    if (!token || !scenarioId || state !== "draft" || !isOwner) return;
+    setDeleting(true);
     try {
       await deleteScenario(token, scenarioId);
+      setDeleteConfirm(null);
       navigate("/my-scenarios");
     } catch (error) {
       setMessage((error as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const executeDeleteScenarioAsAdmin = async () => {
+    const token = getToken();
+    if (!token || !scenarioId || !isAdmin) return;
+    setDeleting(true);
+    try {
+      await deleteScenario(token, scenarioId);
+      setDeleteConfirm(null);
+      navigate("/");
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setDeleting(false);
     }
   };
 
   return (
     <PageLayout
       documentTitle={isCreate ? "New scenario" : title || "Scenario"}
-      heading={isCreate ? "New scenario" : isCollaborator ? "View scenario" : "Edit scenario"}
+      heading={isCreate ? "New scenario" : isReadOnlyView ? "View scenario" : "Edit scenario"}
       headingLevel={1}
       className={`page-layout--scenario-editor${isCreate ? " page-layout--scenario-editor-new" : ""}`}
     >
@@ -642,7 +717,15 @@ export function ScenarioEditorPage({
         </section>
       ) : null}
 
-      {isCollaborator && useParagraphSuggestionUi ? (
+      {viewOnly && isAdmin && scenarioId ? (
+        <section className="scenario-editor__admin-actions">
+          <button type="button" className="btn btn--danger" onClick={() => setDeleteConfirm("admin")}>
+            Delete scenario
+          </button>
+        </section>
+      ) : null}
+
+      {isCollaboratorRole && useParagraphSuggestionUi ? (
         <section className="card editor-section">
           <h3 className="editor-section__title">{title}</h3>
           <DescriptionWithSuggestions
@@ -719,7 +802,7 @@ export function ScenarioEditorPage({
         </StatusMessage>
       ) : null}
 
-      {!isCollaborator ? (
+      {!isCollaboratorRole ? (
       <form onSubmit={onSave} className="scenario-editor__form">
         {isOwner && scenarioId && ownerCanEditDescription ? (
           <ScenarioAiSuggestionsPanel
@@ -777,6 +860,9 @@ export function ScenarioEditorPage({
                   await load(scenarioId);
                   await loadSuggestions(scenarioId);
                 }}
+                onSuggestionAccepted={handleSuggestionAccepted}
+                onSuggestionApplied={handleSuggestionApplied}
+                onEnsureReadyToApply={ensureReadyToApplySuggestions}
               />
             ) : useParagraphSuggestionUi ? (
               <DescriptionWithSuggestions
@@ -786,6 +872,7 @@ export function ScenarioEditorPage({
                 canSuggest={effectiveCanSuggest}
                 canViewSuggestions={canViewSuggestions}
                 canResolve={isOwner}
+                canApplyAcceptedText={canApplySuggestionText}
                 hideResolvedSuggestions={hideResolvedSuggestions}
                 onSuggestionSubmitted={async () => {
                   if (reviewerInReview) {
@@ -808,6 +895,9 @@ export function ScenarioEditorPage({
                   await load(scenarioId);
                   await loadSuggestions(scenarioId);
                 }}
+                onSuggestionAccepted={handleSuggestionAccepted}
+                onSuggestionApplied={handleSuggestionApplied}
+                onEnsureReadyToApply={ensureReadyToApplySuggestions}
               />
             ) : (
               <textarea
@@ -982,8 +1072,8 @@ export function ScenarioEditorPage({
               Submit for review
             </button>
           ) : null}
-          {!isCreate && state === "draft" ? (
-            <button type="button" className="btn btn--danger" onClick={() => onDeleteDraft()}>
+          {!isCreate && isOwner && state === "draft" && !viewOnly ? (
+            <button type="button" className="btn btn--danger" onClick={() => setDeleteConfirm("draft")}>
               Delete draft
             </button>
           ) : null}
@@ -1022,6 +1112,39 @@ export function ScenarioEditorPage({
             </>
           ) : null}
         </StatusMessage>
+      ) : null}
+
+      {deleteConfirm === "draft" ? (
+        <ConfirmModal
+          title="Delete draft?"
+          message={`“${title}” will be removed permanently. Stored images will also be deleted.`}
+          variant="warning"
+          confirmLabel="Delete draft"
+          confirmTone="danger"
+          busy={deleting}
+          onConfirm={() => executeDeleteDraft()}
+          onCancel={() => {
+            if (!deleting) {
+              setDeleteConfirm(null);
+            }
+          }}
+        />
+      ) : null}
+      {deleteConfirm === "admin" ? (
+        <ConfirmModal
+          title="Delete scenario?"
+          message={`“${title}” will no longer be accessible. Stored images will be removed. This cannot be undone.`}
+          variant="warning"
+          confirmLabel="Delete scenario"
+          confirmTone="danger"
+          busy={deleting}
+          onConfirm={() => executeDeleteScenarioAsAdmin()}
+          onCancel={() => {
+            if (!deleting) {
+              setDeleteConfirm(null);
+            }
+          }}
+        />
       ) : null}
     </PageLayout>
   );

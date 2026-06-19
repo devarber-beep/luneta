@@ -46,6 +46,8 @@ import { ScenarioCard } from "./components/ScenarioCard";
 import { PageLayout } from "./components/PageLayout";
 import { FormField } from "./components/FormField";
 import { StatusMessage } from "./components/StatusMessage";
+import { ConfirmModal } from "./components/ConfirmModal";
+import { AdminDeleteScenarioButton } from "./components/AdminDeleteScenarioButton";
 import { describeUsageContext } from "./components/usageContextLabels";
 import type { ScenarioSummary, ScenarioUsageContext } from "./api";
 
@@ -591,6 +593,8 @@ function MyScenariosPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string; state: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const pageSize = 6;
 
   const load = async () => {
@@ -618,19 +622,25 @@ function MyScenariosPage() {
     }
   };
 
-  const onDeleteDraft = async (id: string, title: string) => {
-    if (!token) {
+  const onDeleteScenario = (id: string, title: string, state: string) => {
+    setDeleteConfirm({ id, title, state });
+  };
+
+  const executeDeleteScenario = async () => {
+    if (!token || !deleteConfirm) {
       return;
     }
-    if (!window.confirm(`Delete draft “${title}”? This cannot be undone.`)) {
-      return;
-    }
+    const isDraft = deleteConfirm.state === "draft";
+    setDeleting(true);
     try {
-      await deleteScenario(token, id);
-      setMessage("Draft deleted.");
+      await deleteScenario(token, deleteConfirm.id);
+      setDeleteConfirm(null);
+      setMessage(isDraft ? "Draft deleted." : "Scenario deleted.");
       await load();
     } catch (e) {
       setMessage((e as Error).message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -779,9 +789,15 @@ function MyScenariosPage() {
                       Public page
                     </Link>
                   ) : null}
-                  {s.my_participation_role === "owner" && s.state === "draft" && !mustChangePassword ? (
-                    <button type="button" className="btn btn--ghost" onClick={() => onDeleteDraft(s.id, s.title)}>
-                      Delete draft
+                  {s.my_participation_role === "owner" &&
+                  (s.state === "draft" || s.state === "published") &&
+                  !mustChangePassword ? (
+                    <button
+                      type="button"
+                      className="btn btn--danger"
+                      onClick={() => onDeleteScenario(s.id, s.title, s.state)}
+                    >
+                      {s.state === "draft" ? "Delete draft" : "Delete scenario"}
                     </button>
                   ) : null}
                 </div>
@@ -809,6 +825,26 @@ function MyScenariosPage() {
         </nav>
       ) : null}
       {!loading && !items.length ? <p>{emptyMessage}</p> : null}
+      {deleteConfirm ? (
+        <ConfirmModal
+          title={deleteConfirm.state === "draft" ? "Delete draft?" : "Delete published scenario?"}
+          message={
+            deleteConfirm.state === "draft"
+              ? `“${deleteConfirm.title}” will be removed permanently. Stored images will also be deleted.`
+              : `“${deleteConfirm.title}” will disappear from the public catalog. Stored images will be removed. This cannot be undone.`
+          }
+          variant="warning"
+          confirmLabel={deleteConfirm.state === "draft" ? "Delete draft" : "Delete scenario"}
+          confirmTone="danger"
+          busy={deleting}
+          onConfirm={() => executeDeleteScenario()}
+          onCancel={() => {
+            if (!deleting) {
+              setDeleteConfirm(null);
+            }
+          }}
+        />
+      ) : null}
       <StatusMessage message={message} onDismiss={() => setMessage("")} />
     </PageLayout>
   );
@@ -816,6 +852,7 @@ function MyScenariosPage() {
 
 function PublicScenarioPage() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const token = useToken();
   const role = useRole();
   const [scenarioId, setScenarioId] = useState("");
@@ -910,6 +947,17 @@ function PublicScenarioPage() {
       heading={title || "Public scenario"}
       headingLevel={1}
       className="page-layout--public-scenario"
+      headerAside={
+        role === "admin" && scenarioId && token ? (
+          <AdminDeleteScenarioButton
+            scenarioId={scenarioId}
+            title={title}
+            token={token}
+            onDeleted={() => navigate("/")}
+            onError={(message) => setMessage(message)}
+          />
+        ) : null
+      }
     >
       {publishedAt ? (
         <p className="public-scenario__published text-muted">
@@ -1006,7 +1054,6 @@ function PublicScenarioPage() {
                   canResolve={false}
                   publishedParagraphAltTextOnly
                   onSuggestionSubmitted={async () => {
-                    setMessage("Suggestion submitted.");
                     await loadSuggestions(scenarioId);
                   }}
                 />
