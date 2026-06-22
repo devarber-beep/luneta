@@ -31,3 +31,6 @@ Thumbs.db
 infra/scripts/check_scenarios_db_valid.py
 infra/scripts/mongo_align_scenarios_public.py
 infra/scripts/mongo_migrate_*.py
+
+# Local deployment notes (not published in the repo)
+docs/DESPLIEGUE.md
