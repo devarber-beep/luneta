@@ -11,13 +11,38 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 
-def _send_smtp_sync(*, host: str, port: int, mail_from: str, to: str, subject: str, body: str) -> None:
+def _smtp_transport_mode(port: int) -> tuple[bool, bool]:
+    """Return (use_starttls, use_ssl) for common SMTP ports."""
+    if port == 465:
+        return False, True
+    if port in (25, 587):
+        return True, False
+    return False, False
+
+
+def _send_smtp_sync(
+    *,
+    host: str,
+    port: int,
+    mail_from: str,
+    to: str,
+    subject: str,
+    body: str,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = mail_from
     msg["To"] = to
     msg.set_content(body)
-    with smtplib.SMTP(host, port, timeout=15) as smtp:
+    use_tls, use_ssl = _smtp_transport_mode(port)
+    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    with smtp_class(host, port, timeout=15) as smtp:
+        if use_tls:
+            smtp.starttls()
+        if username and password:
+            smtp.login(username, password)
         smtp.send_message(msg)
 
 
@@ -112,6 +137,8 @@ class MailerService:
                     to=to_email,
                     subject=subject,
                     body=body,
+                    username=self._s.email_smtp_user,
+                    password=self._s.email_smtp_password,
                 )
 
             await asyncio.to_thread(_run)

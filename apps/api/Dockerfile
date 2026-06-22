@@ -12,4 +12,5 @@ RUN pip install --no-cache-dir -e .
 
 COPY app/ app/
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render and similar hosts inject PORT; default 8000 for local Docker.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

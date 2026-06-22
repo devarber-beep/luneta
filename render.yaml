@@ -1,0 +1,53 @@
+# Render Blueprint — Luneta API
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: conectar el repo en Render → New → Blueprint → seleccionar render.yaml
+# El front se despliega aparte en Cloudflare Pages (ver docs/DESPLIEGUE.md).
+
+services:
+  - type: web
+    name: luneta-api
+    runtime: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: WEB_URL
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: AUTH_TOKEN_SECRET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_PUBLIC_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET_LUNETA
+        value: luneta-assets
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_SMTP_HOST
+        sync: false
+      - key: EMAIL_SMTP_PORT
+        value: "587"
+      - key: EMAIL_SMTP_USER
+        sync: false
+      - key: EMAIL_SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FAIL_SILENTLY
+        value: "false"
+      - key: DEV_EXPOSE_LAST_EMAIL_VERIFICATION_TOKEN
+        value: "false"
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false

@@ -50,5 +50,5 @@ luneta/
 - **apps/web**: Vite + React SPA (public browsing + authenticated flows).
 - **packages/contracts**: OpenAPI spec + TypeScript types for the frontend.
 - **infra**: Local dev (docker-compose en raíz + scripts en infra/).
-- **docs**: [Fundaciones técnicas](docs/FUNDACIONES-TECNICAS.md), [requisitos funcionales + trazabilidad](docs/requisitos-funcionales-luneta.md), [vertical slice](docs/vertical-slice.md), [máquina de estados](docs/workflow-state-machine.md), ADRs, etc.
+- **docs**: [Fundaciones técnicas](docs/FUNDACIONES-TECNICAS.md), [requisitos funcionales + trazabilidad](docs/requisitos-funcionales-luneta.md), [despliegue en producción](docs/DESPLIEGUE.md), [vertical slice](docs/vertical-slice.md), [máquina de estados](docs/workflow-state-machine.md), ADRs, etc.
 

@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     email_from: str = "Luneta <no-reply@luneta.local>"
     email_smtp_host: str = "localhost"
     email_smtp_port: int = 1025
+    email_smtp_user: str | None = None
+    email_smtp_password: str | None = None
     # When true, SMTP errors are logged but do not fail API requests (recommended for dev/tests).
     email_fail_silently: bool = True
     email_verification_token_ttl_minutes: int = 60
