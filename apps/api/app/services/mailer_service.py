@@ -1,4 +1,4 @@
-"""Transactional email delivery (SMTP)."""
+"""Transactional email delivery (Brevo API or SMTP)."""
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +6,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 
+from app.services.brevo_email import send_brevo_transactional_email_sync
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -128,20 +129,30 @@ class MailerService:
 
     async def _send(self, *, to_email: str, subject: str, body: str) -> None:
         try:
-
-            def _run() -> None:
-                _send_smtp_sync(
-                    host=self._s.email_smtp_host,
-                    port=self._s.email_smtp_port,
+            if self._s.brevo_api_key:
+                await asyncio.to_thread(
+                    send_brevo_transactional_email_sync,
+                    api_key=self._s.brevo_api_key,
                     mail_from=self._s.email_from,
                     to=to_email,
                     subject=subject,
                     body=body,
-                    username=self._s.email_smtp_user,
-                    password=self._s.email_smtp_password,
                 )
+            else:
 
-            await asyncio.to_thread(_run)
+                def _run_smtp() -> None:
+                    _send_smtp_sync(
+                        host=self._s.email_smtp_host,
+                        port=self._s.email_smtp_port,
+                        mail_from=self._s.email_from,
+                        to=to_email,
+                        subject=subject,
+                        body=body,
+                        username=self._s.email_smtp_user,
+                        password=self._s.email_smtp_password,
+                    )
+
+                await asyncio.to_thread(_run_smtp)
             logger.info("email sent to=%s subject=%s", to_email, subject)
         except Exception:
             logger.exception("email failed to=%s subject=%s", to_email, subject)

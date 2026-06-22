@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     email_smtp_port: int = 1025
     email_smtp_user: str | None = None
     email_smtp_password: str | None = None
+    # When set, outbound mail uses Brevo HTTPS API (required on Render free tier; SMTP is blocked).
+    brevo_api_key: str | None = None
     # When true, SMTP errors are logged but do not fail API requests (recommended for dev/tests).
     email_fail_silently: bool = True
     email_verification_token_ttl_minutes: int = 60
