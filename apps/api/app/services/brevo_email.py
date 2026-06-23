@@ -9,11 +9,11 @@ from email.utils import parseaddr
 BREVO_TRANSACTIONAL_URL = "https://api.brevo.com/v3/smtp/email"
 
 
-def parse_sender(mail_from: str) -> tuple[str, str]:
+def parse_sender(mail_from: str, *, default_sender_name: str = "Luneta") -> tuple[str, str]:
     name, email = parseaddr(mail_from.strip())
     if not email or "@" not in email:
         raise ValueError(f"Invalid EMAIL_FROM address: {mail_from!r}")
-    return (name or "Luneta", email)
+    return (name or default_sender_name, email)
 
 
 def send_brevo_transactional_email_sync(
@@ -23,9 +23,10 @@ def send_brevo_transactional_email_sync(
     to: str,
     subject: str,
     body: str,
+    default_sender_name: str = "Luneta",
     timeout_seconds: int = 30,
 ) -> None:
-    sender_name, sender_email = parse_sender(mail_from)
+    sender_name, sender_email = parse_sender(mail_from, default_sender_name=default_sender_name)
     payload = {
         "sender": {"name": sender_name, "email": sender_email},
         "to": [{"email": to}],

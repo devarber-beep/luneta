@@ -10,8 +10,12 @@ def test_parse_sender_with_display_name() -> None:
     assert parse_sender("Luneta <no-reply@example.org>") == ("Luneta", "no-reply@example.org")
 
 
-def test_parse_sender_plain_email() -> None:
+def test_parse_sender_plain_email_uses_default_name() -> None:
     assert parse_sender("no-reply@example.org") == ("Luneta", "no-reply@example.org")
+    assert parse_sender("no-reply@example.org", default_sender_name="XR for Youth Ethics Consortium") == (
+        "XR for Youth Ethics Consortium",
+        "no-reply@example.org",
+    )
 
 
 def test_parse_sender_invalid() -> None:

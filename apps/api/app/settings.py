@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     s3_bucket_luneta: str = "luneta-assets"
 
     web_url: str = "http://localhost:5173"
-    email_from: str = "Luneta <no-reply@luneta.local>"
+    app_display_name: str = "XR for Youth Ethics Consortium"
+    email_from: str = "XR for Youth Ethics Consortium <no-reply@luneta.local>"
     email_smtp_host: str = "localhost"
     email_smtp_port: int = 1025
     email_smtp_user: str | None = None

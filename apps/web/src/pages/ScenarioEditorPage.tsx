@@ -377,8 +377,13 @@ export function ScenarioEditorPage({
     const created = await createScenario(token, { title: trimmedTitle, description: description.trim() });
     const id = created.id;
     setScenarioId(id);
-    navigate(`/scenarios/${id}/edit`, { replace: true });
     return id;
+  };
+
+  const navigateToEditAfterCreate = (id: string) => {
+    if (isCreate) {
+      navigate(`/scenarios/${id}/edit`, { replace: true });
+    }
   };
 
   const ensureWorkingCopyBeforeSave = async (token: string, id: string) => {
@@ -446,6 +451,7 @@ export function ScenarioEditorPage({
       } else {
         setMessage("Your changes have been saved.");
       }
+      navigateToEditAfterCreate(id);
     } catch (error) {
       if (error instanceof ContentPolicyError) {
         setBlockingError(true);
@@ -488,6 +494,7 @@ export function ScenarioEditorPage({
       setState(updated.state);
       setMessage("Submitted for review.");
       await load(id);
+      navigateToEditAfterCreate(id);
     } catch (error) {
       if (error instanceof ContentPolicyError) {
         setBlockingError(true);

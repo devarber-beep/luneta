@@ -126,6 +126,7 @@ class NoopMailer:
 class MailerService:
     def __init__(self) -> None:
         self._s = settings
+        self._brand = self._s.app_display_name
 
     async def _send(self, *, to_email: str, subject: str, body: str) -> None:
         try:
@@ -137,6 +138,7 @@ class MailerService:
                     to=to_email,
                     subject=subject,
                     body=body,
+                    default_sender_name=self._brand,
                 )
             else:
 
@@ -154,7 +156,8 @@ class MailerService:
 
                 await asyncio.to_thread(_run_smtp)
             logger.info("email sent to=%s subject=%s", to_email, subject)
-        except Exception:
+        except Exception as exc:
+            logger.error("email failed to=%s subject=%s reason=%s", to_email, subject, exc)
             logger.exception("email failed to=%s subject=%s", to_email, subject)
             if not self._s.email_fail_silently:
                 raise
@@ -162,23 +165,23 @@ class MailerService:
     async def send_verification_email(self, *, to_email: str, token: str) -> None:
         base = self._s.web_url.rstrip("/")
         link = f"{base}/verify-email?token={token}"
-        subject = "Verify your Luneta email"
+        subject = f"Verify your {self._brand} email"
         body = (
-            f"Welcome to Luneta.\n\n"
+            f"Welcome to {self._brand}.\n\n"
             f"Open this link to verify your email (or paste the token on the verify page):\n{link}\n\n"
             f"If you did not sign up, you can ignore this message.\n"
         )
         await self._send(to_email=to_email, subject=subject, body=body)
 
     async def send_email_verified_confirmation(self, *, to_email: str) -> None:
-        subject = "Your Luneta email is verified"
-        body = "Your email address has been verified. You can sign in to Luneta.\n"
+        subject = f"Your {self._brand} email is verified"
+        body = f"Your email address has been verified. You can sign in to {self._brand}.\n"
         await self._send(to_email=to_email, subject=subject, body=body)
 
     async def send_password_changed_notification(self, *, to_email: str) -> None:
-        subject = "Your Luneta password was changed"
+        subject = f"Your {self._brand} password was changed"
         body = (
-            "The password for your Luneta account was just changed.\n\n"
+            f"The password for your {self._brand} account was just changed.\n\n"
             "If this was not you, contact support immediately and secure your email inbox.\n"
         )
         await self._send(to_email=to_email, subject=subject, body=body)
@@ -264,9 +267,9 @@ class MailerService:
     ) -> None:
         base = self._s.web_url.rstrip("/")
         link = f"{base}/verify-email?token={verification_token}"
-        subject = "Your Luneta investigator account"
+        subject = f"Your {self._brand} investigator account"
         body = (
-            "An administrator has created an investigator account for this email address in Luneta.\n\n"
+            f"An administrator has created an investigator account for this email address in {self._brand}.\n\n"
             f"Your temporary password (you must change it after first successful sign-in): {temporary_password}\n\n"
             f"Verify your email before signing in:\n{link}\n\n"
             "If you did not expect this message, contact your administrator.\n"
