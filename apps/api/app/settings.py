@@ -1,7 +1,11 @@
 """Application settings from environment."""
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_WRONG_SITE_HOST = "xrforyouthethics.org"
+_CORRECT_SITE_HOST = "xrforyouthethic.org"
 
 
 def _optional_env_file() -> Path | None:
@@ -69,6 +73,13 @@ class Settings(BaseSettings):
     scenario_similarity_heuristic_min_score: float = 0.88
     scenario_similarity_embedding_min_score: float = 0.88
     scenario_similarity_min_shared_tokens: int = 6
+
+    @field_validator("web_url", "email_from", mode="before")
+    @classmethod
+    def fix_known_site_host_typo(cls, value: object) -> object:
+        if isinstance(value, str) and _WRONG_SITE_HOST in value:
+            return value.replace(_WRONG_SITE_HOST, _CORRECT_SITE_HOST)
+        return value
 
 
 settings = Settings()
