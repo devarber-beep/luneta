@@ -42,4 +42,10 @@ class AdminUserSummaryResponse(BaseModel):
     email_normalized: EmailStr
     role: UserRole
     account_status: UserAccountStatus
+    email_verified: bool
     role_change_locked: bool = False
+
+
+class AdminVerifyUserEmailResponse(BaseModel):
+    user_id: str
+    email_verified: bool

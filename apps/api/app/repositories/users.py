@@ -242,7 +242,7 @@ class UsersRepository:
         if not ObjectId.is_valid(user_id):
             return False
         result = await self._collection.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": ObjectId(user_id), "email_verified_at": None},
             {"$set": {"email_verified_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}},
         )
         return result.modified_count == 1

@@ -4,6 +4,7 @@ import {
   listAdminUsers,
   patchAdminUserAccountStatus,
   patchAdminUserRole,
+  verifyAdminUserEmail,
   type AdminUserSummary,
 } from "../adminApi";
 import { getToken } from "../session";
@@ -106,6 +107,20 @@ export function AdminUsersPage() {
     }
   };
 
+  const onVerifyEmail = async (user: AdminUserSummary) => {
+    if (user.email_verified) return;
+    setRowBusy(user.user_id);
+    try {
+      await verifyAdminUserEmail(token, user.user_id);
+      loadUsers();
+      setMessage(`Email verified for ${user.display_name}.`);
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setRowBusy(null);
+    }
+  };
+
   return (
     <PageLayout documentTitle="Users" heading="">
       <section>
@@ -152,6 +167,7 @@ export function AdminUsersPage() {
                   <th style={{ padding: "0.5rem" }}>Email</th>
                   <th style={{ padding: "0.5rem" }}>Role</th>
                   <th style={{ padding: "0.5rem" }}>Status</th>
+                  <th style={{ padding: "0.5rem" }}>Email verified</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,6 +206,18 @@ export function AdminUsersPage() {
                           <option value="active">Active</option>
                           <option value="disabled">Disabled</option>
                         </select>
+                      </td>
+                      <td style={{ padding: "0.5rem" }}>
+                        {user.email_verified ? (
+                          <span>Yes</span>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                            <span>No</span>
+                            <button type="button" disabled={busy} onClick={() => onVerifyEmail(user)}>
+                              Verify
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

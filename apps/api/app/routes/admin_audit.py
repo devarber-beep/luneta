@@ -23,6 +23,7 @@ _ACTION_LABELS: dict[str, str] = {
     AuditActionType.INVESTIGATOR_ACCOUNT_CREATED.value: "Investigator account created",
     AuditActionType.USER_ROLE_CHANGED.value: "User role changed",
     AuditActionType.USER_ACCOUNT_STATUS_CHANGED.value: "Account status changed",
+    AuditActionType.USER_EMAIL_VERIFIED_BY_ADMIN.value: "Email verified by admin",
     AuditActionType.REVIEWER_ASSIGNMENT_CREATED.value: "Reviewer assignment created",
     AuditActionType.REVIEWER_ASSIGNMENT_REMOVED.value: "Reviewer assignment removed",
     AuditActionType.EVALUATION_SUBMITTED.value: "Evaluation submitted",

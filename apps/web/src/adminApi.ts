@@ -15,6 +15,7 @@ export type AdminUserSummary = {
   email_normalized: string;
   role: string;
   account_status: "active" | "disabled";
+  email_verified: boolean;
   role_change_locked?: boolean;
 };
 
@@ -132,6 +133,16 @@ export async function patchAdminUserAccountStatus(
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ account_status }),
+  });
+}
+
+export async function verifyAdminUserEmail(
+  token: string,
+  userId: string,
+): Promise<{ user_id: string; email_verified: boolean }> {
+  return request(`/admin/users/${userId}/verify-email`, {
+    method: "POST",
+    headers: authHeaders(token),
   });
 }
 

@@ -27,6 +27,8 @@ from app.services.audit_service import AuditService
 
 from app.services.email_verification_service import EmailVerificationService
 
+from app.services.mailer_service import MailerService
+
 from app.services.notification_service import NotificationService
 
 
@@ -281,6 +283,52 @@ class AdminUserService:
             actor_user_id=actor.id or "",
 
         )
+
+        return updated
+
+
+
+    async def verify_user_email(self, *, actor: UserModel, target_user_id: str) -> UserModel:
+
+        user = await self._users_repo.get_by_id(target_user_id)
+
+        if user is None:
+
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        if user.email_verified_at is not None:
+
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already verified")
+
+        if not await self._users_repo.mark_email_verified(target_user_id):
+
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already verified")
+
+        updated = await self._users_repo.get_by_id(target_user_id)
+
+        if updated is None:
+
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        if self._audit is not None:
+
+            await self._audit.record(
+
+                actor=actor,
+
+                action_type=AuditActionType.USER_EMAIL_VERIFIED_BY_ADMIN,
+
+                subject_type=AuditSubjectType.USER,
+
+                subject_id=target_user_id,
+
+                previous={"email_verified": False},
+
+                current={"email_verified": True},
+
+            )
+
+        await MailerService().send_email_verified_confirmation(to_email=str(updated.email_normalized))
 
         return updated
 

@@ -20,6 +20,7 @@ from app.schemas.admin_users import (
     AdminSetAccountStatusRequest,
     AdminSetUserRoleRequest,
     AdminUserMutationResponse,
+    AdminVerifyUserEmailResponse,
     ReviewerInvestigatorIdsResponse,
     AdminUserSummaryResponse,
 )
@@ -107,6 +108,16 @@ async def admin_set_account_status(
     )
 
 
+@router.post("/users/{user_id}/verify-email", response_model=AdminVerifyUserEmailResponse)
+async def admin_verify_user_email(
+    user_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    actor: UserModel = Depends(require_permission(Permission.USER_ADMIN_UPDATE_ANY_PROFILE)),
+) -> AdminVerifyUserEmailResponse:
+    user = await _admin_user_service(db).verify_user_email(actor=actor, target_user_id=user_id)
+    return AdminVerifyUserEmailResponse(user_id=user.id or "", email_verified=True)
+
+
 @router.get("/users/summary", response_model=list[AdminUserSummaryResponse])
 async def admin_list_users_summary(
     role: UserRole | None = None,
@@ -130,6 +141,7 @@ async def admin_list_users_summary(
             email_normalized=u.email_normalized,
             role=UserRole(u.role),
             account_status=UserAccountStatus(u.account_status),
+            email_verified=u.email_verified_at is not None,
             role_change_locked=UserRole(u.role) == UserRole.ADMIN and admin_count <= 1,
         )
         for u in users

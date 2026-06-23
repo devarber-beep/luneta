@@ -293,3 +293,48 @@ async def test_admin_deactivate_blocks_login(api_client, fake_db) -> None:
         json={"email": "todeact@luneta.dev", "password": "Password123!"},
     )
     assert blocked.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_verify_user_email(api_client, fake_db) -> None:
+    await fake_db["users"].insert_one(user_doc(email="admrf1@luneta.dev", role="admin", password_plain="AdminPass123!"))
+    await fake_db["users"].insert_one(
+        user_doc(
+            email="unverified@luneta.dev",
+            role="investigator",
+            password_plain="Password123!",
+            verified=False,
+            first_name="Unverified",
+            last_name="User",
+        )
+    )
+    target = await fake_db["users"].find_one({"email_normalized": "unverified@luneta.dev"})
+    assert target is not None
+    uid = str(target["_id"])
+
+    admin_login = await api_client.post(
+        "/auth/login",
+        json={"email": "admrf1@luneta.dev", "password": "AdminPass123!"},
+    )
+    token = admin_login.json()["access_token"]
+
+    listed = await api_client.get("/admin/users/summary", headers={"Authorization": f"Bearer {token}"})
+    row = next(item for item in listed.json() if item["user_id"] == uid)
+    assert row["email_verified"] is False
+
+    verified = await api_client.post(
+        f"/admin/users/{uid}/verify-email",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert verified.status_code == 200
+    assert verified.json() == {"user_id": uid, "email_verified": True}
+
+    doc = await fake_db["users"].find_one({"_id": target["_id"]})
+    assert doc is not None
+    assert doc["email_verified_at"] is not None
+
+    duplicate = await api_client.post(
+        f"/admin/users/{uid}/verify-email",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert duplicate.status_code == 409

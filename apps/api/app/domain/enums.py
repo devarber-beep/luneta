@@ -85,6 +85,7 @@ class AuditActionType(StrEnum):
     INVESTIGATOR_ACCOUNT_CREATED = "investigator_account_created"
     USER_ROLE_CHANGED = "user_role_changed"
     USER_ACCOUNT_STATUS_CHANGED = "user_account_status_changed"
+    USER_EMAIL_VERIFIED_BY_ADMIN = "user_email_verified_by_admin"
     REVIEWER_ASSIGNMENT_CREATED = "reviewer_assignment_created"
     REVIEWER_ASSIGNMENT_REMOVED = "reviewer_assignment_removed"
     EVALUATION_SUBMITTED = "evaluation_submitted"
