@@ -12,6 +12,13 @@ export function AboutPage() {
           </a>
           .
         </p>
+        <p>
+          Created by Daniel Barbero{" "}
+          <a href="https://github.com/devarber-beep" rel="noreferrer" target="_blank">
+            @devarber
+          </a>
+          .
+        </p>
       </div>
     </PageLayout>
   );
