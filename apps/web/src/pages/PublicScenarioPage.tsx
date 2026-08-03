@@ -16,6 +16,7 @@ import { ScenarioEvaluationInsights } from "../components/ScenarioEvaluationInsi
 import { ScenarioEvaluationPanel } from "../components/ScenarioEvaluationPanel";
 import { StatusMessage } from "../components/StatusMessage";
 import { describeUsageContext } from "../components/usageContextLabels";
+import { contentLanguage } from "../lib/contentLanguage";
 import { useRole, useToken } from "../useSession";
 
 export function PublicScenarioPage() {
@@ -109,12 +110,14 @@ export function PublicScenarioPage() {
   const hasSidebarMeta =
     categories.length > 0 || ethicalRisks.length > 0 || usageContextLines.length > 0;
   const showAside = Boolean(coverUrl) || hasSidebarMeta;
+  const scenarioLang = contentLanguage(`${title}\n${description}`);
 
   return (
     <PageLayout
       documentTitle={title || "Public scenario"}
       heading={title || "Public scenario"}
       headingLevel={1}
+      headingLang={scenarioLang === "es" ? "es" : undefined}
       className="page-layout--public-scenario"
       headerAside={
         role === "admin" && scenarioId && token ? (
@@ -210,7 +213,10 @@ export function PublicScenarioPage() {
               ) : null}
             </header>
 
-            <div className="scenario-read-section public-scenario__description">
+            <div
+              className="scenario-read-section public-scenario__description"
+              lang={scenarioLang === "es" ? "es" : undefined}
+            >
               {scenarioId && token && (publicCanSuggest || canViewSuggestions) ? (
                 <DescriptionWithSuggestions
                   scenarioId={scenarioId}

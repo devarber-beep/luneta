@@ -8,6 +8,8 @@ type Props = {
   /** Visible page heading; omit or pass empty string to hide. */
   heading?: string;
   headingLevel?: 1 | 2;
+  /** Optional lang on the visible heading (e.g. user-authored scenario title). */
+  headingLang?: string;
   className?: string;
   /** Optional actions aligned to the top-right of the page heading row. */
   headerAside?: ReactNode;
@@ -18,6 +20,7 @@ export function PageLayout({
   documentTitle,
   heading,
   headingLevel = 2,
+  headingLang,
   className,
   headerAside,
 }: Props) {
@@ -30,11 +33,13 @@ export function PageLayout({
     <main id="main-content" className={`page-layout${className ? ` ${className}` : ""}`} tabIndex={-1}>
       {headerAside && visibleHeading ? (
         <div className="page-layout__header page-layout__header--with-aside">
-          <HeadingTag className="page-layout__heading">{visibleHeading}</HeadingTag>
+          <HeadingTag className="page-layout__heading" lang={headingLang}>
+            {visibleHeading}
+          </HeadingTag>
           <div className="page-layout__header-aside">{headerAside}</div>
         </div>
       ) : visibleHeading ? (
-        <HeadingTag>{visibleHeading}</HeadingTag>
+        <HeadingTag lang={headingLang}>{visibleHeading}</HeadingTag>
       ) : null}
       {children}
     </main>

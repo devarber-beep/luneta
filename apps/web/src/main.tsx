@@ -4,6 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import "./styles/global.css";
 
+document.documentElement.lang = "en";
+
 const rootElement = document.getElementById("root") as HTMLElement;
 
 ReactDOM.createRoot(rootElement).render(
@@ -13,4 +15,3 @@ ReactDOM.createRoot(rootElement).render(
     </BrowserRouter>
   </React.StrictMode>
 );
-
