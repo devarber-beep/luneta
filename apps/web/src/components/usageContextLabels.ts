@@ -20,7 +20,7 @@ export function describeUsageContext(ctx: ScenarioUsageContext | null | undefine
       ? `${safe.children_age_start}-${safe.children_age_end}`
       : "—";
   lines.push(`Children age range: ${age}`);
-  lines.push(`Number of children: ${safe.children_count == null ? "undefined" : String(safe.children_count)}`);
+  lines.push(`Number of children: ${safe.children_count == null ? "—" : String(safe.children_count)}`);
   lines.push(`Duration and frequency: ${safe.duration_frequency ? DURATION_LABELS[safe.duration_frequency] : "—"}`);
   lines.push(`Physically present: ${safe.physically_present ? yesNoLabel(safe.physically_present) : "—"}`);
   lines.push(`Online presence: ${safe.online_present ? yesNoLabel(safe.online_present) : "—"}`);

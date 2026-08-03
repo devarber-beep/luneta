@@ -14,7 +14,7 @@ export function SiteFooter() {
           <Link to="/about">About</Link>
           <Link to="/contact">Contact</Link>
           <a href={CONSORTIUM_URL} rel="noreferrer" target="_blank">
-            XR for Youth Ethics Consortium
+            Consortium project site
           </a>
           <a href={UGR_URL} rel="noreferrer" target="_blank">
             Universidad de Granada

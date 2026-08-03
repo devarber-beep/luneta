@@ -153,7 +153,7 @@ a:hover {
 }
 
 .site-navbar__brand,
-.site-navbar__logo-link,
+.site-navbar__brand-link,
 .site-navbar__brand-text,
 .site-navbar__link,
 .site-footer__nav a,
@@ -255,16 +255,17 @@ a:hover {
   color: var(--color-nav-text);
 }
 
-.site-navbar__logo-link {
+.site-navbar__brand-link {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.9rem;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   text-decoration: none;
+  color: inherit;
 }
 
-.site-navbar__logo-link:focus-visible {
+.site-navbar__brand-link:focus-visible {
   outline: 2px solid var(--color-nav-text);
   outline-offset: 3px;
 }
@@ -285,8 +286,8 @@ a:hover {
   transition: color 0.15s ease;
 }
 
-.site-navbar__brand-text:hover,
-.site-navbar__brand-text:focus-visible {
+.site-navbar__brand-link:hover .site-navbar__brand-text,
+.site-navbar__brand-link:focus-visible .site-navbar__brand-text {
   color: var(--color-nav-accent);
 }
 

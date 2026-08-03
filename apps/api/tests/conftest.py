@@ -2,6 +2,8 @@
 
 Set LUNETA_TEST_REAL_DB=1 to run HTTP tests against MongoDB from MONGODB_URI (e.g. Docker).
 A session-start hook removes rows tied to fixed test emails so runs stay repeatable.
+Outbound email is stubbed (``MailerService._send`` no-op) so a developer `.env`
+with production Brevo/SMTP settings cannot fail or hang the suite.
 Run pytest from ``apps/api`` so ``.env`` loads if present.
 """
 from __future__ import annotations
@@ -78,6 +80,20 @@ def signup_body(
 
 def use_real_mongo() -> bool:
     return os.environ.get("LUNETA_TEST_REAL_DB", "").strip().lower() in ("1", "true", "yes")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_outbound_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Do not send real Brevo/SMTP mail during tests (developer `.env` often has prod keys).
+
+    Patching ``MailerService._send`` avoids network timeouts when Mailhog is not running.
+    """
+    from app.services.mailer_service import MailerService
+
+    async def _noop_send(self: MailerService, *, to_email: str, subject: str, body: str) -> None:
+        return None
+
+    monkeypatch.setattr(MailerService, "_send", _noop_send)
 
 
 class _FakeUserAvatarStorage:

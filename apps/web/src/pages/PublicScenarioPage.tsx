@@ -83,7 +83,10 @@ export function PublicScenarioPage() {
         setUsageContextLines(describeUsageContext(data.usage_context as ScenarioUsageContext | null));
         setPublishedAt(data.published_at);
         setCoverUrl(data.cover_image?.signed_url ?? null);
-        setCoverAlt(data.cover_image?.alt_text ?? "cover image");
+        setCoverAlt(
+          data.cover_image?.alt_text?.trim() ||
+            (data.title ? `Cover image for ${data.title}` : "Scenario cover image"),
+        );
         setInlineImages(
           (data.inline_assets ?? [])
             .slice()
@@ -143,9 +146,9 @@ export function PublicScenarioPage() {
 
               {categories.length > 0 ? (
                 <section className="public-scenario__sidebar-section" aria-labelledby="public-scenario-categories">
-                  <h3 id="public-scenario-categories" className="public-scenario__sidebar-title">
+                  <h2 id="public-scenario-categories" className="public-scenario__sidebar-title">
                     Categories
-                  </h3>
+                  </h2>
                   <ul className="public-scenario__tag-list">
                     {categories.map((c) => (
                       <li key={c.id} className="public-scenario__tag">
@@ -158,9 +161,9 @@ export function PublicScenarioPage() {
 
               {ethicalRisks.length > 0 ? (
                 <section className="public-scenario__sidebar-section" aria-labelledby="public-scenario-risks">
-                  <h3 id="public-scenario-risks" className="public-scenario__sidebar-title">
+                  <h2 id="public-scenario-risks" className="public-scenario__sidebar-title">
                     Ethical risks
-                  </h3>
+                  </h2>
                   <ul className="public-scenario__tag-list public-scenario__tag-list--risks">
                     {ethicalRisks.map((r) => (
                       <li key={r.id} className="public-scenario__tag public-scenario__tag--risk">
@@ -173,9 +176,9 @@ export function PublicScenarioPage() {
 
               {usageContextLines.length > 0 ? (
                 <section className="public-scenario__sidebar-section" aria-labelledby="public-scenario-context">
-                  <h3 id="public-scenario-context" className="public-scenario__sidebar-title">
+                  <h2 id="public-scenario-context" className="public-scenario__sidebar-title">
                     Usage context
-                  </h3>
+                  </h2>
                   <ul className="public-scenario__context-list">
                     {usageContextLines.map((line) => (
                       <li key={line}>{line}</li>

@@ -16,11 +16,16 @@ export function SiteNavbar() {
     <header className="site-navbar">
       <div className="site-navbar__inner">
         <div className="site-navbar__brand">
-          <Link to="/" className="site-navbar__logo-link" aria-label="Home">
-            <img src="/logo_luneta.webp" alt="" className="site-navbar__logo" width={72} height={72} />
-          </Link>
-          <Link to="/" className="site-navbar__brand-text">
-            {BRAND}
+          <Link to="/" className="site-navbar__brand-link">
+            <img
+              src="/logo_luneta.webp"
+              alt=""
+              aria-hidden="true"
+              className="site-navbar__logo"
+              width={72}
+              height={72}
+            />
+            <span className="site-navbar__brand-text">{BRAND}</span>
           </Link>
         </div>
         <nav className="site-navbar__nav" aria-label="Main">
