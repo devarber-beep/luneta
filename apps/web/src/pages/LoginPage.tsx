@@ -26,8 +26,10 @@ export function LoginPage() {
         navigate("/my-profile");
       } else if (profile.role === "reviewer" || profile.role === "admin") {
         navigate("/review");
-      } else {
+      } else if (profile.role === "investigator") {
         navigate("/my-scenarios");
+      } else {
+        navigate("/");
       }
     } catch (error) {
       setMessage((error as Error).message);
