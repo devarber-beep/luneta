@@ -42,12 +42,12 @@ export function SiteNavbar() {
               </Link>
             </>
           ) : null}
-          {token ? (
+          {role === "investigator" || role === "reviewer" || role === "admin" ? (
             <Link to="/my-scenarios" className={linkClass("/my-scenarios")}>
               My Scenarios
             </Link>
           ) : null}
-          {token ? (
+          {role === "investigator" || role === "reviewer" || role === "admin" ? (
             <Link to="/scenarios/new" className={linkClass("/scenarios/new")}>
               New Scenario
             </Link>
