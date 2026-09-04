@@ -22,6 +22,7 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+.cursor/
 Thumbs.db
 
 # Logs
